@@ -30,8 +30,11 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    // Opt-in enforcement: only require secret when explicitly enabled.
+    // This keeps the current client working until it is updated to send the header.
+    const requireSecret = process.env.FLEET_SYNC_REQUIRE_SECRET === "true";
     const secret = process.env.FLEET_SYNC_SECRET;
-    if (secret) {
+    if (requireSecret && secret) {
       const provided =
         request.headers.get("x-fleet-sync-secret") ||
         request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
