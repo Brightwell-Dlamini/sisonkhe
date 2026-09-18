@@ -1,0 +1,132 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap');
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #f9fafb;
+    color: #1f2937;
+  }
+}
+
+.dark {
+  --background: 5 5 5;
+  background-color: #050505 !important;
+  color: #F1F5F9 !important;
+}
+
+.dark body, body.dark {
+  background-color: #050505 !important;
+  color: #F1F5F9 !important;
+}
+
+/* Custom Status Border Badges according to Design specifications */
+.badge {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.status-green {
+  color: #22C55E !important;
+  background-color: rgba(34, 197, 94, 0.08) !important;
+  border: 1px solid #22C55E !important;
+}
+
+.status-blue {
+  color: #3B82F6 !important;
+  background-color: rgba(59, 130, 246, 0.08) !important;
+  border: 1px solid #3B82F6 !important;
+}
+
+.status-yellow {
+  color: #EAB308 !important;
+  background-color: rgba(234, 179, 8, 0.08) !important;
+  border: 1px solid #EAB308 !important;
+}
+
+.status-red {
+  color: #EF4444 !important;
+  background-color: rgba(239, 68, 68, 0.08) !important;
+  border: 1px solid #EF4444 !important;
+}
+
+.status-grey {
+  color: #94A3B8 !important;
+  background-color: rgba(148, 163, 184, 0.08) !important;
+  border: 1px solid #94A3B8 !important;
+}
+
+/* Custom styles for Terminal-Style Departure Board */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.animate-blink {
+  animation: blink 1.2s infinite;
+}
+
+@keyframes ticker {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+/* Custom retro LED effects */
+.led-amber {
+  color: #ffb000;
+  text-shadow: 0 0 10px rgba(255, 176, 0, 0.6), 0 0 20px rgba(255, 176, 0, 0.3);
+}
+
+.led-green {
+  color: #00ff66;
+  text-shadow: 0 0 10px rgba(0, 255, 102, 0.6), 0 0 20px rgba(0, 255, 102, 0.3);
+}
+
+.led-blue {
+  color: #00ccff;
+  text-shadow: 0 0 10px rgba(0, 204, 255, 0.6), 0 0 20px rgba(0, 204, 255, 0.3);
+}
+
+.font-space {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+
+.font-mono-jb {
+  font-family: 'JetBrains Mono', SFMono-Regular, monospace;
+}
+
+/* Scrollbar customization */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+}
+.dark ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+

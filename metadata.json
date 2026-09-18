@@ -1,0 +1,6 @@
+{
+  "name": "Sisonkhe In transit",
+  "description": "National Taxi Rank, Route Queuing, and Fleet Dispatch Management System for Eswatini corridors with real-time departure boards, Driver Virtual Passes, and Vehicle Owner Operator Master Card fleet management.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
