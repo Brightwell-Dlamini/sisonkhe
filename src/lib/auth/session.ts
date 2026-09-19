@@ -8,10 +8,6 @@
 import { createSupabaseServerClient } from "../supabase/server";
 import { resolveUserRole, type ResolvedUser } from "./roles";
 
-/**
- * Get the current authenticated user resolved to their domain role.
- * Returns null if unauthenticated or if the user has no domain record.
- */
 export async function getServerSession(): Promise<ResolvedUser | null> {
   const supabase = await createSupabaseServerClient();
   const {
@@ -20,12 +16,9 @@ export async function getServerSession(): Promise<ResolvedUser | null> {
 
   if (!user) return null;
 
-  return resolveUserRole(supabase, user.id, user.email ?? null, user.phone ?? null);
+  return resolveUserRole(user.id, user.email ?? null, user.phone ?? null);
 }
 
-/**
- * Same as getServerSession, but throws if no session. For protected routes.
- */
 export async function requireServerSession(): Promise<ResolvedUser> {
   const session = await getServerSession();
   if (!session) {
@@ -34,9 +27,6 @@ export async function requireServerSession(): Promise<ResolvedUser> {
   return session;
 }
 
-/**
- * Same as requireServerSession, but also checks role membership.
- */
 export async function requireServerRole(
   roles: ResolvedUser["role"][]
 ): Promise<ResolvedUser> {
