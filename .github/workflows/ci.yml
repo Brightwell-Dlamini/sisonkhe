@@ -1,0 +1,60 @@
+# .github/workflows/ci.yml
+#
+# Runs on every push and PR:
+#   1. TypeScript typecheck
+#   2. ESLint
+#   3. Vitest unit tests
+#   4. Production build (dry run)
+#
+# If any step fails, the workflow fails and (optionally) blocks Vercel deploy
+# via branch protection rules.
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# Cancel in-flight runs if a new commit lands
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, Lint, Test, Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build (dry run)
+        run: npm run build
+        env:
+          # Provide dummy values so the build doesn't fail on missing env
+          NEXT_PUBLIC_APP_URL: "https://example.com"
+          AUTH_SECRET: "ci-dummy-secret-do-not-use-in-prod-0000000000000000"
+          NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "ci-dummy-anon-key"

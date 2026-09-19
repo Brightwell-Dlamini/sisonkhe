@@ -1,8 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import ClientBootstrap from "./ClientBootstrap";
 
-// Dynamically import the main App to avoid SSR issues with localStorage and browser APIs
 const App = dynamic(() => import("../App"), {
   ssr: false,
   loading: () => (
@@ -12,7 +12,7 @@ const App = dynamic(() => import("../App"), {
           🇸🇿 Sisonkhe In Transit
         </div>
         <div className="text-sm text-gray-500 dark:text-gray-400">
-          Loading national fleet management system...
+          Loading...
         </div>
       </div>
     </div>
@@ -20,5 +20,9 @@ const App = dynamic(() => import("../App"), {
 });
 
 export default function HomePage() {
-  return <App />;
+  return (
+    <ClientBootstrap>
+      <App />
+    </ClientBootstrap>
+  );
 }

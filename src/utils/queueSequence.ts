@@ -299,10 +299,10 @@ export function computeMonthlyRoster(
 
   // Determine chronological rotation offset if inspecting non-current month or year
   // Base reference is September 2026 (index 8 of 2026)
-  const baseMonthsTotal = 2026 * 12 + 8;
-  const targetMonthsTotal = year * 12 + monthIndex;
-  const monthDifference = targetMonthsTotal - baseMonthsTotal;
-
+const now = new Date();
+const baseMonthsTotal = now.getFullYear() * 12 + now.getMonth();
+const targetMonthsTotal = year * 12 + monthIndex;
+const monthDifference = targetMonthsTotal - baseMonthsTotal;
   let activeRegulars = regularVehicles.length > 0 ? regularVehicles : routeVehicles;
 
   // Apply deterministic rotational advancement for historical or projected years/months
