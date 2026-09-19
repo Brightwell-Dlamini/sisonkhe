@@ -7,8 +7,10 @@
  * Step 1 (PUT): Verify identity by national ID + phone.
  * Step 2 (POST): Set username + password, create auth user, link to marshal.
  *
- * Linking prefers link_marshal_auth() SECURITY DEFINER RPC, then falls back
- * to a minimal service-role UPDATE of auth_user_id only.
+ * Linking strategy (in order):
+ *  1. link_marshal_auth(id_number, phone, auth_user_id)  — 0004 signature
+ *  2. link_marshal_auth(marshal_id, auth_user_id)        — 0007 signature
+ *  3. Direct UPDATE of auth_user_id only via service role
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -21,9 +23,87 @@ import { resolveUserRole } from "@/lib/auth/roles";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// ---------------------------------------------------------------------------
-// Step 1: Verify identity
-// ---------------------------------------------------------------------------
+async function tryLinkMarshal(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  opts: {
+    marshalId: string;
+    idNumber: string;
+    phone: string;
+    authUserId: string;
+  }
+): Promise<{ ok: boolean; method?: string; error?: string }> {
+  const { marshalId, idNumber, phone, authUserId } = opts;
+
+  // 1) Identity-based RPC (matches supabase/migrations/0004_auth_helpers.sql)
+  {
+    const { data, error } = await admin.rpc("link_marshal_auth", {
+      p_id_number: idNumber,
+      p_phone: phone,
+      p_auth_user_id: authUserId,
+    });
+    if (!error && data === true) {
+      return { ok: true, method: "rpc:id+phone" };
+    }
+    if (error) {
+      console.warn("[claim] link_marshal_auth(id,phone,uid) failed:", error.message);
+    } else if (data === false) {
+      console.warn("[claim] link_marshal_auth(id,phone,uid) returned false");
+    }
+  }
+
+  // 2) ID-based RPC (matches supabase/migrations/0007_link_marshal_auth.sql)
+  {
+    const { data, error } = await admin.rpc("link_marshal_auth", {
+      p_marshal_id: marshalId,
+      p_auth_user_id: authUserId,
+    });
+    if (!error && data === true) {
+      return { ok: true, method: "rpc:marshal_id" };
+    }
+    if (error) {
+      console.warn("[claim] link_marshal_auth(marshal_id,uid) failed:", error.message);
+    } else if (data === false) {
+      console.warn("[claim] link_marshal_auth(marshal_id,uid) returned false");
+    }
+  }
+
+  // 3) Direct UPDATE — only auth_user_id (no optional columns)
+  {
+    const { data: rows, error } = await admin
+      .from("marshals")
+      .update({ auth_user_id: authUserId })
+      .eq("id", marshalId)
+      .is("auth_user_id", null)
+      .select("id");
+
+    if (!error && rows && rows.length > 0) {
+      return { ok: true, method: "update:id" };
+    }
+    if (error) {
+      console.error("[claim] UPDATE by id failed:", error);
+      // Try match by national id as last resort
+      const { data: rows2, error: err2 } = await admin
+        .from("marshals")
+        .update({ auth_user_id: authUserId })
+        .eq("id_number", idNumber)
+        .is("auth_user_id", null)
+        .select("id");
+
+      if (!err2 && rows2 && rows2.length > 0) {
+        return { ok: true, method: "update:id_number" };
+      }
+      return {
+        ok: false,
+        error: error.message || err2?.message || "UPDATE failed",
+      };
+    }
+    return {
+      ok: false,
+      error:
+        "No unclaimed marshal row matched. It may already be linked or the ID does not match.",
+    };
+  }
+}
 
 export async function PUT(request: NextRequest) {
   try {
@@ -47,7 +127,10 @@ export async function PUT(request: NextRequest) {
     if (error) {
       console.error("[api/auth/claim] verify rpc error:", error);
       return NextResponse.json(
-        { error: "Verification service unavailable." },
+        {
+          error: "Verification service unavailable.",
+          detail: error.message,
+        },
         { status: 500 }
       );
     }
@@ -79,17 +162,13 @@ export async function PUT(request: NextRequest) {
       marshalId: match.marshal_id,
     });
   } catch (err) {
-    console.error("[api/auth/claim] error:", err);
+    console.error("[api/auth/claim] PUT error:", err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Step 2: Create account
-// ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
   let createdAuthUserId: string | null = null;
@@ -134,7 +213,13 @@ export async function POST(request: NextRequest) {
 
     if (verifyErr) {
       console.error("[api/auth/claim] re-verify error:", verifyErr);
-      throw verifyErr;
+      return NextResponse.json(
+        {
+          error: "Verification service unavailable.",
+          detail: verifyErr.message,
+        },
+        { status: 500 }
+      );
     }
 
     const match = Array.isArray(verifyData) ? verifyData[0] : verifyData;
@@ -158,7 +243,7 @@ export async function POST(request: NextRequest) {
     if (listErr) {
       console.error("[api/auth/claim] list users error:", listErr);
       return NextResponse.json(
-        { error: "Could not verify username availability." },
+        { error: "Could not verify username availability.", detail: listErr.message },
         { status: 500 }
       );
     }
@@ -190,84 +275,52 @@ export async function POST(request: NextRequest) {
 
     if (createErr || !created.user) {
       console.error("[api/auth/claim] create user error:", createErr);
+      // Common: email already exists from a failed previous claim
+      const msg = createErr?.message ?? "Could not create account.";
+      if (msg.toLowerCase().includes("already") || msg.toLowerCase().includes("exists")) {
+        return NextResponse.json(
+          {
+            error:
+              "An auth account already exists for this marshal (possibly from a failed earlier claim). Ask a supervisor to delete the orphan auth user, or sign in if you already set a password.",
+            detail: msg,
+          },
+          { status: 409 }
+        );
+      }
       return NextResponse.json(
-        { error: "Could not create account. Please try again." },
+        { error: "Could not create account. Please try again.", detail: msg },
         { status: 500 }
       );
     }
 
     createdAuthUserId = created.user.id;
 
-    // Link: prefer RPC, then minimal UPDATE of auth_user_id only.
-    const { data: rpcLinked, error: rpcErr } = await admin.rpc(
-      "link_marshal_auth",
-      {
-        p_marshal_id: match.marshal_id,
-        p_auth_user_id: createdAuthUserId,
-      }
-    );
+    const linkResult = await tryLinkMarshal(admin, {
+      marshalId: match.marshal_id,
+      idNumber,
+      phone,
+      authUserId: createdAuthUserId,
+    });
 
-    let linked = false;
-
-    if (!rpcErr && rpcLinked === true) {
-      linked = true;
-    } else {
-      if (rpcErr) {
-        console.warn(
-          "[api/auth/claim] link_marshal_auth RPC unavailable, falling back to UPDATE:",
-          rpcErr.message
-        );
-      }
-
-      const { data: updatedRows, error: updateErr } = await admin
-        .from("marshals")
-        .update({ auth_user_id: createdAuthUserId })
-        .eq("id", match.marshal_id)
-        .is("auth_user_id", null)
-        .select("id");
-
-      if (updateErr) {
-        console.error("[api/auth/claim] link update error:", updateErr);
+    if (!linkResult.ok) {
+      console.error("[api/auth/claim] link failed:", linkResult);
+      try {
         await admin.auth.admin.deleteUser(createdAuthUserId);
-        createdAuthUserId = null;
-        return NextResponse.json(
-          {
-            error:
-              "Could not link account to marshal record. Please contact your supervisor.",
-            detail: updateErr.message,
-          },
-          { status: 500 }
-        );
+      } catch {
+        /* best-effort */
       }
-
-      if (!updatedRows || updatedRows.length === 0) {
-        console.error("[api/auth/claim] link update affected 0 rows", {
-          marshalId: match.marshal_id,
-        });
-        await admin.auth.admin.deleteUser(createdAuthUserId);
-        createdAuthUserId = null;
-        return NextResponse.json(
-          {
-            error:
-              "This account appears to have just been claimed by another device. Please try signing in.",
-          },
-          { status: 409 }
-        );
-      }
-      linked = true;
-    }
-
-    if (!linked) {
-      await admin.auth.admin.deleteUser(createdAuthUserId);
       createdAuthUserId = null;
       return NextResponse.json(
         {
           error:
             "Could not link account to marshal record. Please contact your supervisor.",
+          detail: linkResult.error,
         },
         { status: 500 }
       );
     }
+
+    console.log("[api/auth/claim] linked via", linkResult.method);
 
     const supabase = await createSupabaseServerClient();
     const { data: signIn, error: signInErr } =
@@ -308,7 +361,10 @@ export async function POST(request: NextRequest) {
       }
     }
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: "Internal server error",
+        detail: err instanceof Error ? err.message : String(err),
+      },
       { status: 500 }
     );
   }
