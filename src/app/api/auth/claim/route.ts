@@ -4,13 +4,11 @@
  *
  * Marshal account claim flow.
  *
- * Step 1 (POST): Verify identity by national ID + phone.
+ * Step 1 (PUT): Verify identity by national ID + phone.
  * Step 2 (POST): Set username + password, create auth user, link to marshal.
  *
- * We combine both steps into a single endpoint for simplicity:
- *   - Verify first
- *   - Then create
- *   - If creation fails, rollback the auth user
+ * The link step uses the admin client (service role) to UPDATE the marshals
+ * row directly — no RPC required, RLS bypassed by service role.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -69,7 +67,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "This account has already been claimed. If you forgot your password, use the password reset flow or contact your supervisor.",
+            "This account has already been claimed. If you forgot your password, contact your supervisor to reset it.",
         },
         { status: 409 }
       );
@@ -130,13 +128,16 @@ export async function POST(request: NextRequest) {
 
     const admin = createSupabaseAdminClient();
 
-    // --- Re-verify identity (protect against race conditions) ---
+    // --- Re-verify identity (protects against race conditions) ---
     const { data: verifyData, error: verifyErr } = await admin.rpc(
       "verify_marshal_identity",
       { p_id_number: idNumber, p_phone: phone }
     );
 
-    if (verifyErr) throw verifyErr;
+    if (verifyErr) {
+      console.error("[api/auth/claim] re-verify error:", verifyErr);
+      throw verifyErr;
+    }
 
     const match = Array.isArray(verifyData) ? verifyData[0] : verifyData;
     if (!match) {
@@ -154,7 +155,17 @@ export async function POST(request: NextRequest) {
     }
 
     // --- Check username availability ---
-    const { data: existingUsers } = await admin.auth.admin.listUsers();
+    const { data: existingUsers, error: listErr } =
+      await admin.auth.admin.listUsers({ perPage: 1000 });
+
+    if (listErr) {
+      console.error("[api/auth/claim] list users error:", listErr);
+      return NextResponse.json(
+        { error: "Could not verify username availability." },
+        { status: 500 }
+      );
+    }
+
     const usernameTaken = existingUsers?.users.some(
       (u) => (u.user_metadata?.username ?? "") === username
     );
@@ -166,21 +177,22 @@ export async function POST(request: NextRequest) {
     }
 
     // --- Create the auth user ---
-    // We use a synthetic email internally (Supabase requires one).
-    // The marshal will never see this email.
+    // Supabase Auth requires an email. We use a synthetic one.
+    // Marshals never see it — they sign in by username/phone/ID.
     const syntheticEmail = `${match.marshal_id}@marshal.sisonkhe.local`;
 
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email: syntheticEmail,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        username,
-        full_name: match.full_name,
-        role: "marshal",
-        marshal_id: match.marshal_id,
-      },
-    });
+    const { data: created, error: createErr } =
+      await admin.auth.admin.createUser({
+        email: syntheticEmail,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          username,
+          full_name: match.full_name,
+          role: "marshal",
+          marshal_id: match.marshal_id,
+        },
+      });
 
     if (createErr || !created.user) {
       console.error("[api/auth/claim] create user error:", createErr);
@@ -192,28 +204,47 @@ export async function POST(request: NextRequest) {
 
     createdAuthUserId = created.user.id;
 
-    // --- Link marshal ---
-    const { data: linked, error: linkErr } = await admin.rpc(
-      "link_marshal_auth",
-      {
-        p_id_number: idNumber,
-        p_phone: phone,
-        p_auth_user_id: createdAuthUserId,
-      }
-    );
+    // --- Link marshal: UPDATE directly via admin client ---
+    // Uses service role key which bypasses RLS.
+    const { error: updateErr, count } = await admin
+      .from("marshals")
+      .update(
+        {
+          auth_user_id: createdAuthUserId,
+          last_login_at: new Date().toISOString(),
+          updated_at: Date.now(),
+          server_updated_at: new Date().toISOString(),
+        },
+        { count: "exact" }
+      )
+      .eq("id", match.marshal_id)
+      .is("auth_user_id", null); // guard against races
 
-    if (linkErr || !linked) {
-      // Rollback: delete the auth user we just created
+    if (updateErr) {
+      console.error("[api/auth/claim] link update error:", updateErr);
       await admin.auth.admin.deleteUser(createdAuthUserId);
       createdAuthUserId = null;
-
-      console.error("[api/auth/claim] link error:", linkErr);
       return NextResponse.json(
         {
           error:
             "Could not link account to marshal record. Please contact your supervisor.",
         },
         { status: 500 }
+      );
+    }
+
+    if (!count || count === 0) {
+      // Either the row was already claimed between step 1 and now,
+      // or the marshal_id doesn't match (shouldn't happen).
+      console.error("[api/auth/claim] link update affected 0 rows");
+      await admin.auth.admin.deleteUser(createdAuthUserId);
+      createdAuthUserId = null;
+      return NextResponse.json(
+        {
+          error:
+            "This account appears to have just been claimed by another device. Please try signing in.",
+        },
+        { status: 409 }
       );
     }
 
@@ -227,7 +258,7 @@ export async function POST(request: NextRequest) {
 
     if (signInErr || !signIn.user) {
       // Account was created and linked, but sign-in failed.
-      // The marshal can just go to /login and sign in manually.
+      // Marshal can go to /login and sign in manually.
       return NextResponse.json({
         success: true,
         signedIn: false,
@@ -251,7 +282,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[api/auth/claim] fatal error:", err);
 
-    // Attempt rollback
+    // Rollback
     if (createdAuthUserId) {
       try {
         const admin = createSupabaseAdminClient();

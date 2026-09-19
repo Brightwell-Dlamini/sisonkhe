@@ -6,22 +6,29 @@
  *
  * Flow:
  *   1. Client sends { identifier, password }
- *   2. Server determines identifier type (phone, national ID, or username)
- *   3. For username: we look up the corresponding auth.users row via staff/marshals/drivers/operators
- *   4. For phone/ID: we look up the domain row, then auth.users
- *   5. Sign in with password via Supabase
+ *   2. Server determines identifier type
+ *   3. Uses RPC helpers to find the auth user
+ *   4. Signs in with password via Supabase
+ *   5. Resolves role
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  createSupabaseAdminClient,
+  createSupabaseServerClient,
+} from "@/lib/supabase/server";
 import { resolveUserRole } from "@/lib/auth/roles";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function looksLikeEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+}
+
 function looksLikePhone(s: string): boolean {
-  return /^\+?[\d\s]{8,15}$/.test(s.trim());
+  const cleaned = s.replace(/\s+/g, "");
+  return /^\+?\d{8,15}$/.test(cleaned) && !looksLikeNationalId(s);
 }
 
 function looksLikeNationalId(s: string): boolean {
@@ -43,82 +50,62 @@ export async function POST(request: NextRequest) {
 
     const admin = createSupabaseAdminClient();
 
-    // 1. Resolve identifier → auth user id
+    // --- Resolve identifier → auth user ---
     let targetAuthUserId: string | null = null;
     let targetEmail: string | null = null;
 
-    // Check if it's an email (contains @)
-    if (identifier.includes("@")) {
-      targetEmail = identifier.toLowerCase();
+    if (looksLikeEmail(identifier)) {
+      const { data, error } = await admin.rpc("find_auth_user_by_email", {
+        p_email: identifier.toLowerCase(),
+      });
+      if (error) console.error("[signin] find_by_email error:", error);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row) {
+        targetAuthUserId = row.auth_user_id;
+        targetEmail = row.email;
+      }
     } else if (looksLikeNationalId(identifier)) {
-      // Look up by national ID
       const cleanId = identifier.replace(/\s+/g, "");
-      const { data: marshal } = await admin
-        .from("marshals")
-        .select("auth_user_id")
-        .eq("id_number", cleanId)
-        .maybeSingle();
-      if (marshal?.auth_user_id) targetAuthUserId = marshal.auth_user_id;
-
-      if (!targetAuthUserId) {
-        const { data: driver } = await admin
-          .from("drivers")
-          .select("auth_user_id")
-          .eq("national_id", cleanId)
-          .maybeSingle();
-        if (driver?.auth_user_id) targetAuthUserId = driver.auth_user_id;
+      const { data, error } = await admin.rpc("find_auth_user_by_national_id", {
+        p_national_id: cleanId,
+      });
+      if (error) console.error("[signin] find_by_id error:", error);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row) {
+        targetAuthUserId = row.auth_user_id;
+        targetEmail = row.email;
       }
     } else if (looksLikePhone(identifier)) {
-      // Look up by phone (marshal cell/whatsapp, driver phone, operator phone)
-      const cleanPhone = identifier.replace(/\s+/g, "");
-      const { data: marshal } = await admin
-        .from("marshals")
-        .select("auth_user_id")
-        .or(`cell_no.eq.${cleanPhone},whatsapp_no.eq.${cleanPhone}`)
-        .maybeSingle();
-      if (marshal?.auth_user_id) targetAuthUserId = marshal.auth_user_id;
-
-      if (!targetAuthUserId) {
-        const { data: driver } = await admin
-          .from("drivers")
-          .select("auth_user_id")
-          .eq("phone", identifier)
-          .maybeSingle();
-        if (driver?.auth_user_id) targetAuthUserId = driver.auth_user_id;
+      const { data, error } = await admin.rpc("find_auth_user_by_phone", {
+        p_phone: identifier,
+      });
+      if (error) console.error("[signin] find_by_phone error:", error);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row) {
+        targetAuthUserId = row.auth_user_id;
+        targetEmail = row.email;
       }
     } else {
-      // Username. We store usernames in auth.users.user_metadata.username
-      const { data: users } = await admin.auth.admin.listUsers();
-      const match = users?.users.find(
-        (u) => (u.user_metadata?.username ?? "") === identifier.toLowerCase()
-      );
-      if (match) {
-        targetAuthUserId = match.id;
-        targetEmail = match.email ?? null;
+      // Username
+      const { data, error } = await admin.rpc("find_auth_user_by_username", {
+        p_username: identifier,
+      });
+      if (error) console.error("[signin] find_by_username error:", error);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row) {
+        targetAuthUserId = row.auth_user_id;
+        targetEmail = row.email;
       }
     }
 
-    if (!targetAuthUserId) {
+    if (!targetAuthUserId || !targetEmail) {
       return NextResponse.json(
         { error: "No account found for that identifier" },
         { status: 401 }
       );
     }
 
-    // 2. Get email for sign-in (Supabase requires email)
-    if (!targetEmail) {
-      const { data: userData, error: userErr } =
-        await admin.auth.admin.getUserById(targetAuthUserId);
-      if (userErr || !userData.user?.email) {
-        return NextResponse.json(
-          { error: "Account has no email — contact support" },
-          { status: 500 }
-        );
-      }
-      targetEmail = userData.user.email;
-    }
-
-    // 3. Sign in with password via the user-scoped client (sets cookies)
+    // --- Sign in with password ---
     const supabase = await createSupabaseServerClient();
     const { data: signIn, error: signInErr } =
       await supabase.auth.signInWithPassword({
@@ -133,7 +120,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Resolve role for the response
+    // --- Resolve role ---
     const resolved = await resolveUserRole(
       supabase,
       signIn.user.id,
@@ -144,24 +131,30 @@ export async function POST(request: NextRequest) {
     if (!resolved) {
       await supabase.auth.signOut();
       return NextResponse.json(
-        { error: "Account has no assigned role. Contact administrator." },
+        {
+          error:
+            "Account has no assigned role. Please contact your administrator.",
+        },
         { status: 403 }
       );
     }
 
-    // 5. Update last_login_at on the domain record
-    if (resolved.role === "marshal" && resolved.marshalId) {
-      await admin
-        .from("marshals")
-        .update({ last_login_at: new Date().toISOString() })
-        .eq("id", resolved.marshalId);
-    } else if (resolved.role === "driver" && resolved.driverId) {
-      // drivers table doesn't have last_login_at — skip
-    } else if (resolved.staffId) {
-      await admin
-        .from("staff")
-        .update({ last_login_at: new Date().toISOString() })
-        .eq("id", resolved.staffId);
+    // --- Update last_login_at on domain record ---
+    try {
+      if (resolved.role === "marshal" && resolved.marshalId) {
+        await admin
+          .from("marshals")
+          .update({ last_login_at: new Date().toISOString() })
+          .eq("id", resolved.marshalId);
+      } else if (resolved.staffId) {
+        await admin
+          .from("staff")
+          .update({ last_login_at: new Date().toISOString() })
+          .eq("id", resolved.staffId);
+      }
+    } catch (updateErr) {
+      // Non-critical — don't fail sign-in over this
+      console.warn("[signin] last_login update failed:", updateErr);
     }
 
     return NextResponse.json({ user: resolved });
