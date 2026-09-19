@@ -12,13 +12,13 @@ import {
   ArrowLeft,
   Users,
   ShieldCheck,
-  UserCircle,Car,
+  UserCircle,Car,Building2,
   Loader2,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/admin/staff", label: "Staff", icon: Users },
-  { href: "/admin/drivers", label: "Drivers", icon: UserCircle }, { href: "/admin/vehicles", label: "Vehicles", icon: Car }, 
+  { href: "/admin/drivers", label: "Drivers", icon: UserCircle }, { href: "/admin/vehicles", label: "Vehicles", icon: Car }, { href: "/admin/operators", label: "Operators", icon: Building2 },
   // More items as we add modules
 ];
 
