@@ -17,11 +17,12 @@ const PUBLIC_ROUTES = [
   "/",
   "/login",
   "/claim",
-  "/kiosk",
+  "/kiosk", "/verify", 
   "/api/auth/claim",
   "/api/auth/signin",
   "/api/health",
-  "/api/fleet/status",
+  "/api/fleet/status", "/api/public",         
+  "/api/qr/verify",     
 ];
 
 const AUTH_ROUTES = ["/login", "/claim"];
