@@ -3,6 +3,7 @@
  * Fixed: removed duplicate `const now` that broke production builds.
  */
 import { Vehicle, Driver, Trip } from "../types";
+import { generateVIC } from "./helper";
 
 export interface RosterQueueItem {
   position: number;
@@ -319,6 +320,41 @@ export function computeVehicleTripStats(
     averageTripsPerVehicle: stats.length ? totalTripsMonth / stats.length : 0,
     topVehicle: stats[0],
   };
+}
+
+export function getLast15QueuePositions(
+  plan: RouteRosterPlan,
+  dayNumber?: number
+): RosterQueueItem[] {
+  const day = dayNumber ?? plan.dailyRoster.find((d) => d.isToday)?.dayNumber ?? 1;
+  const order = plan.dailyRosterMap[day] || plan.dailyRoster[0]?.queueOrder || [];
+  return order.slice(0, 15);
+}
+
+export function advanceMonthlyRotation(vehicles: Vehicle[]): Vehicle[] {
+  if (!vehicles.length) return vehicles;
+  const regulars = vehicles.filter((v) => !v.addedMidMonth && !v.isMidMonthAddition);
+  const mid = vehicles.filter((v) => v.addedMidMonth || v.isMidMonthAddition);
+  if (regulars.length <= 1) {
+    return vehicles.map((v) => ({
+      ...v,
+      addedMidMonth: false,
+      isMidMonthAddition: false,
+      monthlySequenceBaseIndex: v.monthlySequenceBaseIndex ?? v.currentQueuePosition ?? 0,
+    }));
+  }
+  const rotated = [...regulars.slice(1), regulars[0]];
+  const promoted = mid.map((v, i) => ({
+    ...v,
+    addedMidMonth: false,
+    isMidMonthAddition: false,
+    monthlySequenceBaseIndex: rotated.length + i + 1,
+  }));
+  return [...rotated, ...promoted].map((v, i) => ({
+    ...v,
+    monthlySequenceBaseIndex: i + 1,
+    currentQueuePosition: i + 1,
+  }));
 }
 
 export function computeYoYComparison(
