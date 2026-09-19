@@ -1255,6 +1255,15 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+{currentUser.role !== "commuter" && (
+  <a
+    href="/account"
+    className="py-2 px-3 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition cursor-pointer text-xs font-bold"
+    title="Account Settings"
+  >
+    <User className="w-4 h-4" />
+  </a>
+)}
             <button
               onClick={() => setIsLoginModalOpen(true)}
               className="flex-1 sm:flex-initial py-2 px-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-sm"

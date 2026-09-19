@@ -55,7 +55,9 @@ export default function AdminLayout({
               <ArrowLeft className="w-3.5 h-3.5" />
               Back
             </Link>
+
             <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
+
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
               <span className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
@@ -63,7 +65,14 @@ export default function AdminLayout({
               </span>
             </div>
           </div>
-          <div className="text-[11px] text-zinc-500">{user.fullName}</div>
+         <div className="flex items-center gap-3">
+  <Link
+    href="/account"
+    className="text-[11px] font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+  >
+    {user.fullName}
+  </Link>
+</div>
         </div>
       </div>
 
