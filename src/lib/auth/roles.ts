@@ -50,6 +50,25 @@ export async function resolveUserRole(
 ): Promise<ResolvedUser | null> {
   const admin = createSupabaseAdminClient();
 
+  console.log("[resolveUserRole] input authUserId:", authUserId);
+  console.log("[resolveUserRole] input email:", email);
+
+  // --- Diagnostic: check if we can even see the marshals table ---
+  const { count: marshalCount, error: countErr } = await admin
+    .from("marshals")
+    .select("*", { count: "exact", head: true });
+
+  console.log("[resolveUserRole] marshals total count:", marshalCount, "error:", countErr);
+
+  // --- Diagnostic: query the specific row without filters ---
+  const { data: rawMarshal, error: rawErr } = await admin
+    .from("marshals")
+    .select("id, auth_user_id, is_active, first_name, surname")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+
+  console.log("[resolveUserRole] raw marshal query result:", rawMarshal, "error:", rawErr);
+
   // 1. Staff (highest priority)
   const { data: staff, error: staffErr } = await admin
     .from("staff")
@@ -58,7 +77,7 @@ export async function resolveUserRole(
     .eq("is_active", true)
     .maybeSingle();
 
-  if (staffErr) console.error("[resolveUserRole] staff error:", staffErr);
+  console.log("[resolveUserRole] staff query:", { staff, staffErr });
 
   if (staff) {
     return {
@@ -84,7 +103,7 @@ export async function resolveUserRole(
     .eq("is_active", true)
     .maybeSingle();
 
-  if (marshalErr) console.error("[resolveUserRole] marshal error:", marshalErr);
+  console.log("[resolveUserRole] marshal query (with filters):", { marshal, marshalErr });
 
   if (marshal) {
     return {
@@ -109,7 +128,7 @@ export async function resolveUserRole(
     .eq("auth_user_id", authUserId)
     .maybeSingle();
 
-  if (driverErr) console.error("[resolveUserRole] driver error:", driverErr);
+  console.log("[resolveUserRole] driver query:", { driver, driverErr });
 
   if (driver && driver.status !== "Suspended") {
     return {
@@ -132,7 +151,7 @@ export async function resolveUserRole(
     .eq("auth_user_id", authUserId)
     .maybeSingle();
 
-  if (operatorErr) console.error("[resolveUserRole] operator error:", operatorErr);
+  console.log("[resolveUserRole] operator query:", { operator, operatorErr });
 
   if (operator) {
     return {
@@ -147,6 +166,7 @@ export async function resolveUserRole(
     };
   }
 
+  console.log("[resolveUserRole] NO ROLE FOUND — returning null");
   return null;
 }
 
