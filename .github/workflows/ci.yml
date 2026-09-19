@@ -24,6 +24,14 @@ concurrency:
 
 jobs:
   verify:
+      - name: Production build (dry run)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_APP_URL: "https://example.com"
+          AUTH_SECRET: "ci-dummy-secret-do-not-use-in-prod-0000000000000000"
+          NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "ci-dummy-anon-key"
+          SUPABASE_SERVICE_ROLE_KEY: "ci-dummy-service-role"
     name: Typecheck, Lint, Test, Build
     runs-on: ubuntu-latest
     timeout-minutes: 15

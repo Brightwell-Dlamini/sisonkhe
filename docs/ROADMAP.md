@@ -89,90 +89,26 @@
 
 ---
 
-## Phase 2a — Supabase Schema (Week 3)
+## Phase 2 — Schema (Week 3) — IN PROGRESS
 
-### Schema Draft
+### Deliverables
+- [x] Design full schema with conflict-free conventions
+- [x] `src/db/schema.ts` Drizzle schema
+- [x] `drizzle/0000_initial.sql` full migration
+- [x] `drizzle/0001_add_marshals_version.sql` one-column change
+- [x] `drizzle/0002_rls_policies.sql` RLS
+- [x] `drizzle/0003_seed_reference_data.sql` regions + routes
+- [x] `scripts/seed.ts` operators, drivers, vehicles
+- [x] `SCHEMA-DECISIONS.md` rationale
+- [ ] **You apply migrations in Supabase SQL Editor** ← next step
+- [ ] **You seed via `npx tsx scripts/seed.ts`** (uses service role key)
 
-```sql
--- Core entities
-CREATE TABLE regions (
-  code TEXT PRIMARY KEY,          -- 'Hhohho', 'Manzini', ...
-  name TEXT NOT NULL,
-  terminal_name TEXT NOT NULL,
-  emergency_number TEXT,
-  announcement TEXT,
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+### Exit Criteria
+- All tables created in Supabase
+- RLS enabled and tested
+- `marshals` query still works from the portal
+- Reference data present
 
-CREATE TABLE routes (
-  id TEXT PRIMARY KEY,
-  region_code TEXT NOT NULL REFERENCES regions(code),
-  origin TEXT NOT NULL,
-  destination TEXT NOT NULL,
-  distance_km NUMERIC NOT NULL,
-  base_fare_e NUMERIC NOT NULL,
-  is_popular BOOLEAN DEFAULT false,
-  start_time TEXT,
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE TABLE vehicles (
-  registration_number TEXT PRIMARY KEY,
-  vic TEXT UNIQUE,
-  make TEXT,
-  model TEXT,
-  seating_capacity INT,
-  classification TEXT,
-  route_assignment_id TEXT REFERENCES routes(id),
-  loading_bay TEXT,
-  owner_name TEXT,
-  owner_phone TEXT,
-  driver_id TEXT,
-  status TEXT NOT NULL,
-  current_queue_position INT,
-  permit_number TEXT,
-  permit_status TEXT,
-  permit_expiry_date DATE,
-  cof_number TEXT,
-  cof_expiry_date DATE,
-  -- ... rest of fields
-  added_mid_month BOOLEAN DEFAULT false,
-  registration_date DATE,
-  version INT NOT NULL DEFAULT 1,   -- optimistic concurrency
-  updated_at TIMESTAMPTZ DEFAULT now(),
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Sync infrastructure
-CREATE TABLE sync_events (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  entity_type TEXT NOT NULL,
-  entity_id TEXT NOT NULL,
-  operation TEXT NOT NULL,       -- INSERT, UPDATE, DELETE
-  payload JSONB NOT NULL,
-  idempotency_key UUID UNIQUE NOT NULL,
-  client_id TEXT NOT NULL,
-  occurred_at TIMESTAMPTZ NOT NULL,
-  applied_at TIMESTAMPTZ DEFAULT now()
-);
-CREATE INDEX idx_sync_events_applied_at ON sync_events(applied_at);
-
--- Audit log
-CREATE TABLE audit_log (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  actor_user_id UUID,
-  actor_role TEXT,
-  action TEXT NOT NULL,
-  entity_type TEXT,
-  entity_id TEXT,
-  before JSONB,
-  after JSONB,
-  ip_address INET,
-  user_agent TEXT,
-  occurred_at TIMESTAMPTZ DEFAULT now()
-);
-CREATE INDEX idx_audit_log_occurred_at ON audit_log(occurred_at DESC);
-(Full schema to be written in Phase 2a.)
 Phase 2b — Sync Protocol (Week 4)
 
 Event Envelope

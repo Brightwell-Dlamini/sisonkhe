@@ -16,6 +16,8 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+"@supabase/ssr": "^0.5.2",
+"@supabase/supabase-js": "^2.45.4",
     "@auth/core": "^0.34.2",
     "@google/genai": "^2.19.0",
     "@upstash/ratelimit": "^2.0.5",
