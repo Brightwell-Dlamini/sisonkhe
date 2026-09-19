@@ -55,39 +55,40 @@ AS $$
   LIMIT 1;
 $$;
 
--- Find auth user id by phone (checks marshals + drivers + operators)
+-- Find auth user id by phone (checks marshals + drivers)
+-- Note: LANGUAGE plpgsql because it uses a local variable.
 CREATE OR REPLACE FUNCTION public.find_auth_user_by_phone(p_phone text)
 RETURNS TABLE (auth_user_id uuid, email text)
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public, auth
 AS $$
-  DECLARE
-    v_clean_phone text;
-  BEGIN
-    v_clean_phone := regexp_replace(p_phone, '\s+', '', 'g');
+DECLARE
+  v_clean_phone text;
+BEGIN
+  v_clean_phone := regexp_replace(p_phone, '\s+', '', 'g');
 
-    RETURN QUERY
-    SELECT u.id, u.email
-    FROM auth.users u
-    WHERE u.id IN (
-      SELECT auth_user_id FROM public.marshals
-      WHERE auth_user_id IS NOT NULL
-        AND (
-          regexp_replace(coalesce(cell_no, ''), '\s+', '', 'g') = v_clean_phone
-          OR regexp_replace(coalesce(whatsapp_no, ''), '\s+', '', 'g') = v_clean_phone
-        )
-      UNION
-      SELECT auth_user_id FROM public.drivers
-      WHERE auth_user_id IS NOT NULL
-        AND regexp_replace(coalesce(phone, ''), '\s+', '', 'g') = v_clean_phone
-    )
-    LIMIT 1;
-  END;
+  RETURN QUERY
+  SELECT u.id, u.email
+  FROM auth.users u
+  WHERE u.id IN (
+    SELECT auth_user_id FROM public.marshals
+    WHERE auth_user_id IS NOT NULL
+      AND (
+        regexp_replace(coalesce(cell_no, ''), '\s+', '', 'g') = v_clean_phone
+        OR regexp_replace(coalesce(whatsapp_no, ''), '\s+', '', 'g') = v_clean_phone
+      )
+    UNION
+    SELECT auth_user_id FROM public.drivers
+    WHERE auth_user_id IS NOT NULL
+      AND regexp_replace(coalesce(phone, ''), '\s+', '', 'g') = v_clean_phone
+  )
+  LIMIT 1;
+END;
 $$;
 
--- Grant execute to authenticated (needed because signin API calls it after auth setup)
+-- Grant execute to anon + authenticated (signin API calls these pre-auth)
 GRANT EXECUTE ON FUNCTION public.find_auth_user_by_username(text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.find_auth_user_by_email(text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.find_auth_user_by_national_id(text) TO anon, authenticated;
