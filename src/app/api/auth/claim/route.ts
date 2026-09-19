@@ -7,8 +7,8 @@
  * Step 1 (PUT): Verify identity by national ID + phone.
  * Step 2 (POST): Set username + password, create auth user, link to marshal.
  *
- * The link step uses the admin client (service role) to UPDATE the marshals
- * row directly — no RPC required, RLS bypassed by service role.
+ * Linking prefers link_marshal_auth() SECURITY DEFINER RPC, then falls back
+ * to a minimal service-role UPDATE of auth_user_id only.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -101,7 +101,6 @@ export async function POST(request: NextRequest) {
     const username = String(body.username ?? "").trim().toLowerCase();
     const password = String(body.password ?? "");
 
-    // --- Validation ---
     if (!idNumber || !phone || !username || !password) {
       return NextResponse.json(
         { error: "All fields are required." },
@@ -128,7 +127,6 @@ export async function POST(request: NextRequest) {
 
     const admin = createSupabaseAdminClient();
 
-    // --- Re-verify identity (protects against race conditions) ---
     const { data: verifyData, error: verifyErr } = await admin.rpc(
       "verify_marshal_identity",
       { p_id_number: idNumber, p_phone: phone }
@@ -154,7 +152,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- Check username availability ---
     const { data: existingUsers, error: listErr } =
       await admin.auth.admin.listUsers({ perPage: 1000 });
 
@@ -176,9 +173,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- Create the auth user ---
-    // Supabase Auth requires an email. We use a synthetic one.
-    // Marshals never see it — they sign in by username/phone/ID.
     const syntheticEmail = `${match.marshal_id}@marshal.sisonkhe.local`;
 
     const { data: created, error: createErr } =
@@ -204,24 +198,66 @@ export async function POST(request: NextRequest) {
 
     createdAuthUserId = created.user.id;
 
-    // --- Link marshal: UPDATE directly via admin client ---
-    // Uses service role key which bypasses RLS.
-    const { error: updateErr, count } = await admin
-      .from("marshals")
-      .update(
-        {
-          auth_user_id: createdAuthUserId,
-          last_login_at: new Date().toISOString(),
-          updated_at: Date.now(),
-          server_updated_at: new Date().toISOString(),
-        },
-        { count: "exact" }
-      )
-      .eq("id", match.marshal_id)
-      .is("auth_user_id", null); // guard against races
+    // Link: prefer RPC, then minimal UPDATE of auth_user_id only.
+    const { data: rpcLinked, error: rpcErr } = await admin.rpc(
+      "link_marshal_auth",
+      {
+        p_marshal_id: match.marshal_id,
+        p_auth_user_id: createdAuthUserId,
+      }
+    );
 
-    if (updateErr) {
-      console.error("[api/auth/claim] link update error:", updateErr);
+    let linked = false;
+
+    if (!rpcErr && rpcLinked === true) {
+      linked = true;
+    } else {
+      if (rpcErr) {
+        console.warn(
+          "[api/auth/claim] link_marshal_auth RPC unavailable, falling back to UPDATE:",
+          rpcErr.message
+        );
+      }
+
+      const { data: updatedRows, error: updateErr } = await admin
+        .from("marshals")
+        .update({ auth_user_id: createdAuthUserId })
+        .eq("id", match.marshal_id)
+        .is("auth_user_id", null)
+        .select("id");
+
+      if (updateErr) {
+        console.error("[api/auth/claim] link update error:", updateErr);
+        await admin.auth.admin.deleteUser(createdAuthUserId);
+        createdAuthUserId = null;
+        return NextResponse.json(
+          {
+            error:
+              "Could not link account to marshal record. Please contact your supervisor.",
+            detail: updateErr.message,
+          },
+          { status: 500 }
+        );
+      }
+
+      if (!updatedRows || updatedRows.length === 0) {
+        console.error("[api/auth/claim] link update affected 0 rows", {
+          marshalId: match.marshal_id,
+        });
+        await admin.auth.admin.deleteUser(createdAuthUserId);
+        createdAuthUserId = null;
+        return NextResponse.json(
+          {
+            error:
+              "This account appears to have just been claimed by another device. Please try signing in.",
+          },
+          { status: 409 }
+        );
+      }
+      linked = true;
+    }
+
+    if (!linked) {
       await admin.auth.admin.deleteUser(createdAuthUserId);
       createdAuthUserId = null;
       return NextResponse.json(
@@ -233,22 +269,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!count || count === 0) {
-      // Either the row was already claimed between step 1 and now,
-      // or the marshal_id doesn't match (shouldn't happen).
-      console.error("[api/auth/claim] link update affected 0 rows");
-      await admin.auth.admin.deleteUser(createdAuthUserId);
-      createdAuthUserId = null;
-      return NextResponse.json(
-        {
-          error:
-            "This account appears to have just been claimed by another device. Please try signing in.",
-        },
-        { status: 409 }
-      );
-    }
-
-    // --- Auto sign-in ---
     const supabase = await createSupabaseServerClient();
     const { data: signIn, error: signInErr } =
       await supabase.auth.signInWithPassword({
@@ -257,8 +277,6 @@ export async function POST(request: NextRequest) {
       });
 
     if (signInErr || !signIn.user) {
-      // Account was created and linked, but sign-in failed.
-      // Marshal can go to /login and sign in manually.
       return NextResponse.json({
         success: true,
         signedIn: false,
@@ -280,18 +298,15 @@ export async function POST(request: NextRequest) {
       user: resolved,
     });
   } catch (err) {
-    console.error("[api/auth/claim] fatal error:", err);
-
-    // Rollback
+    console.error("[api/auth/claim] POST error:", err);
     if (createdAuthUserId) {
       try {
         const admin = createSupabaseAdminClient();
         await admin.auth.admin.deleteUser(createdAuthUserId);
-      } catch (rollbackErr) {
-        console.error("[api/auth/claim] rollback failed:", rollbackErr);
+      } catch {
+        /* best-effort cleanup */
       }
     }
-
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
