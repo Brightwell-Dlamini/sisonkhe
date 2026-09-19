@@ -1,3 +1,8 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { useState, useEffect, useMemo } from "react";
 import { Advert, EswatiniRegion } from "../types";
 import { INITIAL_ADVERTS } from "../utils/mockData";
@@ -24,17 +29,24 @@ interface CommuterSponsoredBottomBannerProps {
   activeRegion?: EswatiniRegion;
 }
 
+const LOCAL_CACHE_KEY = "kombiflow_adverts";
+const REFETCH_INTERVAL_MS = 30000;
+
 export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBannerProps> = ({
   activeRegion = EswatiniRegion.Hhohho
 }) => {
+  // Seed state from localStorage cache, falling back to bundled defaults.
   const [adverts, setAdverts] = useState<Advert[]>(() => {
+    if (typeof window === "undefined") return INITIAL_ADVERTS;
     try {
-      const stored = localStorage.getItem("kombiflow_adverts");
+      const stored = localStorage.getItem(LOCAL_CACHE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch (e) {}
+    } catch {
+      // ignore
+    }
     return INITIAL_ADVERTS;
   });
 
@@ -45,33 +57,70 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
   const [selectedModalAd, setSelectedModalAd] = useState<Advert | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Sync adverts when localStorage updates
-  const reloadAdverts = () => {
-    try {
-      const stored = localStorage.getItem("kombiflow_adverts");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setAdverts(parsed);
-          return;
-        }
-      }
-    } catch (e) {}
-    setAdverts(INITIAL_ADVERTS);
-  };
-
+  // Fetch adverts from Supabase via the public endpoint.
+  // Caches to localStorage for offline resilience.
   useEffect(() => {
-    reloadAdverts();
-    const handleStorage = () => reloadAdverts();
+    let cancelled = false;
+
+    const fetchAdverts = async () => {
+      try {
+        const res = await fetch(
+          `/api/public/adverts?region=${encodeURIComponent(activeRegion)}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const incoming: Advert[] = Array.isArray(data.adverts)
+          ? data.adverts
+          : [];
+
+        if (cancelled || incoming.length === 0) return;
+
+        setAdverts(incoming);
+
+        // Cache for offline / next-load fallback
+        try {
+          localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(incoming));
+        } catch {
+          // ignore quota errors
+        }
+      } catch {
+        // Network error — keep last known good
+      }
+    };
+
+    void fetchAdverts();
+
+    const interval = window.setInterval(fetchAdverts, REFETCH_INTERVAL_MS);
+
+    // Cross-tab consistency from legacy storage writes
+    const handleStorage = () => {
+      try {
+        const stored = localStorage.getItem(LOCAL_CACHE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setAdverts(parsed);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+
     window.addEventListener("storage", handleStorage);
     window.addEventListener("kombiflow_adverts_updated", handleStorage);
+
     return () => {
+      cancelled = true;
+      window.clearInterval(interval);
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener("kombiflow_adverts_updated", handleStorage);
     };
-  }, []);
+  }, [activeRegion]);
 
-  // Filter active adverts for current region or nationwide
+  // Filter active adverts matching the region.
   const activeAdverts = useMemo(() => {
     return adverts.filter((ad) => {
       if (!ad.isActive) return false;
@@ -84,22 +133,28 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
     });
   }, [adverts, activeRegion]);
 
-  // Safe current advert
+  // Safe current advert.
   const currentAd: Advert | undefined = useMemo(() => {
     if (activeAdverts.length === 0) return undefined;
     return activeAdverts[currentIndex % activeAdverts.length];
   }, [activeAdverts, currentIndex]);
 
-  // Auto-advance timer (every 7.5 seconds when not paused and not dismissed)
+  // Reset index when the advert list changes shape.
   useEffect(() => {
-    if (isPaused || isMinimized || isDismissed || activeAdverts.length <= 1) return;
+    setCurrentIndex(0);
+  }, [activeAdverts.length]);
+
+  // Auto-advance every 7.5s when not paused, minimized, or dismissed.
+  useEffect(() => {
+    if (isPaused || isMinimized || isDismissed || activeAdverts.length <= 1)
+      return;
     const timer = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % activeAdverts.length);
     }, 7500);
     return () => clearInterval(timer);
   }, [isPaused, isMinimized, isDismissed, activeAdverts.length]);
 
-  // Copy promo code helper
+  // Copy promo code helper.
   const handleCopyPromo = (code: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     navigator.clipboard.writeText(code);
@@ -114,14 +169,16 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
 
   const handlePrev = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentIndex((prev) => (prev - 1 + activeAdverts.length) % activeAdverts.length);
+    setCurrentIndex(
+      (prev) => (prev - 1 + activeAdverts.length) % activeAdverts.length
+    );
   };
 
   if (activeAdverts.length === 0 || isDismissed) {
     return null;
   }
 
-  // MINIMIZED FLOATING PILL STATE (Allows commuters to still see & expand anytime)
+  // MINIMIZED FLOATING PILL
   if (isMinimized) {
     return (
       <div className="fixed bottom-3 right-4 z-40 animate-fade-in">
@@ -151,9 +208,7 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
 
   return (
     <>
-      {/* ============================================================ */}
-      {/* PROMINENT BOTTOM WEBSITE BANNER                             */}
-      {/* ============================================================ */}
+      {/* PROMINENT BOTTOM WEBSITE BANNER */}
       <div
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
@@ -165,13 +220,11 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
         {/* Banner Surface */}
         <div className="bg-zinc-950/95 dark:bg-black/95 backdrop-blur-md border-t border-amber-500/30 text-white shadow-[0_-8px_30px_rgba(0,0,0,0.5)]">
           <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex flex-col md:flex-row items-center justify-between gap-3">
-            
             {/* LEFT: Live Badge, Sponsor Thumbnail & Title */}
             <div
               onClick={() => setSelectedModalAd(currentAd)}
               className="flex items-center gap-3 w-full md:w-auto cursor-pointer group flex-1 min-w-0"
             >
-              {/* Thumbnail / Sponsor Logo */}
               <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden bg-black shrink-0 border-2 border-amber-500/50 shadow-md">
                 <img
                   src={currentAd.imageUrl}
@@ -181,10 +234,8 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
               </div>
 
-              {/* Text & Badges */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  {/* Glowing Live Badge */}
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[9px] sm:text-[10px] font-black uppercase tracking-wider font-space">
                     <span className="relative flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
@@ -194,25 +245,25 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                     <span>COMMUTER SPONSORED BROADCAST</span>
                   </span>
 
-                  {/* Sponsor Name */}
                   <span className="text-xs font-bold text-amber-300 uppercase tracking-wider font-space">
                     • {currentAd.sponsorName}
                   </span>
 
-                  {/* Targeted Corridor Tag */}
                   {currentAd.targetRegions && (
                     <span className="hidden lg:inline-flex items-center gap-1 text-[9px] font-mono text-zinc-400 uppercase bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
-                      <span>{currentAd.targetRegions.includes("All") ? "🇸🇿 All Ranks" : currentAd.targetRegions.join(", ")}</span>
+                      <span>
+                        {currentAd.targetRegions.includes("All")
+                          ? "🇸🇿 All Ranks"
+                          : currentAd.targetRegions.join(", ")}
+                      </span>
                     </span>
                   )}
                 </div>
 
-                {/* Offer Title & Summary */}
                 <h4 className="text-xs sm:text-sm font-black text-white uppercase font-space truncate group-hover:text-amber-300 transition-colors mt-0.5">
                   {currentAd.title}
                 </h4>
 
-                {/* Description snippet on larger screens */}
                 {currentAd.description && (
                   <p className="text-[11px] text-zinc-400 line-clamp-1 hidden sm:block">
                     {currentAd.description}
@@ -221,10 +272,8 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
               </div>
             </div>
 
-            {/* RIGHT: Promo Code Chip, Action Button & Carousel Controls */}
+            {/* RIGHT: Promo Code Chip, CTA, Carousel Controls, Minimize/Dismiss */}
             <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto shrink-0 pt-1 md:pt-0 border-t md:border-t-0 border-zinc-800">
-              
-              {/* Quick Promo Code Tag if available */}
               {currentAd.promoCode && (
                 <button
                   onClick={(e) => handleCopyPromo(currentAd.promoCode!, e)}
@@ -241,7 +290,6 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                 </button>
               )}
 
-              {/* Prominent CTA Button */}
               <button
                 onClick={() => setSelectedModalAd(currentAd)}
                 className="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-zinc-950 font-black text-xs uppercase tracking-wider font-space flex items-center gap-1.5 shadow-md hover:shadow-amber-500/20 transition-all cursor-pointer"
@@ -250,7 +298,6 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                 <ExternalLink className="w-3.5 h-3.5" />
               </button>
 
-              {/* Carousel Controls (if >1 advert) */}
               {activeAdverts.length > 1 && (
                 <div className="flex items-center gap-1 pl-1 border-l border-zinc-800">
                   <button
@@ -262,7 +309,8 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                   </button>
 
                   <span className="text-[10px] font-mono text-zinc-400 px-1 select-none">
-                    {(currentIndex % activeAdverts.length) + 1}/{activeAdverts.length}
+                    {(currentIndex % activeAdverts.length) + 1}/
+                    {activeAdverts.length}
                   </span>
 
                   <button
@@ -275,7 +323,6 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                 </div>
               )}
 
-              {/* Minimize / Dismiss Controls */}
               <div className="flex items-center gap-1 pl-1 border-l border-zinc-800">
                 <button
                   onClick={() => setIsMinimized(true)}
@@ -292,20 +339,15 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                   <X className="w-4 h-4" />
                 </button>
               </div>
-
             </div>
-
           </div>
         </div>
       </div>
 
-      {/* ============================================================ */}
-      {/* DETAILED SPONSORED BROADCAST MODAL                          */}
-      {/* ============================================================ */}
+      {/* DETAILED SPONSORED BROADCAST MODAL */}
       {selectedModalAd && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-zinc-950 border-2 border-amber-500/40 rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl relative text-white space-y-0">
-            
             {/* Modal Header */}
             <div className="bg-gradient-to-r from-amber-500/20 via-zinc-900 to-zinc-950 p-5 border-b border-amber-500/20 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -332,7 +374,6 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
 
             {/* Modal Content */}
             <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
-              {/* Creative Photo Banner */}
               <div className="relative rounded-2xl overflow-hidden border border-zinc-800 bg-black h-52">
                 <img
                   src={selectedModalAd.imageUrl}
@@ -345,7 +386,6 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                 </div>
               </div>
 
-              {/* Title & Category */}
               <div>
                 {selectedModalAd.category && (
                   <span className="text-[10px] font-mono uppercase text-amber-400 font-bold block mb-1">
@@ -357,13 +397,11 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                 </h2>
               </div>
 
-              {/* Detailed Description */}
               <p className="text-zinc-300 leading-relaxed text-sm">
                 {selectedModalAd.description ||
                   "Special commuter offer brought to you by our certified public transport partners across the Kingdom of Eswatini."}
               </p>
 
-              {/* Voucher / Promo Code Box */}
               {selectedModalAd.promoCode && (
                 <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-2xl space-y-2">
                   <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-amber-400">
@@ -375,7 +413,9 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                       {selectedModalAd.promoCode}
                     </span>
                     <button
-                      onClick={() => handleCopyPromo(selectedModalAd.promoCode!)}
+                      onClick={() =>
+                        handleCopyPromo(selectedModalAd.promoCode!)
+                      }
                       className="px-3 py-1.5 rounded-lg bg-amber-500 text-black font-black text-xs uppercase flex items-center gap-1.5 hover:bg-amber-400 cursor-pointer transition-colors"
                     >
                       {copiedCode ? (
@@ -394,7 +434,6 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                 </div>
               )}
 
-              {/* Contact & External Links */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                 {selectedModalAd.contactPhone && (
                   <a
@@ -404,11 +443,17 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                     <div className="flex items-center gap-2">
                       <Phone className="w-4 h-4 text-emerald-400" />
                       <div>
-                        <span className="text-[10px] text-zinc-500 block uppercase font-bold">Customer Hotline</span>
-                        <span className="font-mono font-bold text-xs">{selectedModalAd.contactPhone}</span>
+                        <span className="text-[10px] text-zinc-500 block uppercase font-bold">
+                          Customer Hotline
+                        </span>
+                        <span className="font-mono font-bold text-xs">
+                          {selectedModalAd.contactPhone}
+                        </span>
                       </div>
                     </div>
-                    <span className="text-[10px] uppercase font-bold text-emerald-400">Call</span>
+                    <span className="text-[10px] uppercase font-bold text-emerald-400">
+                      Call
+                    </span>
                   </a>
                 )}
 
@@ -422,8 +467,12 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                     <div className="flex items-center gap-2">
                       <Globe className="w-4 h-4 text-blue-400" />
                       <div>
-                        <span className="text-[10px] text-zinc-500 block uppercase font-bold">Official Website</span>
-                        <span className="font-bold text-xs truncate max-w-[130px] block">{selectedModalAd.sponsorName}</span>
+                        <span className="text-[10px] text-zinc-500 block uppercase font-bold">
+                          Official Website
+                        </span>
+                        <span className="font-bold text-xs truncate max-w-[130px] block">
+                          {selectedModalAd.sponsorName}
+                        </span>
                       </div>
                     </div>
                     <ExternalLink className="w-4 h-4 text-blue-400" />
@@ -431,11 +480,11 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                 )}
               </div>
 
-              {/* Trust Badge */}
               <div className="p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/80 flex items-center gap-2.5 text-[11px] text-zinc-400">
                 <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>
-                  Official commuter broadcast verified under Eswatini Road Transport Authority regulations.
+                  Official commuter broadcast verified under Eswatini Road
+                  Transport Authority regulations.
                 </span>
               </div>
             </div>
@@ -449,7 +498,6 @@ export const CommuterSponsoredBottomBanner: React.FC<CommuterSponsoredBottomBann
                 Close
               </button>
             </div>
-
           </div>
         </div>
       )}

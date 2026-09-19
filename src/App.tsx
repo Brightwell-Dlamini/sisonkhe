@@ -1369,17 +1369,19 @@ export default function App() {
 
           {/* Core role select headers */}
           <nav className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl border border-zinc-250 dark:border-zinc-850 self-start lg:self-auto overflow-x-auto max-w-full scrollbar-none">
-            <button
-              onClick={() => handleTabChangeWithAuth("kiosk")}
-              className={`flex items-center gap-1.5 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                activeTab === "kiosk"
-                  ? "bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-white border border-emerald-500/30"
-                  : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
-              }`}
-            >
-              <Radio className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
-              <span>⚡ Live Transit & Radar</span>
-            </button>
+           <button
+  onClick={() => {
+    window.location.href = `/kiosk?region=${encodeURIComponent(activeRegion)}`;
+  }}
+  className={`flex items-center gap-1.5 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+    activeTab === "kiosk"
+      ? "bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-white border border-emerald-500/30"
+      : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+  }`}
+>
+  <Radio className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
+  <span>⚡ Live Transit & Radar</span>
+</button>
             <button
               onClick={() => handleTabChangeWithAuth("departures")}
               className={`flex items-center gap-1.5 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
@@ -1449,18 +1451,7 @@ export default function App() {
 
         {/* Major Content display zone */}
         <main className="min-h-[460px]">
-          {activeTab === "kiosk" && (
-            <PublicDisplayScreen
-              vehicles={vehicles}
-              routes={routes}
-              activeRegion={activeRegion}
-              regionConfigs={regionConfigs}
-              drivers={drivers}
-              trips={trips}
-              onNavigateTab={(tab) => setActiveTab(tab)}
-            />
-          )}
-
+          
           {activeTab === "departures" && (
             <DepartureBoard
               vehicles={vehicles}
