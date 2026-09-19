@@ -34,7 +34,7 @@ async function tryLinkMarshal(
 ): Promise<{ ok: boolean; method?: string; error?: string }> {
   const { marshalId, idNumber, phone, authUserId } = opts;
 
-  // 1) Identity-based RPC (matches supabase/migrations/0004_auth_helpers.sql)
+  // 1) Identity-based RPC
   {
     const { data, error } = await admin.rpc("link_marshal_auth", {
       p_id_number: idNumber,
@@ -51,7 +51,7 @@ async function tryLinkMarshal(
     }
   }
 
-  // 2) ID-based RPC (matches supabase/migrations/0007_link_marshal_auth.sql)
+  // 2) ID-based RPC
   {
     const { data, error } = await admin.rpc("link_marshal_auth", {
       p_marshal_id: marshalId,
@@ -67,7 +67,7 @@ async function tryLinkMarshal(
     }
   }
 
-  // 3) Direct UPDATE — only auth_user_id (no optional columns)
+  // 3) Direct UPDATE — only auth_user_id
   {
     const { data: rows, error } = await admin
       .from("marshals")
@@ -81,7 +81,6 @@ async function tryLinkMarshal(
     }
     if (error) {
       console.error("[claim] UPDATE by id failed:", error);
-      // Try match by national id as last resort
       const { data: rows2, error: err2 } = await admin
         .from("marshals")
         .update({ auth_user_id: authUserId })
@@ -275,7 +274,6 @@ export async function POST(request: NextRequest) {
 
     if (createErr || !created.user) {
       console.error("[api/auth/claim] create user error:", createErr);
-      // Common: email already exists from a failed previous claim
       const msg = createErr?.message ?? "Could not create account.";
       if (msg.toLowerCase().includes("already") || msg.toLowerCase().includes("exists")) {
         return NextResponse.json(
@@ -339,7 +337,6 @@ export async function POST(request: NextRequest) {
     }
 
     const resolved = await resolveUserRole(
-      supabase,
       signIn.user.id,
       signIn.user.email ?? null,
       signIn.user.phone ?? null
