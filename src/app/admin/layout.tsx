@@ -7,19 +7,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/hooks/useAuth";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import {
   ArrowLeft,
   Users,
-  ShieldCheck,UserCircle, 
+  ShieldCheck,
+  UserCircle,
   Loader2,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/admin/staff", label: "Staff", icon: Users },
-  { href: "/admin/drivers", label: "Drivers", icon: UserCircle },  
-];
+  { href: "/admin/drivers", label: "Drivers", icon: UserCircle },
   // More items as we add modules
 ];
 
@@ -64,9 +63,7 @@ export default function AdminLayout({
               </span>
             </div>
           </div>
-          <div className="text-[11px] text-zinc-500">
-            {user.fullName}
-          </div>
+          <div className="text-[11px] text-zinc-500">{user.fullName}</div>
         </div>
       </div>
 
