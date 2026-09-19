@@ -8,10 +8,11 @@ Real-time departure boards, Driver Virtual Passes, Vehicle Owner Operator Master
 
 | Layer | Technology |
 |-------|------------|
-| Framework | Next.js 15 (App Router) |
+| Framework | Next.js 15.5.7 (App Router) |
 | UI | React 19 · Tailwind CSS 4 · Lucide · Motion · Recharts |
 | State | Client localStorage + `/api/fleet/sync` |
-| Deploy | Vercel |
+| Durable store | Vercel KV (optional) · in-memory fallback |
+| Deploy | [Vercel](https://sisonkhe-brightwelldlaminis-projects.vercel.app) |
 
 ## Getting Started
 
@@ -23,45 +24,42 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Scripts
+## Production URL
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Development server |
-| `npm run build` | Production build |
-| `npm run start` | Start production server |
-| `npm run lint` | ESLint |
-| `npm run typecheck` | TypeScript check |
+- App: https://sisonkhe-brightwelldlaminis-projects.vercel.app
+- Health: https://sisonkhe-brightwelldlaminis-projects.vercel.app/api/health
 
 ## API
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/health` | GET | Health check |
+| `/api/health` | GET | Health check (includes active store backend) |
 | `/api/fleet/status` | GET | Lightweight `lastUpdated` poll |
 | `/api/fleet/sync` | GET / POST | Full fleet state read/write |
 
-Optional write protection: set `FLEET_SYNC_SECRET` and send it as `X-Fleet-Sync-Secret` (or `Authorization: Bearer …`) on POST.
+## Enable durable multi-device sync (Vercel KV)
+
+Without KV, fleet state is held in memory per serverless instance and will not reliably sync across regions/instances.
+
+1. Open [Vercel Dashboard](https://vercel.com) → project **sisonkhe** → **Storage**
+2. **Create** a KV database and **connect** it to this project
+3. Redeploy (or push a commit) — `KV_REST_API_URL` / `KV_REST_API_TOKEN` are injected automatically
+4. Confirm via `/api/health` → `"store": "vercel-kv"`
 
 ## Production checklist
 
 - [x] Next.js 15 App Router migration
 - [x] Vercel project linked (framework = nextjs)
+- [x] CVE-2025-66478 patched (Next.js ≥ 15.5.7)
 - [x] API route handlers with CORS, validation, size limits
-- [x] `.env.example` and optional sync secret
-- [ ] **Durable store** — replace in-memory `fleetStore` with Vercel KV / Upstash Redis / Postgres
-- [ ] **Auth** — replace client-only login with Auth.js (or similar) before public launch
-- [ ] Set `FLEET_SYNC_SECRET` in Vercel project env (Production + Preview)
+- [x] Deployment protection relaxed for public kiosk access
+- [x] KV-ready fleet store (auto-selects when env present)
+- [ ] **Create & link Vercel KV** (see above)
+- [ ] **Auth** — replace client-only login with Auth.js before public launch
+- [ ] Set `FLEET_SYNC_SECRET` + enable `FLEET_SYNC_REQUIRE_SECRET` after client update
 - [ ] Custom domain + SSL
-- [ ] Split oversized components (`SuperAdminControlCentre`, `FleetManagerTab`) for maintainability
-- [ ] Error boundaries and structured logging
-
-### Upgrading the fleet store
-
-1. `npm install @vercel/kv`
-2. Create a KV store in the Vercel dashboard and link it to the project
-3. Implement `StorageAdapter` in `src/lib/fleetStore.ts` using `kv.get` / `kv.set`
-4. Redeploy
+- [ ] Remove `typescript.ignoreBuildErrors` after prop-type cleanup
+- [ ] Split oversized components for maintainability
 
 ## Roles
 

@@ -1,17 +1,18 @@
 /**
  * Fleet state store for Sisonkhe API.
  *
- * Current implementation: in-memory (works for single-instance / preview).
- * Designed so the storage backend can be swapped to Vercel KV, Upstash Redis,
- * or Postgres without changing the route handlers.
+ * Selects storage backend automatically:
+ * - Vercel KV when KV_REST_API_URL + KV_REST_API_TOKEN are set
+ * - In-memory fallback otherwise (per serverless instance)
  *
- * Production path:
- * 1. Add @vercel/kv (or @upstash/redis)
- * 2. Implement the StorageAdapter interface below with KV get/set
- * 3. Set KV_REST_API_URL + KV_REST_API_TOKEN in Vercel env
+ * To enable durable multi-instance sync:
+ * 1. Vercel Dashboard → Storage → Create KV Database → Connect to this project
+ * 2. Redeploy (env vars are injected automatically)
  */
 
 const MAX_STATE_BYTES = 4 * 1024 * 1024; // 4 MB safety limit
+const KV_KEY = "sisonkhe:fleet_state";
+
 const ALLOWED_TOP_LEVEL_KEYS = new Set([
   "lastUpdated",
   "routes",
@@ -41,10 +42,11 @@ export type FleetState = Record<string, unknown> & {
 interface StorageAdapter {
   get(): Promise<FleetState>;
   set(state: FleetState): Promise<void>;
+  name: string;
 }
 
-/** In-memory adapter — default until a durable store is wired */
 class MemoryAdapter implements StorageAdapter {
+  name = "memory";
   private state: FleetState = { lastUpdated: Date.now() };
 
   async get(): Promise<FleetState> {
@@ -56,7 +58,46 @@ class MemoryAdapter implements StorageAdapter {
   }
 }
 
-const adapter: StorageAdapter = new MemoryAdapter();
+class KvAdapter implements StorageAdapter {
+  name = "vercel-kv";
+
+  async get(): Promise<FleetState> {
+    const { kv } = await import("@vercel/kv");
+    const data = await kv.get<FleetState>(KV_KEY);
+    if (data && typeof data === "object") {
+      return data;
+    }
+    return { lastUpdated: Date.now() };
+  }
+
+  async set(state: FleetState): Promise<void> {
+    const { kv } = await import("@vercel/kv");
+    await kv.set(KV_KEY, state);
+  }
+}
+
+function createAdapter(): StorageAdapter {
+  const hasKv =
+    Boolean(process.env.KV_REST_API_URL) &&
+    Boolean(process.env.KV_REST_API_TOKEN);
+  if (hasKv) {
+    return new KvAdapter();
+  }
+  return new MemoryAdapter();
+}
+
+// Lazy singleton — avoids importing @vercel/kv when unused
+let adapter: StorageAdapter | null = null;
+
+function getAdapter(): StorageAdapter {
+  if (!adapter) {
+    adapter = createAdapter();
+    if (process.env.FLEET_API_DEBUG === "true") {
+      console.log(`[fleetStore] using adapter: ${adapter.name}`);
+    }
+  }
+  return adapter;
+}
 
 function sanitizeUpdates(updates: Record<string, unknown>): Record<string, unknown> {
   const clean: Record<string, unknown> = {};
@@ -76,7 +117,7 @@ function assertSize(state: FleetState): void {
 }
 
 export async function getFleetState(): Promise<FleetState> {
-  return adapter.get();
+  return getAdapter().get();
 }
 
 export async function updateFleetState(
@@ -86,7 +127,8 @@ export async function updateFleetState(
     throw new Error("Updates must be a plain object");
   }
 
-  const current = await adapter.get();
+  const store = getAdapter();
+  const current = await store.get();
   const sanitized = sanitizeUpdates(updates);
   const next: FleetState = {
     ...current,
@@ -95,11 +137,15 @@ export async function updateFleetState(
   };
 
   assertSize(next);
-  await adapter.set(next);
+  await store.set(next);
   return next;
 }
 
 export async function getLastUpdated(): Promise<number> {
-  const state = await adapter.get();
+  const state = await getAdapter().get();
   return typeof state.lastUpdated === "number" ? state.lastUpdated : 0;
+}
+
+export function getStoreBackendName(): string {
+  return getAdapter().name;
 }
