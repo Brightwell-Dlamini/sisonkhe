@@ -1,15 +1,6 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Sign in by: username OR phone OR national ID + password.
- *
- * Flow:
- *   1. Client sends { identifier, password }
- *   2. Server determines identifier type
- *   3. Uses RPC helpers to find the auth user
- *   4. Signs in with password via Supabase
- *   5. Resolves role
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -26,13 +17,14 @@ function looksLikeEmail(s: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 }
 
-function looksLikePhone(s: string): boolean {
-  const cleaned = s.replace(/\s+/g, "");
-  return /^\+?\d{8,15}$/.test(cleaned) && !looksLikeNationalId(s);
-}
-
 function looksLikeNationalId(s: string): boolean {
   return /^\d{13}$/.test(s.trim().replace(/\s+/g, ""));
+}
+
+function looksLikePhone(s: string): boolean {
+  const cleaned = s.replace(/\s+/g, "");
+  if (looksLikeNationalId(s)) return false;
+  return /^\+?\d{8,15}$/.test(cleaned);
 }
 
 export async function POST(request: NextRequest) {
@@ -86,7 +78,6 @@ export async function POST(request: NextRequest) {
         targetEmail = row.email;
       }
     } else {
-      // Username
       const { data, error } = await admin.rpc("find_auth_user_by_username", {
         p_username: identifier,
       });
@@ -105,7 +96,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- Sign in with password ---
+    // --- Sign in with password (sets session cookie) ---
     const supabase = await createSupabaseServerClient();
     const { data: signIn, error: signInErr } =
       await supabase.auth.signInWithPassword({
@@ -120,9 +111,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- Resolve role ---
+    // --- Resolve role via admin client (not user client) ---
     const resolved = await resolveUserRole(
-      supabase,
       signIn.user.id,
       signIn.user.email ?? null,
       signIn.user.phone ?? null
@@ -139,7 +129,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- Update last_login_at on domain record ---
+    // --- Update last_login_at (non-critical) ---
     try {
       if (resolved.role === "marshal" && resolved.marshalId) {
         await admin
@@ -153,7 +143,6 @@ export async function POST(request: NextRequest) {
           .eq("id", resolved.staffId);
       }
     } catch (updateErr) {
-      // Non-critical — don't fail sign-in over this
       console.warn("[signin] last_login update failed:", updateErr);
     }
 
