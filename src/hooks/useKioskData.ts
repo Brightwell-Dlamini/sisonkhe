@@ -3,9 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Client hook for the public kiosk.
- *
- * Fetches the curated snapshot every 8s while the tab is visible.
- * Falls back to the last known good snapshot if a fetch fails.
+ * Fetches the curated snapshot periodically while the tab is visible.
+ * Does not flip loading=true on background polls (avoids full UI flash).
  */
 
 "use client";
@@ -34,11 +33,14 @@ export function useKioskData(
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
   const pollingRef = useRef<number | null>(null);
+  const regionRef = useRef(region);
+  regionRef.current = region;
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts?: { showLoader?: boolean }) => {
+    if (opts?.showLoader) setLoading(true);
     try {
       const res = await fetch(
-        `/api/public/kiosk?region=${encodeURIComponent(region)}`,
+        `/api/public/kiosk?region=${encodeURIComponent(regionRef.current)}`,
         { cache: "no-store" }
       );
 
@@ -52,26 +54,24 @@ export function useKioskData(
       setLastUpdatedAt(Date.now());
       setError(null);
     } catch (err) {
-      // Keep last good snapshot; just surface the error
       setError(err instanceof Error ? err.message : "Network error");
     } finally {
       setLoading(false);
     }
-  }, [region]);
+  }, []);
 
-  // Immediate fetch when region changes
+  // Initial + region change only shows loader
   useEffect(() => {
-    setLoading(true);
-    void refresh();
-  }, [refresh]);
+    void refresh({ showLoader: true });
+  }, [region, refresh]);
 
-  // Poll while visible
+  // Background poll — no loader
   useEffect(() => {
     if (pollingRef.current) window.clearInterval(pollingRef.current);
 
     pollingRef.current = window.setInterval(() => {
       if (document.visibilityState === "visible") {
-        void refresh();
+        void refresh({ showLoader: false });
       }
     }, POLL_INTERVAL_MS);
 
@@ -80,11 +80,11 @@ export function useKioskData(
     };
   }, [refresh]);
 
-  // Refetch when tab becomes visible after being hidden
+  // Soft refetch when tab becomes visible (no loader)
   useEffect(() => {
     const handler = () => {
       if (document.visibilityState === "visible") {
-        void refresh();
+        void refresh({ showLoader: false });
       }
     };
     document.addEventListener("visibilitychange", handler);
@@ -95,7 +95,7 @@ export function useKioskData(
     snapshot,
     loading,
     error,
-    refresh,
+    refresh: () => refresh({ showLoader: false }),
     setRegion,
     lastUpdatedAt,
   };

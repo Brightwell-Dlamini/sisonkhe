@@ -12,6 +12,9 @@ import type { AuthRole } from "../lib/auth/roles";
 
 /**
  * Redirects to /login if unauthenticated. Redirects to / if role doesn't match.
+ *
+ * While loading, callers may show a spinner — but loading is only true before
+ * first hydration, not on every tab focus.
  */
 export function useRequireAuth(allowedRoles?: AuthRole[]) {
   const { user, loading } = useAuth();
