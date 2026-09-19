@@ -3,18 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Standalone public kiosk page. No login required.
- *
- * Wraps the existing PublicDisplayScreen but drives it with real Supabase
- * data instead of localStorage mock data.
  */
 
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useKioskData } from "@/hooks/useKioskData";
 import PublicDisplayScreen from "@/components/PublicDisplayScreen";
+
+const ALL_REGIONS = ["Hhohho", "Manzini", "Lubombo", "Shiselweni"] as const;
 
 function KioskInner() {
   const searchParams = useSearchParams();
@@ -22,30 +21,31 @@ function KioskInner() {
 
   const { snapshot, loading, error, setRegion } = useKioskData(initialRegion);
 
-  const [regionConfigs, setRegionConfigs] = useState<any[]>([]);
+  // Build regionConfigs synchronously so PublicDisplayScreen never sees []
+  const regionConfigs = useMemo(() => {
+    const codes =
+      snapshot?.regions && snapshot.regions.length > 0
+        ? snapshot.regions
+        : [...ALL_REGIONS];
 
-  // Adapt our PublicRegionConfig to the RegionConfig shape the existing UI expects
-  useEffect(() => {
-    if (!snapshot?.regions) return;
-    // Fetch all region configs for the switcher
-    // (kiosk snapshot only includes the active one; the switcher needs all)
-    // We'll fake them from the snapshot for now, and fetch the rest lazily
-    const configs = snapshot.regions.map((code) => ({
-      region: code,
-      terminalName:
-        code === snapshot.region && snapshot.regionConfig
-          ? snapshot.regionConfig.terminalName
+    return codes.map((code) => {
+      const isActive =
+        snapshot &&
+        code === snapshot.region &&
+        snapshot.regionConfig != null;
+      return {
+        region: code,
+        terminalName: isActive
+          ? snapshot!.regionConfig!.terminalName || `${code} Terminal`
           : `${code} Terminal`,
-      emergencyNumber:
-        code === snapshot.region && snapshot.regionConfig
-          ? snapshot.regionConfig.emergencyNumber ?? ""
+        emergencyNumber: isActive
+          ? snapshot!.regionConfig!.emergencyNumber ?? ""
           : "",
-      announcement:
-        code === snapshot.region && snapshot.regionConfig
-          ? snapshot.regionConfig.announcement ?? ""
+        announcement: isActive
+          ? snapshot!.regionConfig!.announcement ?? ""
           : "",
-    }));
-    setRegionConfigs(configs);
+      };
+    });
   }, [snapshot]);
 
   if (loading && !snapshot) {
@@ -76,7 +76,6 @@ function KioskInner() {
     );
   }
 
-  // Adapt PublicVehicle → Vehicle shape for the existing UI
   const vehiclesForUI = snapshot.vehicles.map((v) => ({
     registrationNumber: v.registrationNumber,
     fleetNumber: v.vic ?? v.registrationNumber,
@@ -112,7 +111,7 @@ function KioskInner() {
       vehicles={vehiclesForUI}
       routes={routesForUI}
       activeRegion={snapshot.region as any}
-      regionConfigs={regionConfigs}
+      regionConfigs={regionConfigs as any}
       drivers={[]}
       trips={[]}
       onNavigateTab={() => {}}
