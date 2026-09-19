@@ -1620,6 +1620,10 @@ export default function App() {
             setCurrentUser(user);
             setIsLoginModalOpen(false);
             setAuthRestrictedPrompt(null);
+if (user.role === "marshal") {
+    window.location.href = "/marshal";
+    return;
+  }
             // Route seamlessly to their primary role tab
             if (user.role === "operator") {
               setActiveTab("operator");
