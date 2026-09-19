@@ -9,12 +9,18 @@ import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { LogIn, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
-import { signInWithPassword } from "@/lib/auth/client";
+import { signInWithPassword, homePathForRole } from "@/lib/auth/client";
+import { useAuthStore } from "@/store/useAuthStore";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") ?? "/";
+  // Only honour redirect if it is an internal path (not open redirect)
+  const rawRedirect = searchParams.get("redirect");
+  const redirectParam =
+    rawRedirect && rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
+      ? rawRedirect
+      : null;
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -35,7 +41,20 @@ function LoginForm() {
       return;
     }
 
-    router.push(redirect);
+    // Seed client auth store so role guards see the user immediately
+    if (result.user) {
+      useAuthStore.getState().setUser(result.user);
+    } else {
+      await useAuthStore.getState().refresh();
+    }
+
+    // Prefer explicit redirect (e.g. deep link), else role home
+    const destination =
+      redirectParam && redirectParam !== "/"
+        ? redirectParam
+        : homePathForRole(result.user?.role);
+
+    router.push(destination);
     router.refresh();
   }
 
@@ -70,7 +89,7 @@ function LoginForm() {
             autoCapitalize="off"
             required
             placeholder="e.g. 78653001 or 7609236100542"
-            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
           />
         </div>
 
@@ -85,14 +104,13 @@ function LoginForm() {
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
               required
-              placeholder="••••••••"
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 pr-10 text-sm font-medium text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 pr-10 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
             />
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-              tabIndex={-1}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+              aria-label={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? (
                 <EyeOff className="w-4 h-4" />
@@ -106,7 +124,7 @@ function LoginForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md flex items-center justify-center gap-2 transition-all"
+          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md flex items-center justify-center gap-2 transition-all"
         >
           {loading ? (
             <>
@@ -122,24 +140,23 @@ function LoginForm() {
         </button>
       </form>
 
-      <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 text-center">
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          First time signing in?{" "}
-          <Link
-            href="/claim"
-            className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
-          >
-            Claim your account
-          </Link>
-        </p>
-      </div>
+      <p className="mt-5 text-center text-[11px] text-zinc-500">
+        Marshal without a password?{" "}
+        <Link href="/claim" className="font-bold text-emerald-600 hover:underline">
+          Claim your account
+        </Link>
+      </p>
     </div>
   );
 }
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="text-center text-xs text-zinc-500">Loading…</div>}>
+    <Suspense
+      fallback={
+        <div className="text-center text-xs text-zinc-500">Loading…</div>
+      }
+    >
       <LoginForm />
     </Suspense>
   );
