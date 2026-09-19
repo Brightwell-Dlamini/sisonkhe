@@ -4,9 +4,13 @@
  *
  * Role resolution. Given an authenticated Supabase user, determine their
  * domain role by querying the appropriate table.
+ *
+ * IMPORTANT: This uses the ADMIN client (service role key).
+ * It runs server-side only, after auth is verified.
+ * RLS is bypassed intentionally — we filter by auth_user_id explicitly.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { createSupabaseAdminClient } from "../supabase/server";
 
 export type AuthRole =
   | "super-admin"
@@ -23,12 +27,10 @@ export interface ResolvedUser {
   phone: string | null;
   role: AuthRole;
   roleDisplay: string;
-  // Domain-specific record
   staffId?: string;
   marshalId?: string;
   driverId?: string;
   operatorId?: string;
-  // Display info
   fullName: string;
   avatarUrl?: string;
   region?: string;
@@ -40,21 +42,23 @@ export interface ResolvedUser {
 /**
  * Resolve a Supabase auth user to their domain role.
  * Tries staff → marshal → driver → operator in that order.
- * Returns null if the user is authenticated but has no domain record.
  */
 export async function resolveUserRole(
-  supabase: SupabaseClient,
   authUserId: string,
   email: string | null,
   phone: string | null
 ): Promise<ResolvedUser | null> {
+  const admin = createSupabaseAdminClient();
+
   // 1. Staff (highest priority)
-  const { data: staff } = await supabase
+  const { data: staff, error: staffErr } = await admin
     .from("staff")
     .select("id, full_name, role, region, terminal_id, is_active")
     .eq("auth_user_id", authUserId)
     .eq("is_active", true)
     .maybeSingle();
+
+  if (staffErr) console.error("[resolveUserRole] staff error:", staffErr);
 
   if (staff) {
     return {
@@ -71,14 +75,16 @@ export async function resolveUserRole(
   }
 
   // 2. Marshal
-  const { data: marshal } = await supabase
+  const { data: marshal, error: marshalErr } = await admin
     .from("marshals")
     .select(
-      "id, first_name, surname, position, region, is_active, profile_picture_url, assigned_route_id, terminal_id"
+      "id, first_name, surname, region, is_active, profile_picture_url, assigned_route_id, terminal_id"
     )
     .eq("auth_user_id", authUserId)
     .eq("is_active", true)
     .maybeSingle();
+
+  if (marshalErr) console.error("[resolveUserRole] marshal error:", marshalErr);
 
   if (marshal) {
     return {
@@ -97,13 +103,13 @@ export async function resolveUserRole(
   }
 
   // 3. Driver
-  const { data: driver } = await supabase
+  const { data: driver, error: driverErr } = await admin
     .from("drivers")
-    .select(
-      "id, full_name, assigned_vehicle_reg, status, profile_picture_url"
-    )
+    .select("id, full_name, assigned_vehicle_reg, status, profile_picture_url")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
+
+  if (driverErr) console.error("[resolveUserRole] driver error:", driverErr);
 
   if (driver && driver.status !== "Suspended") {
     return {
@@ -120,11 +126,13 @@ export async function resolveUserRole(
   }
 
   // 4. Operator
-  const { data: operator } = await supabase
+  const { data: operator, error: operatorErr } = await admin
     .from("fleet_operators")
     .select("id, name, company_name, association, avatar_url")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
+
+  if (operatorErr) console.error("[resolveUserRole] operator error:", operatorErr);
 
   if (operator) {
     return {
