@@ -12,12 +12,14 @@ import { useRequireAuth } from "@/hooks/useRequireAuth";
 import {
   ArrowLeft,
   Users,
-  ShieldCheck,
+  ShieldCheck,UserCircle, 
   Loader2,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/admin/staff", label: "Staff", icon: Users },
+  { href: "/admin/drivers", label: "Drivers", icon: UserCircle },  
+];
   // More items as we add modules
 ];
 
