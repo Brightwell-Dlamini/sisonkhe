@@ -4,16 +4,12 @@
  *
  * Marshal dispatch transitions.
  *
- * Rank fee rules:
- *   - Charged once per departure cycle (Full Cabin OR Depart).
- *   - A vehicle can pay again after Return to Queue → Load → depart again.
- *   - Not once-per-calendar-day (that blocked multi-trip testing/ops).
- *   - Short cooldown (90s) only to block double-click of Full Cabin + Depart
- *     on the same departure.
+ * Rank fee: one fee per real departure (Load → Full Cabin/Depart).
+ * After Return to Queue → Load → depart again, another fee is charged.
+ * Only a 3s window blocks double-click of Full Cabin + Depart on the same click.
  *
- * Trips:
- *   - Written only when the vehicle actually transitions to Departed from
- *     Loading / Waiting / Delayed — not when spam-clicking already-Departed.
+ * Trip row is written only when the rank fee transaction is successfully written,
+ * so trips and fees stay in sync.
  */
 
 import "server-only";
@@ -21,8 +17,8 @@ import { createSupabaseAdminClient } from "../supabase/server";
 import type { MarshalContext } from "./queries";
 
 const RANK_FEE_SZL = 25;
-/** Prevent double-charge if marshal hits Full Cabin then Depart within this window. */
-const FEE_COOLDOWN_MS = 90_000;
+/** Double-click guard only (Full Cabin then Depart on same departure). */
+const DOUBLE_CLICK_MS = 3_000;
 
 const DEPARTABLE_STATUSES = new Set(["Loading", "Waiting", "Delayed"]);
 
@@ -54,7 +50,8 @@ async function authorizeVehicle(
 } | null> {
   const admin = createSupabaseAdminClient();
 
-  const { data: vehicle, error } = await admin
+  // Try exact match first, then case-insensitive via ilike on trimmed value
+  let { data: vehicle, error } = await admin
     .from("vehicles")
     .select(
       "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id"
@@ -62,7 +59,19 @@ async function authorizeVehicle(
     .eq("registration_number", registrationNumber)
     .maybeSingle();
 
-  if (error || !vehicle) return null;
+  if ((error || !vehicle) && registrationNumber) {
+    const { data: alt } = await admin
+      .from("vehicles")
+      .select(
+        "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id"
+      )
+      .ilike("registration_number", registrationNumber)
+      .limit(1)
+      .maybeSingle();
+    vehicle = alt;
+  }
+
+  if (!vehicle) return null;
 
   const routeId = vehicle.route_assignment_id as string | null;
   if (routeId) {
@@ -107,20 +116,25 @@ async function countQueuedOnRoute(
   return count ?? 0;
 }
 
+/**
+ * Write rank fee for this departure.
+ * Returns written:true on success.
+ * Returns written:false only for the 3s double-click guard.
+ * Throws / returns error string on DB failure.
+ */
 async function writeRankFee(
   context: MarshalContext,
   registrationNumber: string,
   triggerSource: string
-): Promise<{ written: boolean }> {
+): Promise<{ written: boolean; error?: string }> {
   const admin = createSupabaseAdminClient();
   const nowIso = new Date().toISOString();
-  const sinceIso = new Date(Date.now() - FEE_COOLDOWN_MS).toISOString();
+  const sinceIso = new Date(Date.now() - DOUBLE_CLICK_MS).toISOString();
 
-  // Only block duplicate fee within the short cooldown (same departure event).
-  // After Return to Queue + Load + depart again, a new fee is allowed.
+  // Only block rapid double-click of Full Cabin + Depart (~same second)
   const { data: recent } = await admin
     .from("marshal_transactions")
-    .select("id, timestamp")
+    .select("id")
     .eq("marshal_id", context.marshalId)
     .eq("vehicle_reg", registrationNumber)
     .gte("timestamp", sinceIso)
@@ -132,6 +146,7 @@ async function writeRankFee(
 
   const safeReg = registrationNumber.replace(/\s+/g, "");
   const txId = `mtx_${Date.now()}_${safeReg}`;
+
   const { error: txErr } = await admin.from("marshal_transactions").insert({
     id: txId,
     marshal_id: context.marshalId,
@@ -142,20 +157,29 @@ async function writeRankFee(
   });
 
   if (txErr) {
-    console.error("[marshal/dispatch] rank fee insert error:", txErr);
-    return { written: false };
+    console.error("[marshal/dispatch] marshal_transactions insert error:", txErr);
+    return { written: false, error: txErr.message };
   }
 
-  await admin.from("rank_fee_payments").insert({
+  // Schema requires payment_method; no marshal_id column on rank_fee_payments
+  const { error: payErr } = await admin.from("rank_fee_payments").insert({
     id: `rfp_${Date.now()}_${safeReg}`,
     timestamp: nowIso,
     vehicle_reg: registrationNumber,
     amount_szl: RANK_FEE_SZL,
+    payment_method: "Cash",
+    transaction_ref: txId,
+    status: "Success",
     allocation_operational: 20,
     allocation_nrtc: 3.5,
     allocation_maintenance: 1.5,
-    marshal_id: context.marshalId,
   });
+
+  if (payErr) {
+    // Fee is still counted via marshal_transactions for the marshal UI summary.
+    // Log payment ledger failure but do not roll back the rank fee.
+    console.error("[marshal/dispatch] rank_fee_payments insert error:", payErr);
+  }
 
   return { written: true };
 }
@@ -170,7 +194,7 @@ async function recordTrip(
   nowIso: string
 ): Promise<void> {
   if (!vehicle.routeId) {
-    console.warn("[marshal/dispatch] skip trip — vehicle has no route:", vehicle.reg);
+    console.warn("[marshal/dispatch] skip trip — no route:", vehicle.reg);
     return;
   }
 
@@ -224,6 +248,8 @@ export async function applyDispatchAction(
     };
   }
 
+  // Always use the canonical reg from DB for writes
+  const reg = vehicle.reg;
   const admin = createSupabaseAdminClient();
   const nowIso = new Date().toISOString();
 
@@ -231,7 +257,7 @@ export async function applyDispatchAction(
     case "load": {
       let newPosition = vehicle.currentQueuePosition;
       if (newPosition < 1) {
-        const maxQueued = await countQueuedOnRoute(vehicle.routeId ?? "");
+        const maxQueued = await countQueuedOnRoute(vehicle.routeId ?? "", reg);
         newPosition = maxQueued + 1;
       }
 
@@ -241,7 +267,7 @@ export async function applyDispatchAction(
           status: "Loading",
           current_queue_position: newPosition,
         })
-        .eq("registration_number", registrationNumber);
+        .eq("registration_number", reg);
 
       if (error) return { success: false, error: error.message };
       return { success: true, newStatus: "Loading" };
@@ -261,7 +287,23 @@ export async function applyDispatchAction(
 
       const trigger =
         action === "full_cabin" ? "Full Cabin Button" : "Depart Button";
-      const fee = await writeRankFee(context, registrationNumber, trigger);
+      const fee = await writeRankFee(context, reg, trigger);
+
+      if (fee.error) {
+        return {
+          success: false,
+          error: `Could not record rank fee: ${fee.error}`,
+        };
+      }
+
+      // Double-click within 3s: status may already be Departed from first click
+      if (!fee.written) {
+        return {
+          success: true,
+          newStatus: vehicle.status === "Departed" ? "Departed" : vehicle.status,
+          rankFeeWritten: false,
+        };
+      }
 
       const oldPos = vehicle.currentQueuePosition;
 
@@ -271,7 +313,7 @@ export async function applyDispatchAction(
           status: "Departed",
           current_queue_position: 0,
         })
-        .eq("registration_number", registrationNumber);
+        .eq("registration_number", reg);
 
       if (error) return { success: false, error: error.message };
 
@@ -286,13 +328,13 @@ export async function applyDispatchAction(
         }
       }
 
-      // Only record a trip when this is a real departure transition
-      await recordTrip(vehicle, nowIso);
+      // Trip only when fee was written — keeps counts aligned
+      await recordTrip({ ...vehicle, reg }, nowIso);
 
       return {
         success: true,
         newStatus: "Departed",
-        rankFeeWritten: fee.written,
+        rankFeeWritten: true,
       };
     }
 
@@ -300,7 +342,7 @@ export async function applyDispatchAction(
       const { error } = await admin
         .from("vehicles")
         .update({ status: "Delayed" })
-        .eq("registration_number", registrationNumber);
+        .eq("registration_number", reg);
 
       if (error) return { success: false, error: error.message };
 
@@ -311,7 +353,7 @@ export async function applyDispatchAction(
           type: "Push",
           recipient_name: null,
           recipient_phone: null,
-          message: `Delay reported for ${registrationNumber}: ${reason}`,
+          message: `Delay reported for ${reg}: ${reason}`,
           status: "Sent",
         });
       }
@@ -326,7 +368,7 @@ export async function applyDispatchAction(
           status: "Breakdown",
           current_queue_position: 0,
         })
-        .eq("registration_number", registrationNumber);
+        .eq("registration_number", reg);
 
       if (error) return { success: false, error: error.message };
 
@@ -337,7 +379,7 @@ export async function applyDispatchAction(
           type: "Push",
           recipient_name: null,
           recipient_phone: null,
-          message: `Breakdown reported for ${registrationNumber}: ${reason}`,
+          message: `Breakdown reported for ${reg}: ${reason}`,
           status: "Sent",
         });
       }
@@ -352,7 +394,7 @@ export async function applyDispatchAction(
           status: "Waiting",
           current_queue_position: 0,
         })
-        .eq("registration_number", registrationNumber);
+        .eq("registration_number", reg);
 
       if (error) return { success: false, error: error.message };
       return { success: true, newStatus: "Waiting" };
