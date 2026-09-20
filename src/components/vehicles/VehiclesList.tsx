@@ -12,12 +12,17 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
-  CreditCard,
 } from "lucide-react";
-import { useVehicleRegistry, type CreateVehicleRequest } from "@/hooks/useVehicleRegistry";
+import {
+  useVehicleRegistry,
+  type CreateVehicleRequest,
+} from "@/hooks/useVehicleRegistry";
 import type { VehicleRow } from "@/lib/vehicles/queries";
 import VehicleFormModal from "./VehicleFormModal";
 import VehicleActionsMenu from "./VehicleActionsMenu";
+import OfficialPlaqueQRModal from "../fleet/OfficialPlaqueQRModal";
+import A4PermitPrintModal from "../fleet/A4PermitPrintModal";
+import { Vehicle, Route, Driver } from "@/types";
 
 const CLASSIFICATION_LABEL: Record<string, string> = {
   kombi: "Kombi",
@@ -26,12 +31,22 @@ const CLASSIFICATION_LABEL: Record<string, string> = {
 };
 
 const PERMIT_COLORS: Record<string, string> = {
-  Active: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+  Active:
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
   Expired: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300",
-  Suspended: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
+  Suspended:
+    "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
 };
 
-export default function VehiclesList() {
+interface VehiclesListProps {
+  routes?: Route[];
+  drivers?: Driver[];
+}
+
+export default function VehiclesList({
+  routes = [],
+  drivers = [],
+}: VehiclesListProps) {
   const {
     vehicles,
     loading,
@@ -49,9 +64,15 @@ export default function VehiclesList() {
   const [editingVehicle, setEditingVehicle] = useState<VehicleRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  // QR plaque modal state
+  const [qrVehicle, setQrVehicle] = useState<Vehicle | null>(null);
+  // A4 permit print modal state
+  const [printVehicle, setPrintVehicle] = useState<Vehicle | null>(null);
+
   const filtered = useMemo(() => {
     return vehicles.filter((v) => {
-      if (permitFilter !== "all" && (v.permitStatus ?? "") !== permitFilter) return false;
+      if (permitFilter !== "all" && (v.permitStatus ?? "") !== permitFilter)
+        return false;
       if (classFilter !== "all" && v.classification !== classFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -72,6 +93,43 @@ export default function VehiclesList() {
     setToast(msg);
     setTimeout(() => setToast(null), 4000);
   };
+
+  /**
+   * Convert a VehicleRow (from the API) into a full Vehicle object
+   * for the legacy modals (QR plaque, A4 print) that expect the old shape.
+   */
+  const toFullVehicle = (row: VehicleRow): Vehicle => ({
+    registrationNumber: row.registrationNumber,
+    fleetNumber: row.vic ?? row.registrationNumber,
+    vic: row.vic ?? undefined,
+    make: row.make,
+    model: row.model,
+    seatingCapacity: row.seatingCapacity,
+    classification: row.classification as Vehicle["classification"],
+    routeAssignmentId: row.routeAssignmentId ?? "",
+    loadingBay: row.loadingBay ?? "Bay 01",
+    ownerName: row.ownerName ?? "",
+    ownerPhone: row.ownerPhone ?? "",
+    driverId: row.driverId ?? "",
+    status: (row as any).status ?? "Waiting",
+    currentQueuePosition: row.currentQueuePosition ?? 0,
+    tripsToday: 0,
+    lastActive: new Date().toISOString(),
+    permitNumber: row.permitNumber ?? undefined,
+    permitStatus: (row.permitStatus as Vehicle["permitStatus"]) ?? "Active",
+    permitIssueDate: row.permitIssueDate ?? undefined,
+    permitExpiryDate: row.permitExpiryDate ?? undefined,
+    cofNumber: row.cofNumber ?? undefined,
+    cofIssueDate: row.cofIssueDate ?? undefined,
+    cofExpiryDate: row.cofExpiryDate ?? undefined,
+    lastInspectionDate: row.lastInspectionDate ?? undefined,
+    association: row.association ?? undefined,
+    insuranceExpiry: row.insuranceExpiry ?? undefined,
+    roadworthinessExpiry: row.roadworthinessExpiry ?? undefined,
+    isMidMonthAddition: row.isMidMonthAddition,
+    monthRegistered: row.monthRegistered ?? undefined,
+    midMonthJoinDay: row.midMonthJoinDay ?? undefined,
+  });
 
   const handleCreate = async (input: CreateVehicleRequest) => {
     const result = await createVehicle(input);
@@ -149,7 +207,9 @@ export default function VehiclesList() {
             disabled={loading}
             className="px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50 flex items-center gap-1.5"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
+            />
             Refresh
           </button>
           <button
@@ -252,6 +312,8 @@ export default function VehiclesList() {
                         vehicle={v}
                         onEdit={() => setEditingVehicle(v)}
                         onDeactivate={() => handleDeactivate(v)}
+                        onViewQR={() => setQrVehicle(toFullVehicle(v))}
+                        onPrintPermit={() => setPrintVehicle(toFullVehicle(v))}
                       />
                     </td>
                   </tr>
@@ -279,6 +341,31 @@ export default function VehiclesList() {
             const ok = await handleUpdate(editingVehicle.registrationNumber, input);
             return { success: ok };
           }}
+        />
+      )}
+
+      {/* QR Plaque Modal */}
+      {qrVehicle && (
+        <OfficialPlaqueQRModal
+          vehicle={qrVehicle}
+          vehicles={vehicles.map(toFullVehicle)}
+          routes={routes}
+          drivers={drivers}
+          onClose={() => setQrVehicle(null)}
+          onPrintA4={(v) => {
+            setQrVehicle(null);
+            setPrintVehicle(v);
+          }}
+        />
+      )}
+
+      {/* A4 Print Modal */}
+      {printVehicle && (
+        <A4PermitPrintModal
+          vehicle={printVehicle}
+          routes={routes}
+          drivers={drivers}
+          onClose={() => setPrintVehicle(null)}
         />
       )}
     </div>

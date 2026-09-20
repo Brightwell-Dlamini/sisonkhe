@@ -13,9 +13,17 @@ interface Props {
   vehicle: VehicleRow;
   onEdit: () => void;
   onDeactivate: () => void;
+  onViewQR?: () => void;
+  onPrintPermit?: () => void;
 }
 
-export default function VehicleActionsMenu({ vehicle, onEdit, onDeactivate }: Props) {
+export default function VehicleActionsMenu({
+  vehicle,
+  onEdit,
+  onDeactivate,
+  onViewQR,
+  onPrintPermit,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -53,28 +61,33 @@ export default function VehicleActionsMenu({ vehicle, onEdit, onDeactivate }: Pr
               <Edit2 className="w-3.5 h-3.5" />
               Edit
             </button>
-            <button
-              onClick={() => {
-                setOpen(false);
-                // Stub for future phases — action to print A4 permit
-                alert("A4 permit printing will be enabled in Phase 5.");
-              }}
-              className="w-full text-left px-3 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              Print A4 Permit
-            </button>
-            <button
-              onClick={() => {
-                setOpen(false);
-                // Stub for future — action to open QR plaque
-                alert("QR plaque will be enabled in Phase 5.");
-              }}
-              className="w-full text-left px-3 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2"
-            >
-              <QrCode className="w-3.5 h-3.5" />
-              View QR Plaque
-            </button>
+
+            {onViewQR && (
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  onViewQR();
+                }}
+                className="w-full text-left px-3 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                View QR Plaque
+              </button>
+            )}
+
+            {onPrintPermit && (
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  onPrintPermit();
+                }}
+                className="w-full text-left px-3 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Print A4 Permit
+              </button>
+            )}
+
             <button
               onClick={() => {
                 setOpen(false);
