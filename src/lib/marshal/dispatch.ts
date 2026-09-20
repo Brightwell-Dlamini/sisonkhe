@@ -2,14 +2,18 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Marshal dispatch transitions. Every vehicle status change and rank fee
- * write goes through this module — single source of truth for operational
- * state changes.
+ * Marshal dispatch transitions.
  *
- * Key invariant: whenever a marshal triggers Full Cabin or Depart, exactly
- * one rank fee transaction is written. No double-charging.
+ * Rank fee rules:
+ *   - Charged once per departure cycle (Full Cabin OR Depart).
+ *   - A vehicle can pay again after Return to Queue → Load → depart again.
+ *   - Not once-per-calendar-day (that blocked multi-trip testing/ops).
+ *   - Short cooldown (90s) only to block double-click of Full Cabin + Depart
+ *     on the same departure.
  *
- * Also records a Completed trip row so admin/ledger Trips & Settlement work.
+ * Trips:
+ *   - Written only when the vehicle actually transitions to Departed from
+ *     Loading / Waiting / Delayed — not when spam-clicking already-Departed.
  */
 
 import "server-only";
@@ -17,7 +21,10 @@ import { createSupabaseAdminClient } from "../supabase/server";
 import type { MarshalContext } from "./queries";
 
 const RANK_FEE_SZL = 25;
-const LOADING_DURATION_MIN = 20;
+/** Prevent double-charge if marshal hits Full Cabin then Depart within this window. */
+const FEE_COOLDOWN_MS = 90_000;
+
+const DEPARTABLE_STATUSES = new Set(["Loading", "Waiting", "Delayed"]);
 
 export type DispatchAction =
   | "load"
@@ -107,23 +114,24 @@ async function writeRankFee(
 ): Promise<{ written: boolean }> {
   const admin = createSupabaseAdminClient();
   const nowIso = new Date().toISOString();
-  const today = nowIso.slice(0, 10);
+  const sinceIso = new Date(Date.now() - FEE_COOLDOWN_MS).toISOString();
 
-  // Prevent double-charge for same vehicle same calendar day from this marshal
-  const { data: existing } = await admin
+  // Only block duplicate fee within the short cooldown (same departure event).
+  // After Return to Queue + Load + depart again, a new fee is allowed.
+  const { data: recent } = await admin
     .from("marshal_transactions")
-    .select("id")
+    .select("id, timestamp")
     .eq("marshal_id", context.marshalId)
     .eq("vehicle_reg", registrationNumber)
-    .gte("timestamp", `${today}T00:00:00.000Z`)
-    .lte("timestamp", `${today}T23:59:59.999Z`)
+    .gte("timestamp", sinceIso)
     .limit(1);
 
-  if (existing && existing.length > 0) {
+  if (recent && recent.length > 0) {
     return { written: false };
   }
 
-  const txId = `mtx_${Date.now()}_${registrationNumber.replace(/\s+/g, "")}`;
+  const safeReg = registrationNumber.replace(/\s+/g, "");
+  const txId = `mtx_${Date.now()}_${safeReg}`;
   const { error: txErr } = await admin.from("marshal_transactions").insert({
     id: txId,
     marshal_id: context.marshalId,
@@ -138,9 +146,8 @@ async function writeRankFee(
     return { written: false };
   }
 
-  // Split allocations (default 20 / 3.5 / 1.5 of E25)
   await admin.from("rank_fee_payments").insert({
-    id: `rfp_${Date.now()}_${registrationNumber.replace(/\s+/g, "")}`,
+    id: `rfp_${Date.now()}_${safeReg}`,
     timestamp: nowIso,
     vehicle_reg: registrationNumber,
     amount_szl: RANK_FEE_SZL,
@@ -153,9 +160,6 @@ async function writeRankFee(
   return { written: true };
 }
 
-/**
- * Record a completed trip when a vehicle departs (Full Cabin or Depart).
- */
 async function recordTrip(
   vehicle: {
     reg: string;
@@ -214,7 +218,10 @@ export async function applyDispatchAction(
 ): Promise<DispatchResult> {
   const vehicle = await authorizeVehicle(context, registrationNumber);
   if (!vehicle) {
-    return { success: false, error: "Vehicle not found or not under your authority." };
+    return {
+      success: false,
+      error: "Vehicle not found or not under your authority.",
+    };
   }
 
   const admin = createSupabaseAdminClient();
@@ -240,41 +247,21 @@ export async function applyDispatchAction(
       return { success: true, newStatus: "Loading" };
     }
 
-    case "full_cabin": {
-      const fee = await writeRankFee(context, registrationNumber, "Full Cabin Button");
-
-      const oldPos = vehicle.currentQueuePosition;
-
-      const { error } = await admin
-        .from("vehicles")
-        .update({
-          status: "Departed",
-          current_queue_position: 0,
-        })
-        .eq("registration_number", registrationNumber);
-
-      if (error) return { success: false, error: error.message };
-
-      if (oldPos > 0 && vehicle.routeId) {
-        await admin
-          .rpc("shift_queue_forward", {
-            p_route_id: vehicle.routeId,
-            p_from_position: oldPos,
-          })
-          .then(() => {});
-      }
-
-      await recordTrip(vehicle, nowIso);
-
-      return {
-        success: true,
-        newStatus: "Departed",
-        rankFeeWritten: fee.written,
-      };
-    }
-
+    case "full_cabin":
     case "depart": {
-      const fee = await writeRankFee(context, registrationNumber, "Depart Button");
+      if (!DEPARTABLE_STATUSES.has(vehicle.status)) {
+        return {
+          success: false,
+          error:
+            vehicle.status === "Departed"
+              ? "Already departed. Use Return to Queue, then Load, before departing again."
+              : `Cannot depart from status "${vehicle.status}". Load the vehicle first.`,
+        };
+      }
+
+      const trigger =
+        action === "full_cabin" ? "Full Cabin Button" : "Depart Button";
+      const fee = await writeRankFee(context, registrationNumber, trigger);
 
       const oldPos = vehicle.currentQueuePosition;
 
@@ -289,14 +276,17 @@ export async function applyDispatchAction(
       if (error) return { success: false, error: error.message };
 
       if (oldPos > 0 && vehicle.routeId) {
-        await admin
-          .rpc("shift_queue_forward", {
+        try {
+          await admin.rpc("shift_queue_forward", {
             p_route_id: vehicle.routeId,
             p_from_position: oldPos,
-          })
-          .catch(() => {});
+          });
+        } catch {
+          /* best-effort */
+        }
       }
 
+      // Only record a trip when this is a real departure transition
       await recordTrip(vehicle, nowIso);
 
       return {
@@ -360,6 +350,7 @@ export async function applyDispatchAction(
         .from("vehicles")
         .update({
           status: "Waiting",
+          current_queue_position: 0,
         })
         .eq("registration_number", registrationNumber);
 

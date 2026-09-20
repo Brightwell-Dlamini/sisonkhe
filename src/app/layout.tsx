@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ThemeProvider } from "@/components/common/ThemeProvider";
 
 export const metadata: Metadata = {
   title: "Sisonkhe In Transit",
@@ -19,7 +20,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="antialiased">{children}</body>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('sisonkhe_theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}}catch(e){}})();`,
+          }}
+        />
+      </head>
+      <body className="antialiased bg-zinc-50 text-zinc-900 dark:bg-[#050505] dark:text-zinc-100">
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }
