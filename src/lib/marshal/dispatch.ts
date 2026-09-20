@@ -8,6 +8,8 @@
  *
  * Key invariant: whenever a marshal triggers Full Cabin or Depart, exactly
  * one rank fee transaction is written. No double-charging.
+ *
+ * Also records a Completed trip row so admin/ledger Trips & Settlement work.
  */
 
 import "server-only";
@@ -32,10 +34,6 @@ export interface DispatchResult {
   newStatus?: string;
 }
 
-/**
- * Validate that the calling marshal has authority over this vehicle.
- * Returns the vehicle row if valid, null otherwise.
- */
 async function authorizeVehicle(
   context: MarshalContext,
   registrationNumber: string
@@ -45,26 +43,25 @@ async function authorizeVehicle(
   status: string;
   currentQueuePosition: number;
   seatingCapacity: number;
+  driverId: string | null;
 } | null> {
   const admin = createSupabaseAdminClient();
 
   const { data: vehicle, error } = await admin
     .from("vehicles")
     .select(
-      "registration_number, route_assignment_id, status, current_queue_position, seating_capacity"
+      "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id"
     )
     .eq("registration_number", registrationNumber)
     .maybeSingle();
 
   if (error || !vehicle) return null;
 
-  // Authorization: marshal must be assigned to the vehicle's route or the route's region
   const routeId = vehicle.route_assignment_id as string | null;
   if (routeId) {
     if (context.assignedRouteId) {
       if (routeId !== context.assignedRouteId) return null;
     } else {
-      // Fall back to region check
       const { data: route } = await admin
         .from("routes")
         .select("region_code")
@@ -80,12 +77,10 @@ async function authorizeVehicle(
     status: vehicle.status as string,
     currentQueuePosition: (vehicle.current_queue_position as number) ?? 0,
     seatingCapacity: (vehicle.seating_capacity as number) ?? 15,
+    driverId: (vehicle.driver_id as string | null) ?? null,
   };
 }
 
-/**
- * Count queued vehicles on the same route.
- */
 async function countQueuedOnRoute(
   routeId: string,
   excludeReg?: string
@@ -105,47 +100,37 @@ async function countQueuedOnRoute(
   return count ?? 0;
 }
 
-/**
- * Write a rank fee transaction + a payment record. Idempotent per (vehicle, today, trigger).
- *
- * Returns the receipt id if written, or null if already written today for the same trigger.
- */
 async function writeRankFee(
   context: MarshalContext,
   registrationNumber: string,
-  triggerSource: "Full Cabin Button" | "Depart Button"
-): Promise<{ written: boolean; receiptRef?: string }> {
+  triggerSource: string
+): Promise<{ written: boolean }> {
   const admin = createSupabaseAdminClient();
-  const now = new Date();
-  const dateStr = now.toISOString().split("T")[0];
-  const monthStr = dateStr.substring(0, 7);
+  const nowIso = new Date().toISOString();
+  const today = nowIso.slice(0, 10);
 
-  // Idempotency: only one rank fee per vehicle per trigger per day
+  // Prevent double-charge for same vehicle same calendar day from this marshal
   const { data: existing } = await admin
     .from("marshal_transactions")
     .select("id")
+    .eq("marshal_id", context.marshalId)
     .eq("vehicle_reg", registrationNumber)
-    .eq("date", dateStr)
-    .eq("trigger_source", triggerSource)
-    .maybeSingle();
+    .gte("timestamp", `${today}T00:00:00.000Z`)
+    .lte("timestamp", `${today}T23:59:59.999Z`)
+    .limit(1);
 
-  if (existing) {
+  if (existing && existing.length > 0) {
     return { written: false };
   }
 
-  const txId = `mtx_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-  const receiptRef = `CLOAK-${Math.floor(100000 + Math.random() * 900000)}`;
-
-  // 1. Marshal transaction (the marshal's ledger)
+  const txId = `mtx_${Date.now()}_${registrationNumber.replace(/\s+/g, "")}`;
   const { error: txErr } = await admin.from("marshal_transactions").insert({
     id: txId,
     marshal_id: context.marshalId,
-    timestamp: now.toISOString(),
-    date: dateStr,
-    month: monthStr,
+    timestamp: nowIso,
     vehicle_reg: registrationNumber,
-    amount_szl: RANK_FEE_SZL,
     trigger_source: triggerSource,
+    amount_szl: RANK_FEE_SZL,
   });
 
   if (txErr) {
@@ -153,27 +138,74 @@ async function writeRankFee(
     return { written: false };
   }
 
-  // 2. Rank fee payment (the system-wide ledger)
-  const paymentId = `pay_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  // Split allocations (default 20 / 3.5 / 1.5 of E25)
   await admin.from("rank_fee_payments").insert({
-    id: paymentId,
-    timestamp: now.toISOString(),
+    id: `rfp_${Date.now()}_${registrationNumber.replace(/\s+/g, "")}`,
+    timestamp: nowIso,
     vehicle_reg: registrationNumber,
     amount_szl: RANK_FEE_SZL,
-    payment_method: "Cash",
-    transaction_ref: receiptRef,
-    status: "Success",
-    allocation_operational: 20.0,
+    allocation_operational: 20,
     allocation_nrtc: 3.5,
     allocation_maintenance: 1.5,
+    marshal_id: context.marshalId,
   });
 
-  return { written: true, receiptRef };
+  return { written: true };
 }
 
 /**
- * Apply a dispatch action. Idempotent-ish: calling twice is safe.
+ * Record a completed trip when a vehicle departs (Full Cabin or Depart).
  */
+async function recordTrip(
+  vehicle: {
+    reg: string;
+    routeId: string | null;
+    seatingCapacity: number;
+    driverId: string | null;
+  },
+  nowIso: string
+): Promise<void> {
+  if (!vehicle.routeId) {
+    console.warn("[marshal/dispatch] skip trip — vehicle has no route:", vehicle.reg);
+    return;
+  }
+
+  const admin = createSupabaseAdminClient();
+  const now = new Date(nowIso);
+  const date = now.toISOString().slice(0, 10);
+  const departureTime = now.toISOString().slice(11, 16);
+
+  const { data: route } = await admin
+    .from("routes")
+    .select("base_fare_e")
+    .eq("id", vehicle.routeId)
+    .maybeSingle();
+  const fare = Number(route?.base_fare_e ?? 0);
+  const passengers = Math.max(1, vehicle.seatingCapacity);
+  const revenue = fare * passengers;
+
+  const id = `trip_${Date.now()}_${vehicle.reg.replace(/\s+/g, "")}`;
+
+  const { error } = await admin.from("trips").insert({
+    id,
+    date,
+    departure_time: departureTime,
+    arrival_time: null,
+    route_id: vehicle.routeId,
+    vehicle_reg: vehicle.reg,
+    driver_id: vehicle.driverId || "unassigned",
+    passenger_count: passengers,
+    trip_duration_minutes: null,
+    delay_reason: null,
+    status: "Completed",
+    revenue_szl: revenue,
+  });
+
+  if (error) {
+    console.error("[marshal/dispatch] trip insert error:", error);
+  }
+}
+
 export async function applyDispatchAction(
   context: MarshalContext,
   registrationNumber: string,
@@ -182,18 +214,16 @@ export async function applyDispatchAction(
 ): Promise<DispatchResult> {
   const vehicle = await authorizeVehicle(context, registrationNumber);
   if (!vehicle) {
-    return { success: false, error: "Vehicle not found or not in your terminal." };
+    return { success: false, error: "Vehicle not found or not under your authority." };
   }
 
   const admin = createSupabaseAdminClient();
-  const now = new Date();
-  const nowIso = now.toISOString();
+  const nowIso = new Date().toISOString();
 
   switch (action) {
     case "load": {
-      // Move to Loading. Advance its queue position to 1 if not already queued.
       let newPosition = vehicle.currentQueuePosition;
-      if (!newPosition || newPosition < 1) {
+      if (newPosition < 1) {
         const maxQueued = await countQueuedOnRoute(vehicle.routeId ?? "");
         newPosition = maxQueued + 1;
       }
@@ -211,30 +241,30 @@ export async function applyDispatchAction(
     }
 
     case "full_cabin": {
-      // Write rank fee, then immediately transition to Departed.
       const fee = await writeRankFee(context, registrationNumber, "Full Cabin Button");
 
-      // Advance the queue: everyone behind shifts forward by 1
       const oldPos = vehicle.currentQueuePosition;
-      const newPos = 0; // Departed leaves the queue
 
       const { error } = await admin
         .from("vehicles")
         .update({
           status: "Departed",
-          current_queue_position: newPos,
+          current_queue_position: 0,
         })
         .eq("registration_number", registrationNumber);
 
       if (error) return { success: false, error: error.message };
 
-      // Shift everyone behind forward
       if (oldPos > 0 && vehicle.routeId) {
-        await admin.rpc("shift_queue_forward", {
-          p_route_id: vehicle.routeId,
-          p_from_position: oldPos,
-        }).then(() => { /* best-effort */ });
+        await admin
+          .rpc("shift_queue_forward", {
+            p_route_id: vehicle.routeId,
+            p_from_position: oldPos,
+          })
+          .then(() => {});
       }
+
+      await recordTrip(vehicle, nowIso);
 
       return {
         success: true,
@@ -244,7 +274,6 @@ export async function applyDispatchAction(
     }
 
     case "depart": {
-      // Straight departure — still writes a rank fee (per current business rule).
       const fee = await writeRankFee(context, registrationNumber, "Depart Button");
 
       const oldPos = vehicle.currentQueuePosition;
@@ -260,12 +289,15 @@ export async function applyDispatchAction(
       if (error) return { success: false, error: error.message };
 
       if (oldPos > 0 && vehicle.routeId) {
-        // Best-effort queue shift
-        await admin.rpc("shift_queue_forward", {
-          p_route_id: vehicle.routeId,
-          p_from_position: oldPos,
-        }).catch(() => {});
+        await admin
+          .rpc("shift_queue_forward", {
+            p_route_id: vehicle.routeId,
+            p_from_position: oldPos,
+          })
+          .catch(() => {});
       }
+
+      await recordTrip(vehicle, nowIso);
 
       return {
         success: true,
@@ -282,7 +314,6 @@ export async function applyDispatchAction(
 
       if (error) return { success: false, error: error.message };
 
-      // Log notification (optional — informational)
       if (reason) {
         await admin.from("notifications").insert({
           id: `notif_${Date.now()}`,
