@@ -50,7 +50,6 @@ async function authorizeVehicle(
 } | null> {
   const admin = createSupabaseAdminClient();
 
-  // Try exact match first, then case-insensitive via ilike on trimmed value
   let { data: vehicle, error } = await admin
     .from("vehicles")
     .select(
@@ -116,22 +115,18 @@ async function countQueuedOnRoute(
   return count ?? 0;
 }
 
-/**
- * Write rank fee for this departure.
- * Returns written:true on success.
- * Returns written:false only for the 3s double-click guard.
- * Throws / returns error string on DB failure.
- */
 async function writeRankFee(
   context: MarshalContext,
   registrationNumber: string,
   triggerSource: string
 ): Promise<{ written: boolean; error?: string }> {
   const admin = createSupabaseAdminClient();
-  const nowIso = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const date = nowIso.slice(0, 10); // YYYY-MM-DD
+  const month = nowIso.slice(0, 7); // YYYY-MM
   const sinceIso = new Date(Date.now() - DOUBLE_CLICK_MS).toISOString();
 
-  // Only block rapid double-click of Full Cabin + Depart (~same second)
   const { data: recent } = await admin
     .from("marshal_transactions")
     .select("id")
@@ -151,6 +146,8 @@ async function writeRankFee(
     id: txId,
     marshal_id: context.marshalId,
     timestamp: nowIso,
+    date,
+    month,
     vehicle_reg: registrationNumber,
     trigger_source: triggerSource,
     amount_szl: RANK_FEE_SZL,
@@ -161,7 +158,6 @@ async function writeRankFee(
     return { written: false, error: txErr.message };
   }
 
-  // Schema requires payment_method; no marshal_id column on rank_fee_payments
   const { error: payErr } = await admin.from("rank_fee_payments").insert({
     id: `rfp_${Date.now()}_${safeReg}`,
     timestamp: nowIso,
@@ -176,8 +172,6 @@ async function writeRankFee(
   });
 
   if (payErr) {
-    // Fee is still counted via marshal_transactions for the marshal UI summary.
-    // Log payment ledger failure but do not roll back the rank fee.
     console.error("[marshal/dispatch] rank_fee_payments insert error:", payErr);
   }
 
@@ -248,7 +242,6 @@ export async function applyDispatchAction(
     };
   }
 
-  // Always use the canonical reg from DB for writes
   const reg = vehicle.reg;
   const admin = createSupabaseAdminClient();
   const nowIso = new Date().toISOString();
@@ -296,7 +289,6 @@ export async function applyDispatchAction(
         };
       }
 
-      // Double-click within 3s: status may already be Departed from first click
       if (!fee.written) {
         return {
           success: true,
@@ -328,7 +320,6 @@ export async function applyDispatchAction(
         }
       }
 
-      // Trip only when fee was written — keeps counts aligned
       await recordTrip({ ...vehicle, reg }, nowIso);
 
       return {
