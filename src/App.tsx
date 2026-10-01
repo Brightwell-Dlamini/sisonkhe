@@ -4,18 +4,8 @@
  *
  * Sisonkhe In Transit — root router.
  *
- * The legacy monolith lived here. It's been replaced by dedicated routes:
- *   /kiosk      → public terminal board
- *   /verify     → public QR verification
- *   /login      → sign in
- *   /claim      → marshal account claim
- *   /account    → password change
- *   /marshal    → marshal dispatch dashboard
- *   /operator   → operator portal (renewals, wallet)
- *   /admin      → staff portal (staff, drivers, vehicles, operators, ledger, permits)
- *
- * This component's only job is to route the user to the right place based
- * on their role.
+ * Routes the authenticated user to their role-appropriate dashboard.
+ * Anonymous visitors go to the public kiosk.
  */
 
 "use client";
@@ -38,34 +28,32 @@ export default function App() {
     }
 
     switch (user.role) {
-  case "marshal":
-    router.replace("/marshal");
-    break;
-  case "operator":
-    router.replace("/operator/renewals");
-    break;
-  case "driver":
-    router.replace("/driver");
-    break;
-  case "inspector":
-    router.replace("/inspector/scan");
-    break;
-  case "super-admin":
-  case "admin":
-  case "fleet-manager":
-    router.replace("/admin");
-    break;
-  default:
-    router.replace("/kiosk");
-}
+      case "marshal":
+        router.replace("/marshal");
+        break;
+      case "operator":
+        router.replace("/operator/renewals");
+        break;
+      case "driver":
+        router.replace("/driver");
+        break;
+      case "inspector":
+        router.replace("/inspector/scan");
+        break;
+      case "super-admin":
+      case "admin":
+      case "fleet-manager":
+        router.replace("/admin");
+        break;
+      default:
+        router.replace("/kiosk");
+    }
   }, [user, loading, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-[#050505]">
       <div className="text-center">
-        <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center mx-auto mb-3">
-          🇸🇿
-        </div>
+        <div className="text-3xl mb-3">🇸🇿</div>
         <Loader2 className="w-5 h-5 animate-spin text-emerald-600 mx-auto" />
         <div className="text-xs text-zinc-500 mt-3">Redirecting…</div>
       </div>

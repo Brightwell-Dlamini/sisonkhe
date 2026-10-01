@@ -1,8 +1,6 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Admin landing. Shows a quick overview dashboard.
  */
 
 "use client";
@@ -21,48 +19,13 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 
 const ADMIN_LINKS = [
-  {
-    href: "/admin/staff",
-    label: "Staff",
-    description: "Manage admins, fleet managers, and inspectors",
-    icon: Users,
-  },
-  {
-    href: "/admin/drivers",
-    label: "Drivers",
-    description: "Register drivers, assign vehicles, manage PDPs",
-    icon: UserCircle,
-  },
-  {
-    href: "/admin/vehicles",
-    label: "Vehicles",
-    description: "Commercial vehicle registry and permit management",
-    icon: Car,
-  },
-  {
-    href: "/admin/operators",
-    label: "Operators",
-    description: "Vehicle owners and Master Card management",
-    icon: Building2,
-  },
-  {
-    href: "/admin/ledger",
-    label: "Ledger & Settlement",
-    description: "Trip history and rank fee reconciliation",
-    icon: Receipt,
-  },
-  {
-    href: "/admin/permits",
-    label: "Permit Renewals",
-    description: "Review operator renewal requests",
-    icon: Award,
-  },
-  {
-    href: "/admin/permits/print",
-    label: "Print Queue",
-    description: "Print official A4 permits with signed QR",
-    icon: Printer,
-  },
+  { href: "/admin/staff", label: "Staff", description: "Manage admins, fleet managers, and inspectors", icon: Users },
+  { href: "/admin/drivers", label: "Drivers", description: "Register drivers, assign vehicles, manage PDPs", icon: UserCircle },
+  { href: "/admin/vehicles", label: "Vehicles", description: "Commercial vehicle registry and permits", icon: Car },
+  { href: "/admin/operators", label: "Operators", description: "Vehicle owners and Master Card management", icon: Building2 },
+  { href: "/admin/ledger", label: "Ledger & Settlement", description: "Trip history and rank fee reconciliation", icon: Receipt },
+  { href: "/admin/permits", label: "Permit Renewals", description: "Review operator renewal requests", icon: Award },
+  { href: "/admin/permits/print", label: "Print Queue", description: "Print official A4 permits with signed QR", icon: Printer },
 ];
 
 export default function AdminIndex() {

@@ -5,10 +5,6 @@
  * Pure utility functions. No side effects, no storage access, no network.
  */
 
-/**
- * Generates a unique Vehicle Identification Code (VIC) from a registration
- * number. Format: 3 letters + hyphen + 3 digits, e.g. "MMZ-601", "HBM-101".
- */
 export function generateVIC(reg: string): string {
   if (!reg) return "";
   const cleanReg = reg.toUpperCase().replace(/\s+/g, "");
@@ -34,33 +30,23 @@ export function generateVIC(reg: string): string {
   return `${prefix}-${digits}`;
 }
 
-/**
- * Standardizes any VIC string to MMZ-601 format.
- */
 export function formatVIC(vicOrReg: string): string {
   if (!vicOrReg) return "";
   const clean = vicOrReg.trim().toUpperCase();
 
   const matchHyphen = clean.match(/^([A-Z]{2,4})-(\d{1,4})$/);
   if (matchHyphen) {
-    const letters = matchHyphen[1];
-    const digits = matchHyphen[2].padStart(3, "0").slice(-3);
-    return `${letters}-${digits}`;
+    return `${matchHyphen[1]}-${matchHyphen[2].padStart(3, "0").slice(-3)}`;
   }
 
   const matchDirect = clean.match(/^([A-Z]{2,4})(\d{1,4})$/);
   if (matchDirect) {
-    const letters = matchDirect[1];
-    const digits = matchDirect[2].padStart(3, "0").slice(-3);
-    return `${letters}-${digits}`;
+    return `${matchDirect[1]}-${matchDirect[2].padStart(3, "0").slice(-3)}`;
   }
 
   return generateVIC(clean);
 }
 
-/**
- * Route code = origin prefix + bay number. E.g. "MB01", "MN14".
- */
 export function getRouteCode(origin: string, region: string, bay: string): string {
   const cleanBay = bay.replace(/[^0-9]/g, "");
   const bayNum = cleanBay ? cleanBay.padStart(2, "0") : "01";
@@ -78,9 +64,6 @@ export function getRouteCode(origin: string, region: string, bay: string): strin
   return prefix + bayNum;
 }
 
-/**
- * Days until a date. Returns 999 if no date is provided.
- */
 export function calculateDaysRemaining(expiryDateStr: string | undefined): number {
   if (!expiryDateStr) return 999;
   const today = new Date();

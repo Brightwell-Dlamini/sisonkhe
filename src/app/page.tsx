@@ -1,11 +1,6 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Root page. Routes the user to the right surface.
- *
- * The role-based redirect happens client-side in App.tsx because we need
- * the auth session, which is only available in the browser.
  */
 
 "use client";
