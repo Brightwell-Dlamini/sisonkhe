@@ -37,7 +37,7 @@ export default function App() {
       return;
     }
 
-    sswitch (user.role) {
+    switch (user.role) {
   case "marshal":
     router.replace("/marshal");
     break;
