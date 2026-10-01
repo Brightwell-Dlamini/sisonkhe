@@ -56,15 +56,19 @@ export default function RenewalRequestModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load operator's vehicles
+  // Load operator's vehicles (API scopes results for operator role)
   useEffect(() => {
     const load = async () => {
       try {
         const res = await fetch("/api/vehicles", { cache: "no-store" });
         if (!res.ok) throw new Error("Failed to load vehicles");
         const data = await res.json();
+        // Server already scopes to this operator; keep defensive filter
         const list: VehicleOption[] = (data.vehicles ?? [])
-          .filter((v: any) => v.ownerOperatorId === operatorId)
+          .filter(
+            (v: any) =>
+              !v.ownerOperatorId || v.ownerOperatorId === operatorId
+          )
           .map((v: any) => ({
             registrationNumber: v.registrationNumber,
             vic: v.vic,

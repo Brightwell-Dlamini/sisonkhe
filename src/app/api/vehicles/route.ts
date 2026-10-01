@@ -5,14 +5,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { requireServerRole } from "@/lib/auth/session";
+import { getServerSession, requireServerRole } from "@/lib/auth/session";
 import { createVehicleSchema } from "@/lib/vehicles/validation";
 import { listVehicles } from "@/lib/vehicles/queries";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const ALLOWED_ROLES = ["super-admin", "admin", "fleet-manager"] as const;
+const ADMIN_ROLES = ["super-admin", "admin", "fleet-manager"] as const;
 
 // ---------------------------------------------------------------------------
 // VIC generation — mirrors src/utils/helper.ts generateVIC
@@ -51,7 +51,64 @@ function generateVIC(reg: string): string {
 
 export async function GET() {
   try {
-    await requireServerRole([...ALLOWED_ROLES]);
+    const session = await getServerSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
+    }
+
+    // Operators: return only vehicles they own
+    if (session.role === "operator") {
+      if (!session.operatorId) {
+        return NextResponse.json({ vehicles: [] });
+      }
+
+      const admin = createSupabaseAdminClient();
+      const { data, error } = await admin
+        .from("vehicles")
+        .select(
+          `registration_number, vic, make, model, seating_capacity, classification,
+           owner_name, owner_phone, owner_operator_id, driver_id, status,
+           permit_number, permit_status, permit_issue_date, permit_expiry_date,
+           cof_number, cof_issue_date, cof_expiry_date, created_at, updated_at`
+        )
+        .eq("owner_operator_id", session.operatorId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        throw new Error(`Failed to list operator vehicles: ${error.message}`);
+      }
+
+      const vehicles = (data ?? []).map((row) => ({
+        registrationNumber: row.registration_number as string,
+        vic: (row.vic as string | null) ?? null,
+        make: row.make as string,
+        model: row.model as string,
+        seatingCapacity: row.seating_capacity as number,
+        classification: row.classification as string,
+        ownerName: (row.owner_name as string | null) ?? null,
+        ownerPhone: (row.owner_phone as string | null) ?? null,
+        ownerOperatorId: (row.owner_operator_id as string | null) ?? null,
+        driverId: (row.driver_id as string | null) ?? null,
+        status: row.status as string,
+        permitNumber: (row.permit_number as string | null) ?? null,
+        permitStatus: (row.permit_status as string | null) ?? null,
+        permitIssueDate: (row.permit_issue_date as string | null) ?? null,
+        permitExpiryDate: (row.permit_expiry_date as string | null) ?? null,
+        cofNumber: (row.cof_number as string | null) ?? null,
+        cofIssueDate: (row.cof_issue_date as string | null) ?? null,
+        cofExpiryDate: (row.cof_expiry_date as string | null) ?? null,
+        createdAt: row.created_at as string,
+        updatedAt: row.updated_at as string,
+      }));
+
+      return NextResponse.json({ vehicles });
+    }
+
+    // Admin / fleet-manager / super-admin: full list
+    if (!ADMIN_ROLES.includes(session.role as (typeof ADMIN_ROLES)[number])) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    }
+
     const vehicles = await listVehicles();
     return NextResponse.json({ vehicles });
   } catch (err) {
@@ -70,7 +127,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireServerRole([...ALLOWED_ROLES]);
+    await requireServerRole([...ADMIN_ROLES]);
 
     const body = await request.json();
     const parsed = createVehicleSchema.safeParse(body);
