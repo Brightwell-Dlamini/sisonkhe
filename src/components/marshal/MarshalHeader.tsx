@@ -7,6 +7,7 @@
 
 import { RefreshCw, MapPin } from "lucide-react";
 import type { MarshalContext } from "@/lib/marshal/queries";
+import SyncStatusPill from "@/components/offline/SyncStatusPill";
 
 interface Props {
   context: MarshalContext;
@@ -35,21 +36,25 @@ export default function MarshalHeader({ context, onRefresh, loading }: Props) {
               {context.assignedRouteId ? (
                 <>
                   {" "}
-                  • Route <strong className="font-mono">{context.assignedRouteId}</strong>
+                  • Route{" "}
+                  <strong className="font-mono">{context.assignedRouteId}</strong>
                 </>
               ) : null}
             </span>
           </div>
         </div>
 
-        <button
-          onClick={onRefresh}
-          disabled={loading}
-          className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-50"
-          title="Refresh"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          <SyncStatusPill />
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 disabled:opacity-50"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
       </div>
     </div>
   );

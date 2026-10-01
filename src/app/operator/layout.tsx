@@ -9,6 +9,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Loader2, ArrowLeft, Building2, Award } from "lucide-react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
+import OfflineBanner from "@/components/offline/OfflineBanner";
 
 const NAV_ITEMS = [
   { href: "/operator/renewals", label: "Permit Renewals", icon: Award },
@@ -34,6 +35,8 @@ export default function OperatorLayout({
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-[#050505]">
+      <OfflineBanner />
+
       <div className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">

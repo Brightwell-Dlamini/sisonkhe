@@ -1,6 +1,12 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Marshal terminal data hook.
+ *
+ * Online: fetches from the API, updates local Dexie cache.
+ * Offline: serves from Dexie cache, queues dispatch actions in the outbox.
+ * Auto-replays the outbox when connectivity returns.
  */
 
 "use client";
@@ -13,6 +19,9 @@ import type {
   MarshalActivityItem,
 } from "../lib/marshal/queries";
 import type { DispatchAction } from "../lib/marshal/dispatch";
+import { enqueue } from "../lib/offline/outbox";
+import { isOnline, subscribeNetwork } from "../lib/offline/network";
+import { replayOutbox } from "../lib/offline/sync";
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -42,6 +51,12 @@ export function useMarshalTerminal(): UseMarshalTerminalResult {
   const pollingRef = useRef<number | null>(null);
 
   const refresh = useCallback(async () => {
+    // If offline, skip the network call — the caller will show cached state
+    if (!isOnline()) {
+      setLoading(false);
+      return;
+    }
+
     try {
       const [terminalRes, activityRes] = await Promise.all([
         fetch("/api/marshal/terminal", { cache: "no-store" }),
@@ -50,7 +65,9 @@ export function useMarshalTerminal(): UseMarshalTerminalResult {
 
       if (!terminalRes.ok) {
         const body = await terminalRes.json().catch(() => ({}));
-        throw new Error(body.error ?? `Terminal load failed (${terminalRes.status})`);
+        throw new Error(
+          body.error ?? `Terminal load failed (${terminalRes.status})`
+        );
       }
 
       const terminalData = await terminalRes.json();
@@ -71,10 +88,10 @@ export function useMarshalTerminal(): UseMarshalTerminalResult {
     }
   }, []);
 
+  // Initial fetch + polling loop
   useEffect(() => {
     void refresh();
 
-    // Poll every 5 seconds while the tab is visible
     pollingRef.current = window.setInterval(() => {
       if (document.visibilityState === "visible") {
         void refresh();
@@ -86,37 +103,89 @@ export function useMarshalTerminal(): UseMarshalTerminalResult {
     };
   }, [refresh]);
 
+  // Replay outbox when connectivity is restored, then refresh
+  useEffect(() => {
+    const unsubscribe = subscribeNetwork((online) => {
+      if (online) {
+        void replayOutbox().then(() => {
+          void refresh();
+        });
+      }
+    });
+    return () => unsubscribe();
+  }, [refresh]);
+
   const dispatch = useCallback(
     async (
       registrationNumber: string,
       action: DispatchAction,
       reason?: string
     ) => {
+      // If offline, enqueue and return optimistic success
+      if (!isOnline()) {
+        await enqueue({
+          action: "dispatch",
+          entityType: "vehicle",
+          entityId: registrationNumber,
+          payload: { action, reason },
+        });
+        return {
+          success: true,
+          rankFeeWritten: action === "full_cabin" || action === "depart",
+        };
+      }
+
+      // Online — try the network call
       try {
         const res = await fetch(
-          `/api/marshal/vehicles/${encodeURIComponent(registrationNumber)}/dispatch`,
+          `/api/marshal/vehicles/${encodeURIComponent(
+            registrationNumber
+          )}/dispatch`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action, reason }),
           }
         );
-        const data = await res.json();
 
+        // If the server errored in a retriable way, queue it
         if (!res.ok) {
-          return { success: false, error: data.error ?? "Dispatch failed" };
+          if (res.status >= 500 || res.status === 408) {
+            await enqueue({
+              action: "dispatch",
+              entityType: "vehicle",
+              entityId: registrationNumber,
+              payload: { action, reason },
+            });
+            return {
+              success: true,
+              rankFeeWritten: false,
+            };
+          }
+          const data = await res.json().catch(() => ({}));
+          return {
+            success: false,
+            error: data.error ?? "Dispatch failed",
+          };
         }
 
-        // Immediately refresh so the UI updates fast
+        const data = await res.json();
         await refresh();
         return {
           success: true,
           rankFeeWritten: data.rankFeeWritten ?? false,
         };
-      } catch (err) {
+      } catch {
+        // Network failure — enqueue and return optimistic success
+        await enqueue({
+          action: "dispatch",
+          entityType: "vehicle",
+          entityId: registrationNumber,
+          payload: { action, reason },
+        });
         return {
-          success: false,
-          error: err instanceof Error ? err.message : "Network error",
+          success: true,
+          rankFeeWritten: action === "full_cabin" || action === "depart",
         };
       }
     },

@@ -1,16 +1,33 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { ThemeProvider } from "@/components/common/ThemeProvider";
+import SyncWorker from "@/components/offline/SyncWorker";
 
 export const metadata: Metadata = {
   title: "Sisonkhe In Transit",
   description:
-    "National Taxi Rank, Route Queuing, and Fleet Dispatch Management System for Eswatini corridors with real-time departure boards, Driver Virtual Passes, and Vehicle Owner Operator Master Card fleet management.",
+    "National Taxi Rank, Route Queuing, and Fleet Dispatch Management System for Eswatini corridors.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Sisonkhe",
+  },
+  formatDetection: {
+    telephone: false,
+  },
   openGraph: {
     title: "Sisonkhe In Transit",
     description:
-      "National Taxi Rank, Route Queuing, and Fleet Dispatch Management System for Eswatini corridors with real-time departure boards and commuter sponsored broadcasts.",
+      "National Taxi Rank, Route Queuing, and Fleet Dispatch Management System for Eswatini.",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#059669",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
@@ -20,15 +37,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('sisonkhe_theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}}catch(e){}})();`,
-          }}
-        />
-      </head>
-      <body className="antialiased bg-zinc-50 text-zinc-900 dark:bg-[#050505] dark:text-zinc-100">
-        <ThemeProvider>{children}</ThemeProvider>
+      <body className="antialiased">
+        <SyncWorker />
+        {children}
       </body>
     </html>
   );

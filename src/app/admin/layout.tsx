@@ -8,7 +8,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import ThemeToggle from "@/components/common/ThemeToggle";
+import OfflineBanner from "@/components/offline/OfflineBanner";
 import {
   ArrowLeft,
   Users,
@@ -16,7 +16,7 @@ import {
   Car,
   Building2,
   Receipt,
-  Award,         
+  Award,
   ShieldCheck,
   Loader2,
 } from "lucide-react";
@@ -27,7 +27,7 @@ const NAV_ITEMS = [
   { href: "/admin/vehicles", label: "Vehicles", icon: Car },
   { href: "/admin/operators", label: "Operators", icon: Building2 },
   { href: "/admin/ledger", label: "Ledger & Settlement", icon: Receipt },
-  { href: "/admin/permits", label: "Permit Renewals", icon: Award },   
+  { href: "/admin/permits", label: "Permit Renewals", icon: Award },
 ];
 
 export default function AdminLayout({
@@ -46,18 +46,20 @@ export default function AdminLayout({
     );
   }
 
-  if (!user || user.role !== "super-admin") {
+  if (!user) {
     return null;
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-[#050505] dark:text-zinc-100">
+    <div className="min-h-screen bg-zinc-50 dark:bg-[#050505]">
+      <OfflineBanner />
+
       <div className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <Link
               href="/"
-              className="flex items-center gap-1.5 text-xs font-bold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              className="flex items-center gap-1.5 text-xs font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               Back
@@ -70,15 +72,12 @@ export default function AdminLayout({
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <ThemeToggle />
-            <Link
-              href="/account"
-              className="text-[11px] font-bold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-            >
-              {user.fullName}
-            </Link>
-          </div>
+          <Link
+            href="/account"
+            className="text-[11px] font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+          >
+            {user.fullName} →
+          </Link>
         </div>
       </div>
 
@@ -103,7 +102,8 @@ export default function AdminLayout({
             );
           })}
         </aside>
-        <main className="min-w-0">{children}</main>
+
+        <main>{children}</main>
       </div>
     </div>
   );
