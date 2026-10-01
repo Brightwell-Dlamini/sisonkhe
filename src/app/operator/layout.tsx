@@ -7,12 +7,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Loader2, ArrowLeft, Building2, Award } from "lucide-react";
+import { Loader2, ArrowLeft, Building2, Award, Wallet } from "lucide-react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import OfflineBanner from "@/components/offline/OfflineBanner";
 
 const NAV_ITEMS = [
-  { href: "/operator/renewals", label: "Permit Renewals", icon: Award },
+  { href: "/operator/renewals", label: "Permit Renewals", icon: Award }, { href: "/operator/wallet", label: "Wallet & Payments", icon: Wallet }, 
 ];
 
 export default function OperatorLayout({

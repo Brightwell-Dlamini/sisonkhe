@@ -22,7 +22,7 @@ const PUBLIC_ROUTES = [
   "/api/auth/signin",
   "/api/health",
   "/api/fleet/status", "/api/public",         
-  "/api/qr/verify",     
+  "/api/qr/verify", "/api/payments/webhooks",    
 ];
 
 const AUTH_ROUTES = ["/login", "/claim"];
