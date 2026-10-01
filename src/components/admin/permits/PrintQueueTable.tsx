@@ -87,8 +87,9 @@ export default function PrintQueueTable() {
   };
 
   const openSingle = (reg: string) => {
+    // Route handler lives at /print/[registrationNumber]
     window.open(
-      `/print/permit/${encodeURIComponent(reg)}`,
+      `/print/${encodeURIComponent(reg)}`,
       "_blank",
       "noopener,noreferrer"
     );
