@@ -11,7 +11,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
 interface UseQrScannerResult {
   supported: boolean;
@@ -22,12 +22,15 @@ interface UseQrScannerResult {
   onDetected: (callback: (payload: string) => void) => void;
 }
 
-export function useQrScanner(): UseQrScannerResult {
+export function useQrScanner(
+  externalVideoRef?: RefObject<HTMLVideoElement | null>
+): UseQrScannerResult {
   const [supported, setSupported] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const internalVideoRef = useRef<HTMLVideoElement | null>(null);
+  const videoRef = externalVideoRef ?? internalVideoRef;
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<any>(null);
   const rafRef = useRef<number | null>(null);
@@ -54,7 +57,7 @@ export function useQrScanner(): UseQrScannerResult {
       videoRef.current.srcObject = null;
     }
     setScanning(false);
-  }, []);
+  }, [videoRef]);
 
   const start = useCallback(async () => {
     setError(null);
@@ -110,7 +113,7 @@ export function useQrScanner(): UseQrScannerResult {
       );
       stop();
     }
-  }, [supported, stop]);
+  }, [supported, stop, videoRef]);
 
   const onDetected = useCallback((callback: (payload: string) => void) => {
     callbackRef.current = callback;
@@ -130,11 +133,4 @@ export function useQrScanner(): UseQrScannerResult {
     stop,
     onDetected,
   };
-}
-
-// Re-export the video ref setter
-export function useQrScanner(
-  videoRef: React.RefObject<HTMLVideoElement | null>
-): UseQrScannerResult {
-  // This is a placeholder hook to allow the component to attach its own ref.
 }
