@@ -1,0 +1,144 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+"use client";
+
+import { useState } from "react";
+import { Send, X, Loader2, AlertCircle } from "lucide-react";
+import type { DriverContext } from "@/lib/driver/queries";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
+
+interface Props {
+  marshal: NonNullable<DriverContext["marshal"]>;
+  driverName: string;
+  onClose: () => void;
+  onSent: () => void;
+}
+
+const PRESETS = [
+  "Ready at bay — awaiting dispatch instructions.",
+  "Passenger capacity reached.",
+  "Minor mechanical issue — need assistance.",
+  "Traffic delay on route.",
+  "Arrived back at terminal.",
+];
+
+export default function MessageMarshalModal({
+  marshal,
+  driverName,
+  onClose,
+  onSent,
+}: Props) {
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSend = async () => {
+    if (!text.trim()) return;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const supabase = getSupabaseBrowser();
+      const { error: insertErr } = await supabase.from("notifications").insert({
+        id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        timestamp: new Date().toISOString(),
+        type: "Push",
+        recipient_name: marshal.fullName,
+        recipient_phone: marshal.phone ?? null,
+        message: `[${driverName}]: ${text.trim()}`,
+        status: "Sent",
+      });
+
+      if (insertErr) {
+        setError(insertErr.message);
+        return;
+      }
+
+      onSent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="text-sm font-black uppercase text-zinc-900 dark:text-white">
+              Message Marshal
+            </h3>
+            <p className="text-[11px] text-zinc-500">
+              {marshal.fullName}
+              {marshal.phone ? ` • ${marshal.phone}` : ""}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase text-zinc-500">
+            Quick Messages
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {PRESETS.map((p) => (
+              <button
+                key={p}
+                onClick={() => setText(p)}
+                className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              >
+                {p.length > 40 ? p.slice(0, 40) + "…" : p}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <textarea
+          rows={3}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Type your message to the marshal…"
+          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white resize-none"
+        />
+
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSend}
+            disabled={loading || !text.trim()}
+            className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5"
+          >
+            {loading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Send className="w-3.5 h-3.5" />
+            )}
+            Send Message
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

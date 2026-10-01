@@ -1,0 +1,59 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+"use client";
+
+import Link from "next/link";
+import { Loader2, ArrowLeft, Car } from "lucide-react";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
+import OfflineBanner from "@/components/offline/OfflineBanner";
+
+export default function DriverLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { user, loading } = useRequireAuth(["driver"]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-[#050505]">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (!user || user.role !== "driver") return null;
+
+  return (
+    <div className="min-h-screen bg-zinc-50 dark:bg-[#050505]">
+      <OfflineBanner />
+      <div className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+          <Link
+            href="/"
+            className="flex items-center gap-1.5 text-xs font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Home
+          </Link>
+          <div className="flex items-center gap-2">
+            <Car className="w-4 h-4 text-blue-600" />
+            <span className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+              Driver Cab
+            </span>
+          </div>
+          <Link
+            href="/account"
+            className="text-[11px] font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+          >
+            {user.fullName} →
+          </Link>
+        </div>
+      </div>
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">{children}</div>
+    </div>
+  );
+}

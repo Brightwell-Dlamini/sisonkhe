@@ -37,26 +37,27 @@ export default function App() {
       return;
     }
 
-    switch (user.role) {
-      case "marshal":
-        router.replace("/marshal");
-        break;
-      case "operator":
-        router.replace("/operator/renewals");
-        break;
-      case "driver":
-        // Driver dashboard is Phase 7. Until then, park drivers on the kiosk.
-        router.replace("/kiosk");
-        break;
-      case "super-admin":
-      case "admin":
-      case "fleet-manager":
-      case "inspector":
-        router.replace("/admin");
-        break;
-      default:
-        router.replace("/kiosk");
-    }
+    sswitch (user.role) {
+  case "marshal":
+    router.replace("/marshal");
+    break;
+  case "operator":
+    router.replace("/operator/renewals");
+    break;
+  case "driver":
+    router.replace("/driver");
+    break;
+  case "inspector":
+    router.replace("/inspector/scan");
+    break;
+  case "super-admin":
+  case "admin":
+  case "fleet-manager":
+    router.replace("/admin");
+    break;
+  default:
+    router.replace("/kiosk");
+}
   }, [user, loading, router]);
 
   return (
