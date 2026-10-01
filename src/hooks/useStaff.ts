@@ -34,6 +34,10 @@ export interface CreateStaffResponse {
   error?: string;
   issues?: Record<string, string[]>;
   staff?: StaffRow;
+  credentials?: {
+    email: string;
+    password: string;
+  };
 }
 
 export interface UpdateStaffRequest {
@@ -98,7 +102,11 @@ export function useStaff(): UseStaffResult {
         }
 
         await refresh();
-        return { success: true, staff: data.staff };
+        return {
+          success: true,
+          staff: data.staff,
+          credentials: data.credentials,
+        };
       } catch (err) {
         return {
           success: false,

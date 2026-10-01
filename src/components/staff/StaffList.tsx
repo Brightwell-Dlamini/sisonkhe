@@ -12,6 +12,7 @@ import type { StaffRow } from "@/lib/staff/queries";
 import StaffFormModal from "./StaffFormModal";
 import StaffActionsMenu from "./StaffActionsMenu";
 import ResetPasswordDialog from "./ResetPasswordDialog";
+import StaffCredentialsDialog from "./StaffCredentialsDialog";
 
 const ROLE_LABELS: Record<string, string> = {
   "super-admin": "Super Admin",
@@ -48,6 +49,12 @@ export default function StaffList() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffRow | null>(null);
   const [resetStaff, setResetStaff] = useState<StaffRow | null>(null);
+  const [resetTempPassword, setResetTempPassword] = useState<string | undefined>();
+  const [credentials, setCredentials] = useState<{
+    fullName: string;
+    email: string;
+    password: string;
+  } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -73,7 +80,17 @@ export default function StaffList() {
 
   const handleCreate = async (input: CreateStaffRequest) => {
     const result = await createStaff(input);
+    if (result.success && result.credentials) {
+      setShowCreateModal(false);
+      setCredentials({
+        fullName: result.staff?.fullName ?? input.fullName,
+        email: result.credentials.email,
+        password: result.credentials.password,
+      });
+      return { success: true };
+    }
     if (result.success) {
+      // Fallback if credentials missing (should not happen after API fix)
       showToast(`Created ${result.staff?.fullName ?? "staff member"}`);
       setShowCreateModal(false);
       return { success: true };
@@ -90,15 +107,16 @@ export default function StaffList() {
     return ok;
   };
 
-  const handleDeactivate = async (staff: StaffRow) => {
-    const ok = await deactivateStaff(staff.id);
-    if (ok) showToast(`Deactivated ${staff.fullName}`);
+  const handleDeactivate = async (staffMember: StaffRow) => {
+    const ok = await deactivateStaff(staffMember.id);
+    if (ok) showToast(`Deactivated ${staffMember.fullName}`);
   };
 
-  const handleResetPassword = async (staff: StaffRow) => {
-    const result = await resetPassword(staff.id);
+  const handleResetPassword = async (staffMember: StaffRow) => {
+    const result = await resetPassword(staffMember.id);
     if (result.success && result.tempPassword) {
-      setResetStaff(staff);
+      setResetTempPassword(result.tempPassword);
+      setResetStaff(staffMember);
       return result;
     }
     return result;
@@ -282,10 +300,23 @@ export default function StaffList() {
         />
       )}
 
+      {credentials && (
+        <StaffCredentialsDialog
+          fullName={credentials.fullName}
+          email={credentials.email}
+          password={credentials.password}
+          onClose={() => setCredentials(null)}
+        />
+      )}
+
       {resetStaff && (
         <ResetPasswordDialog
           staff={resetStaff}
-          onClose={() => setResetStaff(null)}
+          tempPassword={resetTempPassword}
+          onClose={() => {
+            setResetStaff(null);
+            setResetTempPassword(undefined);
+          }}
         />
       )}
     </div>

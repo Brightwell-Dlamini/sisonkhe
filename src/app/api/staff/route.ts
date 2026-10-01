@@ -4,6 +4,8 @@
  *
  * GET  /api/staff       — list all staff (super-admin only)
  * POST /api/staff       — create a new staff member (super-admin only)
+ *
+ * On create, returns credentials once so the admin can copy them.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -131,6 +133,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Return credentials once so the admin can copy and share them.
+    // Staff sign in with email (not a generated username).
     return NextResponse.json({
       success: true,
       staff: {
@@ -146,6 +150,10 @@ export async function POST(request: NextRequest) {
         lastLoginAt: staffRow.last_login_at,
         createdAt: staffRow.created_at,
         updatedAt: staffRow.updated_at,
+      },
+      credentials: {
+        email,
+        password,
       },
     });
   } catch (err) {
