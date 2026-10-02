@@ -17,15 +17,20 @@ const PUBLIC_ROUTES = [
   "/",
   "/login",
   "/claim",
-  "/kiosk", "/verify", 
+  "/register",
+  "/kiosk",
+  "/verify",
   "/api/auth/claim",
   "/api/auth/signin",
+  "/api/register",
   "/api/health",
-  "/api/fleet/status", "/api/public",         
-  "/api/qr/verify", "/api/payments/webhooks",    
+  "/api/fleet/status",
+  "/api/public",
+  "/api/qr/verify",
+  "/api/payments/webhooks",
 ];
 
-const AUTH_ROUTES = ["/login", "/claim"];
+const AUTH_ROUTES = ["/login", "/claim", "/register"];
 
 export async function middleware(request: NextRequest) {
   const { response, user } = await updateSupabaseSession(request);
