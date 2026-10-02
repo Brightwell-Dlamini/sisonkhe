@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
+import NavAuthActions from "@/components/common/NavAuthActions";
 import OfflineBanner from "@/components/offline/OfflineBanner";
 
 export default function MarshalLayout({
@@ -46,12 +47,7 @@ export default function MarshalLayout({
               Marshal Terminal
             </span>
           </div>
-          <Link
-            href="/account"
-            className="text-[11px] font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-          >
-            {user.fullName} →
-          </Link>
+          <NavAuthActions fullName={user.fullName} />
         </div>
       </div>
 
