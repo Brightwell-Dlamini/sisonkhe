@@ -58,6 +58,7 @@ export default function VehicleFormModal({
     ownerPhone: vehicle?.ownerPhone ?? "",
     ownerOperatorId: vehicle?.ownerOperatorId ?? "",
     driverId: vehicle?.driverId ?? "",
+    driverNationalId: "",
     permitNumber: vehicle?.permitNumber ?? "",
     permitStatus: vehicle?.permitStatus ?? "Active",
     permitIssueDate: vehicle?.permitIssueDate ?? "",
@@ -78,11 +79,9 @@ export default function VehicleFormModal({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
-  // Auto-generate VIC preview when registration changes
   useEffect(() => {
     if (mode === "create" && !form.vic && form.registrationNumber) {
-      const preview = generateVICPreview(form.registrationNumber);
-      // Don't set — just show preview in the helper text
+      generateVICPreview(form.registrationNumber);
     }
   }, [form.registrationNumber, form.vic, mode]);
 
@@ -130,6 +129,7 @@ export default function VehicleFormModal({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
@@ -145,7 +145,6 @@ export default function VehicleFormModal({
             </div>
           )}
 
-          {/* Identification */}
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
               Identification
@@ -215,10 +214,7 @@ export default function VehicleFormModal({
                   className="input"
                 />
               </Field>
-              <Field
-                label="Seating Capacity *"
-                error={fieldErrors.seatingCapacity?.[0]}
-              >
+              <Field label="Seating Capacity *" error={fieldErrors.seatingCapacity?.[0]}>
                 <input
                   type="number"
                   required
@@ -243,7 +239,6 @@ export default function VehicleFormModal({
             </div>
           </fieldset>
 
-          {/* Assignment */}
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
               Assignment
@@ -259,22 +254,28 @@ export default function VehicleFormModal({
                   className="input font-mono"
                 />
               </Field>
-              <Field label="Assigned Driver ID">
+              <Field label="Driver National ID">
                 <input
                   type="text"
-                  value={form.driverId}
-                  onChange={(e) => update("driverId", e.target.value)}
-                  placeholder="Leave empty or paste driver ID"
+                  value={form.driverNationalId ?? ""}
+                  onChange={(e) => update("driverNationalId", e.target.value)}
+                  placeholder="e.g. 8701016123456"
                   className="input font-mono text-xs"
                 />
                 <p className="text-[10px] text-zinc-500 mt-1">
-                  Tip: copy the driver ID from the Drivers page.
+                  Human key — links both sides via the assignment service.
+                  {form.driverId ? (
+                    <>
+                      {" "}
+                      Current internal id:{" "}
+                      <span className="font-mono">{form.driverId}</span>
+                    </>
+                  ) : null}
                 </p>
               </Field>
             </div>
           </fieldset>
 
-          {/* Ownership */}
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
               Ownership
@@ -311,7 +312,6 @@ export default function VehicleFormModal({
             </div>
           </fieldset>
 
-          {/* Permits & Compliance */}
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
               Permits & Compliance
@@ -412,7 +412,6 @@ export default function VehicleFormModal({
             </div>
           </fieldset>
 
-          {/* Mid-month rotation */}
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
               30-Day Rotation
@@ -422,9 +421,7 @@ export default function VehicleFormModal({
               <input
                 type="checkbox"
                 checked={!!form.isMidMonthAddition}
-                onChange={(e) =>
-                  update("isMidMonthAddition", e.target.checked)
-                }
+                onChange={(e) => update("isMidMonthAddition", e.target.checked)}
                 className="mt-0.5 w-4 h-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
               />
               <div className="text-xs">
@@ -432,9 +429,8 @@ export default function VehicleFormModal({
                   Added mid-month (tail-lock)
                 </div>
                 <div className="text-zinc-500 text-[11px] mt-0.5">
-                  Vehicle will be pinned to the tail of the queue for the
-                  remainder of this 30-day cycle. It graduates to the regular
-                  rotation next month.
+                  Vehicle will be pinned to the tail of the queue for the remainder of this
+                  30-day cycle. It graduates to the regular rotation next month.
                 </div>
               </div>
             </label>
@@ -469,18 +465,12 @@ export default function VehicleFormModal({
             )}
           </fieldset>
 
-          {/* Auto card note */}
           {mode === "create" && (
             <div className="flex items-start gap-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
-              <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
-              <div className="text-xs text-emerald-900 dark:text-emerald-200">
-                <div className="font-bold">Virtual Transit Card auto-issued</div>
-                <div className="text-[11px] mt-0.5">
-                  On save, a Virtual Transit Card is issued with a{" "}
-                  <strong>E450 registration fee</strong> recorded and an initial
-                  balance of <strong>E1,525</strong>. The card number and receipt
-                  appear in the Fleet Manager view.
-                </div>
+              <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-emerald-800 dark:text-emerald-300">
+                <strong>Virtual Transit Card</strong> will be issued automatically on
+                registration (registration fee recorded as paid for pilot).
               </div>
             </div>
           )}
@@ -508,21 +498,26 @@ export default function VehicleFormModal({
       <style jsx>{`
         .input {
           width: 100%;
-          background-color: rgb(250 250 250);
+          background: rgb(250 250 250);
           border: 1px solid rgb(228 228 231);
           border-radius: 0.75rem;
-          padding: 0.625rem 0.875rem;
-          font-size: 0.875rem;
+          padding: 0.5rem 0.75rem;
+          font-size: 0.8125rem;
           color: rgb(24 24 27);
           outline: none;
         }
-        :global(.dark) .input {
-          background-color: rgb(9 9 11);
+        .input:focus {
+          border-color: rgb(16 185 129);
+          box-shadow: 0 0 0 2px rgb(16 185 129 / 0.2);
+        }
+        .dark .input {
+          background: rgb(9 9 11);
           border-color: rgb(39 39 42);
           color: white;
         }
-        .input:focus {
-          border-color: rgb(16 185 129);
+        .input:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
         }
       `}</style>
     </div>
@@ -540,11 +535,13 @@ function Field({
 }) {
   return (
     <div>
-      <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">
         {label}
       </label>
       {children}
-      {error && <p className="text-[10px] text-red-600 mt-1">{error}</p>}
+      {error && (
+        <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{error}</p>
+      )}
     </div>
   );
 }
