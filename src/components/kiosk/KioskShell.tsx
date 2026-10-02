@@ -1,9 +1,6 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Kiosk shell. Renders header, mode tabs, and the active mode component.
- * Also renders the advert banner at the bottom.
  */
 
 "use client";
@@ -11,6 +8,7 @@
 import { useState } from "react";
 import type { KioskSnapshot } from "@/lib/public/kiosk";
 import type { KioskMode } from "@/app/kiosk/page";
+import { useVoiceAnnouncements } from "@/hooks/useVoiceAnnouncements";
 import KioskHeader from "./KioskHeader";
 import KioskModeTabs from "./KioskModeTabs";
 import KioskModeTransit from "./KioskModeTransit";
@@ -39,6 +37,8 @@ export default function KioskShell({
   const [showFareCalc, setShowFareCalc] = useState(false);
   const [showLostProperty, setShowLostProperty] = useState(false);
 
+  const voice = useVoiceAnnouncements();
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-[#050505]">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 pb-24">
@@ -48,6 +48,9 @@ export default function KioskShell({
           onRefresh={onRefresh}
           onOpenFareCalculator={() => setShowFareCalc(true)}
           onOpenLostProperty={() => setShowLostProperty(true)}
+          voiceEnabled={voice.enabled}
+          voiceSupported={voice.supported}
+          onToggleVoice={() => voice.setEnabled(!voice.enabled)}
         />
 
         <KioskModeTabs
@@ -58,7 +61,9 @@ export default function KioskShell({
         />
 
         <div className="mt-5">
-          {mode === "transit" && <KioskModeTransit snapshot={snapshot} />}
+          {mode === "transit" && (
+            <KioskModeTransit snapshot={snapshot} onSpeak={voice.speak} voiceEnabled={voice.enabled} />
+          )}
           {mode === "radar" && <KioskModeRadar snapshot={snapshot} />}
           {mode === "queue" && <KioskModeQueue snapshot={snapshot} />}
           {mode === "tv" && <KioskModeTV snapshot={snapshot} />}

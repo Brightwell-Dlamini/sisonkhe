@@ -12,9 +12,10 @@ import {
   Calculator,
   ShieldAlert,
   RefreshCw,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import type { KioskSnapshot } from "@/lib/public/kiosk";
-import NavAuthActions from "@/components/common/NavAuthActions";
 
 interface Props {
   snapshot: KioskSnapshot;
@@ -22,6 +23,9 @@ interface Props {
   onRefresh: () => void;
   onOpenFareCalculator: () => void;
   onOpenLostProperty: () => void;
+  voiceEnabled: boolean;
+  voiceSupported: boolean;
+  onToggleVoice: () => void;
 }
 
 export default function KioskHeader({
@@ -30,6 +34,9 @@ export default function KioskHeader({
   onRefresh,
   onOpenFareCalculator,
   onOpenLostProperty,
+  voiceEnabled,
+  voiceSupported,
+  onToggleVoice,
 }: Props) {
   const [now, setNow] = useState(new Date());
 
@@ -43,7 +50,6 @@ export default function KioskHeader({
   return (
     <header className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-4 sm:p-5 shadow-sm">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        {/* Identity */}
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-md shrink-0">
             <Radio className="w-5 h-5 animate-pulse" />
@@ -64,7 +70,6 @@ export default function KioskHeader({
           </div>
         </div>
 
-        {/* Region pills */}
         <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl overflow-x-auto scrollbar-none border border-zinc-200 dark:border-zinc-700/60">
           {snapshot.regions.map((region) => (
             <button
@@ -81,7 +86,6 @@ export default function KioskHeader({
           ))}
         </div>
 
-        {/* Clock + actions */}
         <div className="flex items-center gap-2">
           <div className="text-right font-mono pr-2 border-r border-zinc-200 dark:border-zinc-800 hidden sm:block">
             <div className="text-sm font-black text-zinc-900 dark:text-white flex items-center justify-end gap-1">
@@ -96,6 +100,24 @@ export default function KioskHeader({
               SZ Time
             </span>
           </div>
+
+          {voiceSupported && (
+            <button
+              onClick={onToggleVoice}
+              className={`p-2.5 rounded-xl cursor-pointer transition-colors ${
+                voiceEnabled
+                  ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              }`}
+              title={voiceEnabled ? "Mute announcements" : "Enable voice announcements"}
+            >
+              {voiceEnabled ? (
+                <Volume2 className="w-4 h-4" />
+              ) : (
+                <VolumeX className="w-4 h-4" />
+              )}
+            </button>
+          )}
 
           <button
             onClick={onOpenFareCalculator}
@@ -120,8 +142,6 @@ export default function KioskHeader({
           >
             <RefreshCw className="w-4 h-4" />
           </button>
-
-          <NavAuthActions />
         </div>
       </div>
     </header>
