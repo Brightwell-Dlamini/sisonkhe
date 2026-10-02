@@ -15,7 +15,6 @@ import { useAuthStore } from "@/store/useAuthStore";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Only honour redirect if it is an internal path (not open redirect)
   const rawRedirect = searchParams.get("redirect");
   const redirectParam =
     rawRedirect && rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
@@ -41,14 +40,12 @@ function LoginForm() {
       return;
     }
 
-    // Seed client auth store so role guards see the user immediately
     if (result.user) {
       useAuthStore.getState().setUser(result.user);
     } else {
       await useAuthStore.getState().refresh();
     }
 
-    // Prefer explicit redirect (e.g. deep link), else role home
     const destination =
       redirectParam && redirectParam !== "/"
         ? redirectParam
@@ -140,11 +137,23 @@ function LoginForm() {
         </button>
       </form>
 
-      <p className="mt-5 text-center text-[11px] text-zinc-500">
-        Marshal without a password?{" "}
-        <Link href="/claim" className="font-bold text-emerald-600 hover:underline">
-          Claim your account
-        </Link>
+      <p className="mt-5 text-center text-[11px] text-zinc-500 space-y-1">
+        <span className="block">
+          Marshal without a password?{" "}
+          <Link href="/claim" className="font-bold text-emerald-600 hover:underline">
+            Claim your account
+          </Link>
+        </span>
+        <span className="block">
+          New driver?{" "}
+          <Link href="/register/driver" className="font-bold text-emerald-600 hover:underline">
+            Self-register
+          </Link>
+          {" \u00b7 "}
+          <Link href="/register/vehicle" className="font-bold text-emerald-600 hover:underline">
+            Register vehicle
+          </Link>
+        </span>
       </p>
     </div>
   );
