@@ -12,7 +12,7 @@
  *   4. Generates driver ID, username, and temp password
  *   5. Creates the auth user (synthetic email)
  *   6. Inserts the driver row
- *   7. Links the vehicle back to the driver
+ *   7. Links the vehicle via assignment service
  *   8. Returns the generated credentials ONCE
  */
 
@@ -26,15 +26,12 @@ import {
   generateTempPassword,
   generateUsername,
 } from "@/lib/drivers/generators";
+import { assignDriverVehicle } from "@/lib/assignments/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const ALLOWED_ROLES = ["super-admin", "admin", "fleet-manager"] as const;
-
-// ---------------------------------------------------------------------------
-// GET — list all drivers
-// ---------------------------------------------------------------------------
 
 export async function GET() {
   try {
@@ -54,17 +51,12 @@ export async function GET() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// POST — create a new driver
-// ---------------------------------------------------------------------------
-
 export async function POST(request: NextRequest) {
   let createdAuthUserId: string | null = null;
 
   try {
     await requireServerRole([...ALLOWED_ROLES]);
 
-    // --- Parse & validate input --------------------------------------------
     const body = await request.json();
     const parsed = createDriverSchema.safeParse(body);
 
@@ -81,7 +73,6 @@ export async function POST(request: NextRequest) {
     const input = parsed.data;
     const admin = createSupabaseAdminClient();
 
-    // --- Uniqueness checks -------------------------------------------------
     if (input.phone) {
       const { data: phoneClash } = await admin
         .from("drivers")
@@ -124,7 +115,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // --- Vehicle assignment validation -------------------------------------
     if (input.assignedVehicleReg) {
       const { data: vehicle } = await admin
         .from("vehicles")
@@ -138,23 +128,13 @@ export async function POST(request: NextRequest) {
           { status: 404 }
         );
       }
-      if (vehicle.driver_id) {
-        return NextResponse.json(
-          {
-            error: `Vehicle ${input.assignedVehicleReg} is already assigned to another driver.`,
-          },
-          { status: 409 }
-        );
-      }
     }
 
-    // --- Generate credentials ----------------------------------------------
     const driverId = generateDriverId();
     const username = await generateUniqueUsername(input.fullName);
     const tempPassword = generateTempPassword();
     const syntheticEmail = `${driverId}@driver.sisonkhe.local`;
 
-    // --- Create auth user --------------------------------------------------
     const { data: created, error: createErr } =
       await admin.auth.admin.createUser({
         email: syntheticEmail,
@@ -182,7 +162,6 @@ export async function POST(request: NextRequest) {
 
     createdAuthUserId = created.user.id;
 
-    // --- Insert driver row -------------------------------------------------
     const avatarSeed = input.fullName
       .toLowerCase()
       .replace(/[^a-z]/g, "")
@@ -214,7 +193,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (insertErr) {
-      // Rollback auth user
       await admin.auth.admin.deleteUser(createdAuthUserId);
       createdAuthUserId = null;
       console.error("[api/drivers] insert error:", insertErr);
@@ -224,24 +202,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- Link vehicle back to driver ---------------------------------------
     if (input.assignedVehicleReg) {
-      const { error: linkErr } = await admin
-        .from("vehicles")
-        .update({ driver_id: driverId })
-        .eq("registration_number", input.assignedVehicleReg);
-
-      if (linkErr) {
-        // Non-fatal: driver is created, vehicle link failed.
-        // Log and continue — admin can re-assign via edit.
-        console.warn(
-          "[api/drivers] vehicle link failed (non-fatal):",
-          linkErr
-        );
+      try {
+        await assignDriverVehicle(admin, {
+          driverId,
+          vehicleReg: input.assignedVehicleReg,
+          force: true,
+        });
+      } catch (linkErr) {
+        console.warn("[api/drivers] assignment failed (non-fatal):", linkErr);
       }
     }
 
-    // --- Success -----------------------------------------------------------
     return NextResponse.json({
       success: true,
       driverId,
@@ -259,7 +231,6 @@ export async function POST(request: NextRequest) {
         ? 403
         : 500;
 
-    // Rollback auth user on catastrophic failure
     if (createdAuthUserId) {
       try {
         const admin = createSupabaseAdminClient();
@@ -275,15 +246,10 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Helper — generate a unique username from the driver's full name
-// ---------------------------------------------------------------------------
-
 async function generateUniqueUsername(fullName: string): Promise<string> {
   const admin = createSupabaseAdminClient();
   const taken = new Set<string>();
 
-  // Preload existing usernames (up to 1000 — enough for the pilot)
   try {
     const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
     for (const u of data?.users ?? []) {
@@ -291,7 +257,6 @@ async function generateUniqueUsername(fullName: string): Promise<string> {
       if (uname) taken.add(uname.toLowerCase());
     }
   } catch (err) {
-    // Non-fatal: we fall back to collision-resistant suffix generation
     console.warn("[api/drivers] could not preload usernames:", err);
   }
 
