@@ -41,6 +41,10 @@ export interface PublicVehicle {
   routeDestination: string | null;
   /** Only first name + initial of surname. No full name, no phone, no ID. */
   driverDisplayName: string | null;
+  /** Loading-window fields — populated once columns exist on the vehicles table. */
+  loadingStartTime: string | null;
+  expectedDepartureTime: string | null;
+  loadingDurationMinutes: number | null;
 }
 
 export interface PublicAdvert {
@@ -95,7 +99,9 @@ export async function listPublicRegions(): Promise<string[]> {
 // Route discovery
 // ---------------------------------------------------------------------------
 
-export async function listPublicRoutes(region?: string): Promise<PublicRoute[]> {
+export async function listPublicRoutes(
+  region?: string
+): Promise<PublicRoute[]> {
   const admin = createSupabaseAdminClient();
   let q = admin
     .from("routes")
@@ -164,6 +170,8 @@ export async function listPublicVehicles(
   }
 
   // 2. Vehicles on those routes (exclude Offline)
+  // Note: loading-window fields are not selected because they don't exist as
+  // columns yet. They're returned as null.
   const { data: vehicles, error } = await admin
     .from("vehicles")
     .select(
@@ -219,6 +227,9 @@ export async function listPublicVehicles(
       driverDisplayName: driverId
         ? driverDisplayMap.get(driverId) ?? null
         : null,
+      loadingStartTime: null,
+      expectedDepartureTime: null,
+      loadingDurationMinutes: null,
     };
   });
 }
@@ -244,7 +255,6 @@ export async function listPublicAdverts(
     return [];
   }
 
-  // Filter by region in memory (target_regions is text[])
   const filtered = (data ?? []).filter((ad) => {
     const targets = (ad.target_regions as string[] | null) ?? [];
     if (targets.length === 0) return true;
@@ -303,9 +313,7 @@ export async function getKioskSnapshot(
 ): Promise<KioskSnapshot> {
   const regions = await listPublicRegions();
   const effectiveRegion =
-    region && regions.includes(region)
-      ? region
-      : regions[0] ?? "Hhohho";
+    region && regions.includes(region) ? region : regions[0] ?? "Hhohho";
 
   const [routes, vehicles, adverts, regionConfig] = await Promise.all([
     listPublicRoutes(effectiveRegion),

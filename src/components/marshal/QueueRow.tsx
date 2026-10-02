@@ -30,18 +30,26 @@ interface Props {
     reason?: string
   ) => Promise<{ success: boolean; error?: string; rankFeeWritten?: boolean }>;
   showToast: (msg: string) => void;
+  onSelectVehicle?: (reg: string) => void;
 }
 
 const STATUS_STYLES: Record<string, string> = {
   Waiting: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300",
-  Loading: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+  Loading:
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
   Full: "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300",
   Departed: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-  Delayed: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
+  Delayed:
+    "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
   Breakdown: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300",
 };
 
-export default function QueueRow({ vehicle, onDispatch, showToast }: Props) {
+export default function QueueRow({
+  vehicle,
+  onDispatch,
+  showToast,
+  onSelectVehicle,
+}: Props) {
   const [pending, setPending] = useState<DispatchAction | null>(null);
   const [showDelay, setShowDelay] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -61,7 +69,9 @@ export default function QueueRow({ vehicle, onDispatch, showToast }: Props) {
     }
 
     if (res.rankFeeWritten) {
-      showToast(`${vehicle.registrationNumber}: dispatched. Rank fee E25 recorded.`);
+      showToast(
+        `${vehicle.registrationNumber}: dispatched. Rank fee E25 recorded.`
+      );
     } else if (action === "load") {
       showToast(`${vehicle.registrationNumber}: moved to Loading.`);
     } else if (action === "full_cabin") {
@@ -85,9 +95,14 @@ export default function QueueRow({ vehicle, onDispatch, showToast }: Props) {
   const handleBreakdownConfirm = async (reason: string) => {
     setShowBreakdown(false);
     setPending("breakdown");
-    const res = await onDispatch(vehicle.registrationNumber, "breakdown", reason);
+    const res = await onDispatch(
+      vehicle.registrationNumber,
+      "breakdown",
+      reason
+    );
     setPending(null);
-    if (res.success) showToast(`${vehicle.registrationNumber}: marked breakdown.`);
+    if (res.success)
+      showToast(`${vehicle.registrationNumber}: marked breakdown.`);
     else showToast(res.error ?? "Failed");
   };
 
@@ -114,10 +129,14 @@ export default function QueueRow({ vehicle, onDispatch, showToast }: Props) {
             {isQueued ? `#${vehicle.currentQueuePosition}` : "—"}
           </div>
 
-          {/* Identity */}
-          <div className="flex-1 min-w-0">
+          {/* Identity (clickable for details) */}
+          <div
+            className="flex-1 min-w-0 cursor-pointer group"
+            onClick={() => onSelectVehicle?.(vehicle.registrationNumber)}
+            title="View vehicle details"
+          >
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono font-black text-zinc-900 dark:text-white">
+              <span className="font-mono font-black text-zinc-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                 {vehicle.registrationNumber}
               </span>
               {vehicle.vic && (
@@ -126,7 +145,9 @@ export default function QueueRow({ vehicle, onDispatch, showToast }: Props) {
                 </span>
               )}
               <span
-                className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${STATUS_STYLES[vehicle.status] ?? ""}`}
+                className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                  STATUS_STYLES[vehicle.status] ?? ""
+                }`}
               >
                 {vehicle.status}
               </span>
@@ -155,6 +176,10 @@ export default function QueueRow({ vehicle, onDispatch, showToast }: Props) {
                 </span>
               )}
             </div>
+
+            <span className="text-[10px] text-zinc-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors inline-block mt-1 opacity-0 group-hover:opacity-100">
+              View details →
+            </span>
           </div>
         </div>
 

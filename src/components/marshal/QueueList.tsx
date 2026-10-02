@@ -19,23 +19,25 @@ interface Props {
     reason?: string
   ) => Promise<{ success: boolean; error?: string; rankFeeWritten?: boolean }>;
   showToast: (msg: string) => void;
+  onSelectVehicle?: (reg: string) => void;
 }
 
-export default function QueueList({ vehicles, onDispatch, showToast }: Props) {
+export default function QueueList({
+  vehicles,
+  onDispatch,
+  showToast,
+  onSelectVehicle,
+}: Props) {
   const [search, setSearch] = useState("");
 
   const sorted = useMemo(() => {
-    // Queued first (position 1, 2, 3...), then unqueued (position 0), then non-Waiting
     return [...vehicles].sort((a, b) => {
       const aPos = a.currentQueuePosition;
       const bPos = b.currentQueuePosition;
 
-      // Both queued: sort by position
       if (aPos > 0 && bPos > 0) return aPos - bPos;
-      // Queued beats unqueued
       if (aPos > 0 && bPos === 0) return -1;
       if (bPos > 0 && aPos === 0) return 1;
-      // Both unqueued: alphabetical
       return a.registrationNumber.localeCompare(b.registrationNumber);
     });
   }, [vehicles]);
@@ -88,6 +90,7 @@ export default function QueueList({ vehicles, onDispatch, showToast }: Props) {
               vehicle={v}
               onDispatch={onDispatch}
               showToast={showToast}
+              onSelectVehicle={onSelectVehicle}
             />
           ))}
         </div>
