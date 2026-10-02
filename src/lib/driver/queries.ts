@@ -277,3 +277,82 @@ export async function getDriverRecentTrips(
     };
   });
 }
+// ---------------------------------------------------------------------------
+// Virtual card queries
+// ---------------------------------------------------------------------------
+
+export interface DriverVirtualCard {
+  id: string;
+  cardNumber: string;
+  expiryDate: string;
+  vehicleReg: string;
+  vic: string;
+  cardholderName: string;
+  balanceSzl: number;
+  status: string;
+  registrationFeePaid: boolean;
+  registrationFeeAmount: number;
+  registrationReceiptRef: string;
+  cardTier: string;
+  transactions: Array<{
+    id: string;
+    timestamp: string;
+    type: string;
+    description: string;
+    amountSzl: number;
+    direction: "DEBIT" | "CREDIT";
+    receiptNumber: string;
+    status: string;
+  }>;
+}
+
+export async function getDriverVirtualCard(
+  vehicleReg: string
+): Promise<DriverVirtualCard | null> {
+  const admin = createSupabaseAdminClient();
+  const reg = vehicleReg.trim().toUpperCase();
+
+  const { data: card } = await admin
+    .from("vehicle_virtual_cards")
+    .select(
+      "id, card_number, expiry_date, vehicle_reg, vic, cardholder_name, balance_szl, status, registration_fee_paid, registration_fee_amount, registration_receipt_ref, card_tier"
+    )
+    .eq("vehicle_reg", reg)
+    .maybeSingle();
+
+  if (!card) return null;
+
+  const { data: txs } = await admin
+    .from("virtual_card_transactions")
+    .select(
+      "id, timestamp, type, description, amount_szl, direction, receipt_number, status"
+    )
+    .eq("card_id", card.id as string)
+    .order("timestamp", { ascending: false })
+    .limit(50);
+
+  return {
+    id: card.id as string,
+    cardNumber: card.card_number as string,
+    expiryDate: card.expiry_date as string,
+    vehicleReg: card.vehicle_reg as string,
+    vic: card.vic as string,
+    cardholderName: (card.cardholder_name as string | null) ?? "",
+    balanceSzl: Number(card.balance_szl ?? 0),
+    status: card.status as string,
+    registrationFeePaid: Boolean(card.registration_fee_paid),
+    registrationFeeAmount: Number(card.registration_fee_amount ?? 0),
+    registrationReceiptRef: (card.registration_receipt_ref as string | null) ?? "",
+    cardTier: (card.card_tier as string | null) ?? "Commercial Concession",
+    transactions: (txs ?? []).map((t) => ({
+      id: t.id as string,
+      timestamp: t.timestamp as string,
+      type: t.type as string,
+      description: t.description as string,
+      amountSzl: Number(t.amount_szl ?? 0),
+      direction: t.direction as "DEBIT" | "CREDIT",
+      receiptNumber: t.receipt_number as string,
+      status: t.status as string,
+    })),
+  };
+}
