@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { requireServerRole } from "@/lib/auth/session";
 import { updateDriverSchema } from "@/lib/drivers/validation";
+import { assignDriverVehicle, unassignDriverVehicle } from "@/lib/assignments/service";
 import { getDriverById } from "@/lib/drivers/queries";
 
 export const dynamic = "force-dynamic";
@@ -64,8 +65,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
 
     const admin = createSupabaseAdminClient();
-
-    // --- Build patch ---
     const patch: Record<string, unknown> = {};
     const input = parsed.data;
 
@@ -107,7 +106,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "No fields to update" }, { status: 400 });
     }
 
-    // --- Get current row for vehicle sync ---
     const { data: current } = await admin
       .from("drivers")
       .select("assigned_vehicle_reg")
@@ -121,7 +119,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const oldVehicle = current.assigned_vehicle_reg as string | null;
     const newVehicle = patch.assigned_vehicle_reg as string | null | undefined;
 
-    // --- Validate new vehicle assignment ---
     if (newVehicle && newVehicle !== oldVehicle) {
       const { data: vehicle } = await admin
         .from("vehicles")
@@ -135,15 +132,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           { status: 404 }
         );
       }
-      if (vehicle.driver_id && vehicle.driver_id !== id) {
-        return NextResponse.json(
-          { error: `Vehicle ${newVehicle} is already assigned to another driver.` },
-          { status: 409 }
-        );
-      }
     }
 
-    // --- Update driver ---
     const { data: updated, error: updateErr } = await admin
       .from("drivers")
       .update(patch)
@@ -161,25 +151,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Driver not found" }, { status: 404 });
     }
 
-    // --- Sync vehicle ↔ driver assignment ---
     if (newVehicle !== undefined && newVehicle !== oldVehicle) {
-      // Detach old vehicle
-      if (oldVehicle) {
-        await admin
-          .from("vehicles")
-          .update({ driver_id: null })
-          .eq("registration_number", oldVehicle);
-      }
-      // Attach new vehicle
-      if (newVehicle) {
-        await admin
-          .from("vehicles")
-          .update({ driver_id: id })
-          .eq("registration_number", newVehicle);
+      if (!newVehicle && oldVehicle) {
+        await unassignDriverVehicle(admin, { driverId: id, vehicleReg: oldVehicle });
+      } else if (newVehicle) {
+        await assignDriverVehicle(admin, {
+          driverId: id,
+          vehicleReg: newVehicle,
+          force: true,
+        });
       }
     }
 
-    // --- Sync auth metadata (full name) ---
     if (input.fullName !== undefined && updated.auth_user_id) {
       try {
         const { data: existing } = await admin.auth.admin.getUserById(
@@ -211,7 +194,6 @@ export async function DELETE(_: NextRequest, { params }: Params) {
 
     const admin = createSupabaseAdminClient();
 
-    // Detach from any vehicle
     const { data: driverRow } = await admin
       .from("drivers")
       .select("assigned_vehicle_reg")
@@ -219,10 +201,10 @@ export async function DELETE(_: NextRequest, { params }: Params) {
       .maybeSingle();
 
     if (driverRow?.assigned_vehicle_reg) {
-      await admin
-        .from("vehicles")
-        .update({ driver_id: null })
-        .eq("registration_number", driverRow.assigned_vehicle_reg);
+      await unassignDriverVehicle(admin, {
+        driverId: id,
+        vehicleReg: driverRow.assigned_vehicle_reg as string,
+      });
     }
 
     const { error } = await admin
