@@ -149,7 +149,7 @@ function LoginForm() {
           <Link href="/register/driver" className="font-bold text-emerald-600 hover:underline">
             Self-register
           </Link>
-          {" \u00b7 "}
+          {" · "}
           <Link href="/register/vehicle" className="font-bold text-emerald-600 hover:underline">
             Register vehicle
           </Link>
