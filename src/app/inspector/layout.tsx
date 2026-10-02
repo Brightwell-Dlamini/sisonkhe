@@ -9,6 +9,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Loader2, ArrowLeft, ShieldAlert, QrCode, FileText } from "lucide-react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
+import NavAuthActions from "@/components/common/NavAuthActions";
 import OfflineBanner from "@/components/offline/OfflineBanner";
 
 const NAV_ITEMS = [
@@ -52,12 +53,7 @@ export default function InspectorLayout({
               Inspector
             </span>
           </div>
-          <Link
-            href="/account"
-            className="text-[11px] font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-          >
-            {user.fullName} →
-          </Link>
+          <NavAuthActions fullName={user.fullName} />
         </div>
 
         <div className="max-w-3xl mx-auto px-4 sm:px-6 pb-2 flex gap-1">

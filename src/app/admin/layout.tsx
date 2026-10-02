@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
+import NavAuthActions from "@/components/common/NavAuthActions";
 import OfflineBanner from "@/components/offline/OfflineBanner";
 import {
   ArrowLeft,
@@ -72,12 +73,7 @@ export default function AdminLayout({
               </span>
             </div>
           </div>
-          <Link
-            href="/account"
-            className="text-[11px] font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-          >
-            {user.fullName} →
-          </Link>
+          <NavAuthActions fullName={user.fullName} />
         </div>
       </div>
 
