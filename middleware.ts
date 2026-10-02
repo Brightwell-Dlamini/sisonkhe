@@ -23,6 +23,7 @@ const PUBLIC_ROUTES = [
   "/api/auth/claim",
   "/api/auth/signin",
   "/api/register",
+  "/api/assignments",
   "/api/health",
   "/api/fleet/status",
   "/api/public",
@@ -39,19 +40,18 @@ export async function middleware(request: NextRequest) {
   const isPublic = PUBLIC_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(route + "/")
   );
-  const isAuthRoute = AUTH_ROUTES.some(
-    (route) => pathname === route || pathname.startsWith(route + "/")
-  );
 
-  // If authenticated user hits login/claim, push them home
-  if (isAuthRoute && user) {
-    return NextResponse.redirect(new URL("/", request.url));
+  if (isPublic) {
+    if (user && AUTH_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))) {
+      // let login page handle redirect by role
+    }
+    return response;
   }
 
-  // If unauthenticated user hits protected route, push them to login
-  if (!isPublic && !user) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
+  if (!user) {
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -60,13 +60,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     *   - _next/static (static files)
-     *   - _next/image (image optimization)
-     *   - favicon.ico
-     *   - Public asset extensions
-     */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
