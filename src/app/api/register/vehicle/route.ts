@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { selfRegisterVehicleSchema } from "@/lib/vehicles/selfRegister";
+import { assignDriverVehicle } from "@/lib/assignments/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -131,7 +132,7 @@ export async function POST(request: NextRequest) {
       owner_name: ownerName || null,
       owner_phone: ownerPhone || null,
       owner_operator_id: null,
-      driver_id: driver.id,
+      driver_id: null,
       status: "Waiting",
       current_queue_position: 0,
       permit_number: input.permitNumber || null,
@@ -158,13 +159,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { error: linkErr } = await admin
-      .from("drivers")
-      .update({ assigned_vehicle_reg: input.registrationNumber })
-      .eq("id", driver.id);
-
-    if (linkErr) {
-      console.warn("[api/register/vehicle] driver link update failed:", linkErr);
+    try {
+      await assignDriverVehicle(admin, {
+        driverId: driver.id as string,
+        nationalId: input.driverNationalId,
+        vehicleReg: input.registrationNumber,
+        force: true,
+      });
+    } catch (linkErr) {
+      console.warn("[api/register/vehicle] assignment failed:", linkErr);
+      return NextResponse.json(
+        {
+          error:
+            linkErr instanceof Error
+              ? linkErr.message
+              : "Vehicle created but could not link driver.",
+        },
+        { status: 409 }
+      );
     }
 
     const syntheticCardId = `VCARD-${input.registrationNumber.replace(/\s+/g, "-")}`;
