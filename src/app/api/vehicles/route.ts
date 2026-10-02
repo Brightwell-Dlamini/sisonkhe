@@ -8,15 +8,12 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getServerSession, requireServerRole } from "@/lib/auth/session";
 import { createVehicleSchema } from "@/lib/vehicles/validation";
 import { listVehicles } from "@/lib/vehicles/queries";
+import { assignDriverVehicle } from "@/lib/assignments/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const ADMIN_ROLES = ["super-admin", "admin", "fleet-manager"] as const;
-
-// ---------------------------------------------------------------------------
-// VIC generation — mirrors src/utils/helper.ts generateVIC
-// ---------------------------------------------------------------------------
 
 function generateVIC(reg: string): string {
   if (!reg) return "";
@@ -45,10 +42,6 @@ function generateVIC(reg: string): string {
   return `${prefix}-${digits}`;
 }
 
-// ---------------------------------------------------------------------------
-// GET — list
-// ---------------------------------------------------------------------------
-
 export async function GET() {
   try {
     const session = await getServerSession();
@@ -56,7 +49,6 @@ export async function GET() {
       return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
     }
 
-    // Operators: return only vehicles they own
     if (session.role === "operator") {
       if (!session.operatorId) {
         return NextResponse.json({ vehicles: [] });
@@ -104,7 +96,6 @@ export async function GET() {
       return NextResponse.json({ vehicles });
     }
 
-    // Admin / fleet-manager / super-admin: full list
     if (!ADMIN_ROLES.includes(session.role as (typeof ADMIN_ROLES)[number])) {
       return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
     }
@@ -120,10 +111,6 @@ export async function GET() {
     return NextResponse.json({ error: message }, { status });
   }
 }
-
-// ---------------------------------------------------------------------------
-// POST — create
-// ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
   try {
@@ -145,7 +132,6 @@ export async function POST(request: NextRequest) {
     const input = parsed.data;
     const admin = createSupabaseAdminClient();
 
-    // --- Duplicate check ---
     const { data: existing } = await admin
       .from("vehicles")
       .select("registration_number")
@@ -159,7 +145,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- Route validation ---
     if (input.routeAssignmentId) {
       const { data: route } = await admin
         .from("routes")
@@ -174,33 +159,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // --- Driver validation ---
-    if (input.driverId) {
-      const { data: driver } = await admin
-        .from("drivers")
-        .select("id, assigned_vehicle_reg")
-        .eq("id", input.driverId)
-        .maybeSingle();
-      if (!driver) {
-        return NextResponse.json(
-          { error: `Driver not found.` },
-          { status: 404 }
-        );
-      }
-      if (driver.assigned_vehicle_reg) {
-        return NextResponse.json(
-          {
-            error: `Driver is already assigned to vehicle ${driver.assigned_vehicle_reg}.`,
-          },
-          { status: 409 }
-        );
-      }
-    }
-
-    // --- Generate VIC ---
     const vic = input.vic || generateVIC(input.registrationNumber);
 
-    // --- Insert vehicle ---
     const { error: insertErr } = await admin.from("vehicles").insert({
       registration_number: input.registrationNumber,
       vic,
@@ -213,7 +173,7 @@ export async function POST(request: NextRequest) {
       owner_name: input.ownerName || null,
       owner_phone: input.ownerPhone || null,
       owner_operator_id: input.ownerOperatorId || null,
-      driver_id: input.driverId || null,
+      driver_id: null,
       status: "Waiting",
       current_queue_position: 0,
       permit_number: input.permitNumber || null,
@@ -242,20 +202,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- Sync driver ↔ vehicle assignment ---
-    if (input.driverId) {
-      await admin
-        .from("drivers")
-        .update({ assigned_vehicle_reg: input.registrationNumber })
-        .eq("id", input.driverId);
+    if (input.driverNationalId || input.driverId) {
+      try {
+        await assignDriverVehicle(admin, {
+          driverId: input.driverId || null,
+          nationalId: input.driverNationalId || null,
+          vehicleReg: input.registrationNumber,
+          force: true,
+        });
+      } catch (linkErr) {
+        console.warn("[api/vehicles] assignment failed (non-fatal):", linkErr);
+      }
     }
 
-    // --- Auto-issue Virtual Transit Card ---
     const syntheticCardId = `VCARD-${input.registrationNumber.replace(/\s+/g, "-")}`;
     const now = new Date();
     const regFeeReceipt = `RCP-REG-2026-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    // deterministic 16-digit card number from reg
     const clean = input.registrationNumber.replace(/[^A-Z0-9]/gi, "").toUpperCase();
     let hash = 0;
     for (let i = 0; i < clean.length; i++) {
@@ -273,13 +236,13 @@ export async function POST(request: NextRequest) {
       .insert({
         id: syntheticCardId,
         card_number: cardNumber,
-        cvv_hash: "pending-hash", // TODO: proper hashing in Phase 5
+        cvv_hash: "pending-hash",
         expiry_date: "09/31",
         vehicle_reg: input.registrationNumber,
         vic,
         cardholder_name: input.ownerName || "Fleet Operator",
         status: "Active",
-        balance_szl: 1525.0, // 2000 preload - 450 reg - 25 rank sample
+        balance_szl: 1525.0,
         registration_fee_paid: true,
         registration_fee_amount: 450.0,
         registration_fee_date: now.toISOString().split("T")[0],
@@ -290,7 +253,6 @@ export async function POST(request: NextRequest) {
       });
 
     if (cardErr) {
-      // Non-fatal — vehicle exists, card can be re-issued later
       console.warn("[api/vehicles] virtual card issue failed:", cardErr);
     }
 
