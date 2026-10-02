@@ -14,6 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import type { KioskSnapshot } from "@/lib/public/kiosk";
+import NavAuthActions from "@/components/common/NavAuthActions";
 
 interface Props {
   snapshot: KioskSnapshot;
@@ -119,6 +120,8 @@ export default function KioskHeader({
           >
             <RefreshCw className="w-4 h-4" />
           </button>
+
+          <NavAuthActions />
         </div>
       </div>
     </header>
