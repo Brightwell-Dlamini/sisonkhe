@@ -21,6 +21,7 @@ export interface CreateVehicleRequest {
   ownerPhone?: string;
   ownerOperatorId?: string;
   driverId?: string;
+  driverNationalId?: string;
   permitNumber?: string;
   permitStatus?: string;
   permitIssueDate?: string;
@@ -95,19 +96,19 @@ export function useVehicleRegistry(): UseVehicleRegistryResult {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(input),
         });
-        const data = await res.json();
+        const body = await res.json().catch(() => ({}));
         if (!res.ok) {
           return {
             success: false,
-            error: data.error ?? "Failed to create vehicle",
-            issues: data.issues,
+            error: body.error ?? `Create failed (${res.status})`,
+            issues: body.issues,
           };
         }
         await refresh();
         return {
           success: true,
-          registrationNumber: data.registrationNumber,
-          vic: data.vic,
+          registrationNumber: body.registrationNumber,
+          vic: body.vic,
         };
       } catch (err) {
         return {
@@ -120,10 +121,7 @@ export function useVehicleRegistry(): UseVehicleRegistryResult {
   );
 
   const updateVehicle = useCallback(
-    async (
-      reg: string,
-      input: Partial<CreateVehicleRequest>
-    ): Promise<boolean> => {
+    async (reg: string, input: Partial<CreateVehicleRequest>): Promise<boolean> => {
       try {
         const res = await fetch(`/api/vehicles/${encodeURIComponent(reg)}`, {
           method: "PATCH",

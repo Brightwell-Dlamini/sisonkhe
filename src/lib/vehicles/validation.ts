@@ -5,14 +5,6 @@
 
 import { z } from "zod";
 
-const nullableString = z
-  .string()
-  .trim()
-  .max(160)
-  .optional()
-  .nullable()
-  .or(z.literal(""));
-
 const dateString = z
   .string()
   .trim()
@@ -32,12 +24,7 @@ export const createVehicleSchema = z.object({
     .max(20)
     .transform((v) => v.toUpperCase()),
 
-  vic: z
-    .string()
-    .trim()
-    .max(20)
-    .optional()
-    .or(z.literal("")),
+  vic: z.string().trim().max(20).optional().or(z.literal("")),
 
   make: z.string().trim().min(1, "Make is required").max(60),
   model: z.string().trim().min(1, "Model is required").max(60),
@@ -58,25 +45,23 @@ export const createVehicleSchema = z.object({
   ownerOperatorId: z.string().trim().max(60).optional().or(z.literal("")),
 
   driverId: z.string().trim().max(60).optional().or(z.literal("")),
+  /** Preferred human key — resolved server-side to driverId */
+  driverNationalId: z.string().trim().max(40).optional().or(z.literal("")),
 
-  // Permits
   permitNumber: z.string().trim().max(40).optional().or(z.literal("")),
   permitStatus: z.enum(PERMIT_STATUSES).optional(),
   permitIssueDate: dateString,
   permitExpiryDate: dateString,
 
-  // Fitness
   cofNumber: z.string().trim().max(40).optional().or(z.literal("")),
   cofIssueDate: dateString,
   cofExpiryDate: dateString,
   lastInspectionDate: dateString,
 
-  // Association & insurance
   association: z.string().trim().max(120).optional().or(z.literal("")),
   insuranceExpiry: dateString,
   roadworthinessExpiry: dateString,
 
-  // Mid-month tracking
   isMidMonthAddition: z.boolean().optional().default(false),
   monthRegistered: z
     .string()
@@ -87,7 +72,6 @@ export const createVehicleSchema = z.object({
   midMonthJoinDay: z.coerce.number().int().min(1).max(31).optional(),
   monthlySequenceBaseIndex: z.coerce.number().int().min(1).optional(),
 
-  // Profile
   vehiclePhotoUrl: z.string().trim().max(500).optional().or(z.literal("")),
 });
 

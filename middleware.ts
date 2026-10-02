@@ -40,18 +40,19 @@ export async function middleware(request: NextRequest) {
   const isPublic = PUBLIC_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(route + "/")
   );
+  const isAuthRoute = AUTH_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(route + "/")
+  );
 
-  if (isPublic) {
-    if (user && AUTH_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))) {
-      // let login page handle redirect by role
-    }
-    return response;
+  // If authenticated user hits login/claim, push them home
+  if (isAuthRoute && user) {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
-  if (!user) {
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("next", pathname);
+  // If unauthenticated user hits protected route, push them to login
+  if (!isPublic && !user) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -60,6 +61,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
