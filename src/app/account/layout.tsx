@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
+import NavAuthActions from "@/components/common/NavAuthActions";
 
 export default function AccountLayout({
   children,
@@ -41,7 +42,7 @@ export default function AccountLayout({
           <span className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
             Account Settings
           </span>
-          <span className="w-12" />
+          <NavAuthActions fullName={user.fullName} />
         </div>
       </div>
 
