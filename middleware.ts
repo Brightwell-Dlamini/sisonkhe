@@ -31,7 +31,7 @@ const PUBLIC_ROUTES = [
   "/api/payments/webhooks",
 ];
 
-const AUTH_ROUTES = ["/login", "/claim", "/register"];
+const AUTH_ROUTES = ["/login", "/claim"]; // /register stays usable while signed in (link flow)
 
 export async function middleware(request: NextRequest) {
   const { response, user } = await updateSupabaseSession(request);

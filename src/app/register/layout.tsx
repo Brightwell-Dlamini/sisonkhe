@@ -48,6 +48,12 @@ export default function RegisterLayout({
               Vehicle
             </Link>
             <Link
+              href="/register/link"
+              className="px-2.5 py-1.5 rounded-lg text-amber-700 hover:bg-amber-50 hover:text-amber-900"
+            >
+              Link
+            </Link>
+            <Link
               href="/login"
               className="px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
             >
