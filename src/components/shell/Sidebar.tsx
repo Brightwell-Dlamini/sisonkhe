@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { NavGroup } from "@/config/navigation";
 import SidebarGroup from "./SidebarGroup";
+import BrandMark from "@/components/common/BrandMark";
 
 interface Props {
   groups: NavGroup[];
@@ -26,15 +27,9 @@ export default function Sidebar({
         mobile ? "w-64" : collapsed ? "w-16" : "w-60"
       } transition-all duration-200 flex flex-col bg-[#0A0A0A] border-r border-white/[0.06] h-full`}
     >
-      {/* Brand */}
       <div className="h-14 flex items-center justify-between px-3 border-b border-white/[0.06]">
         <Link href="/" className="flex items-center gap-2 min-w-0" onClick={onNavigate}>
-          <span className="text-lg shrink-0">🇸🇿</span>
-          {!collapsed && (
-            <span className="font-black tracking-tight text-white truncate">
-              Sisonkhe
-            </span>
-          )}
+          <BrandMark size="xs" showText={!collapsed} inverse />
         </Link>
         {!mobile && onToggleCollapse && (
           <button
@@ -51,7 +46,6 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4 scrollbar-thin">
         {groups.map((group) => (
           <SidebarGroup
@@ -63,12 +57,11 @@ export default function Sidebar({
         ))}
       </nav>
 
-      {/* Footer */}
       {!collapsed && (
         <div className="px-3 py-3 border-t border-white/[0.06]">
           <div className="font-mono text-[9px] text-zinc-600 leading-tight">
-            <div>v1.0.1 · SZ National</div>
-            <div className="mt-0.5 text-zinc-700">© 2026 NRTC</div>
+            <div>v1.0.1 \u00b7 SZ National</div>
+            <div className="mt-0.5 text-zinc-700">\u00a9 2026 NRTC</div>
           </div>
         </div>
       )}

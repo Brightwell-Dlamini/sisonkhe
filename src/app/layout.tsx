@@ -15,10 +15,16 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
+  icons: {
+    icon: [{ url: "/logo.jpg", type: "image/jpeg" }],
+    apple: [{ url: "/logo.jpg", type: "image/jpeg" }],
+    shortcut: "/logo.jpg",
+  },
   openGraph: {
     title: "Sisonkhe In Transit",
     description:
       "National Taxi Rank, Route Queuing, and Fleet Dispatch Management System for Eswatini.",
+    images: [{ url: "/logo.jpg", alt: "Sisonkhe In Transit" }],
   },
 };
 
