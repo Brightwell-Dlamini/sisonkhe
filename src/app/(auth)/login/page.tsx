@@ -8,7 +8,7 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { LogIn, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { LogIn, Eye, EyeOff, Loader2, AlertCircle, Monitor } from "lucide-react";
 import { signInWithPassword, homePathForRole } from "@/lib/auth/client";
 import { useAuthStore } from "@/store/useAuthStore";
 
@@ -75,7 +75,7 @@ function LoginForm() {
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
-          <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+          <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
             Username / Phone / National ID
           </label>
           <input
@@ -83,15 +83,13 @@ function LoginForm() {
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             autoComplete="username"
-            autoCapitalize="off"
             required
-            placeholder="e.g. 78653001 or 7609236100542"
             className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
           />
         </div>
 
         <div>
-          <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+          <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
             Password
           </label>
           <div className="relative">
@@ -126,7 +124,7 @@ function LoginForm() {
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Signing in…</span>
+              <span>Signing in\u2026</span>
             </>
           ) : (
             <>
@@ -137,24 +135,34 @@ function LoginForm() {
         </button>
       </form>
 
-      <p className="mt-5 text-center text-[11px] text-zinc-500 space-y-1">
-        <span className="block">
-          Marshal without a password?{" "}
-          <Link href="/claim" className="font-bold text-emerald-600 hover:underline">
-            Claim your account
-          </Link>
-        </span>
-        <span className="block">
-          New driver?{" "}
-          <Link href="/register/driver" className="font-bold text-emerald-600 hover:underline">
-            Self-register
-          </Link>
-          {" · "}
-          <Link href="/register/vehicle" className="font-bold text-emerald-600 hover:underline">
-            Register vehicle
-          </Link>
-        </span>
-      </p>
+      <div className="mt-5 space-y-3">
+        <Link
+          href="/kiosk"
+          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:border-emerald-500/50 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors"
+        >
+          <Monitor className="w-3.5 h-3.5" />
+          View public kiosk (live terminal board)
+        </Link>
+
+        <p className="text-center text-[11px] text-zinc-500 space-y-1">
+          <span className="block">
+            Marshal without a password?{" "}
+            <Link href="/claim" className="font-bold text-emerald-600 hover:underline">
+              Claim your account
+            </Link>
+          </span>
+          <span className="block">
+            New driver?{" "}
+            <Link href="/register/driver" className="font-bold text-emerald-600 hover:underline">
+              Self-register
+            </Link>
+            {" \u00b7 "}
+            <Link href="/register/vehicle" className="font-bold text-emerald-600 hover:underline">
+              Register vehicle
+            </Link>
+          </span>
+        </p>
+      </div>
     </div>
   );
 }
@@ -163,7 +171,7 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="text-center text-xs text-zinc-500">Loading…</div>
+        <div className="text-center text-xs text-zinc-500">Loading\u2026</div>
       }
     >
       <LoginForm />

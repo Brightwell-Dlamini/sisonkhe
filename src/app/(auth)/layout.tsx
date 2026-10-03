@@ -16,15 +16,15 @@ export default function AuthLayout({
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex justify-center mb-3">
-            <BrandMark size="lg" showSubtitle />
+            <BrandMark href="/kiosk" size="lg" showSubtitle />
           </div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            National Taxi Rank Management • Kingdom of Eswatini
+            National Taxi Rank Management \u2022 Kingdom of Eswatini
           </p>
         </div>
         {children}
         <p className="text-center text-[10px] text-zinc-400 mt-8">
-          © 2026 National Road Transportation Council
+          \u00a9 2026 National Road Transportation Council
         </p>
       </div>
     </div>
