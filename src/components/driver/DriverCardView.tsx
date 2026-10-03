@@ -38,12 +38,10 @@ export default function DriverCardView() {
     );
   }
 
-  // Format card number as XXXX XXXX XXXX XXXX
   const formatted = card.cardNumber.replace(/(\d{4})(?=\d)/g, "$1 ");
 
   return (
     <div className="space-y-4">
-      {/* Card visual */}
       <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 text-white p-6 shadow-2xl max-w-md mx-auto">
         <div className="absolute inset-0 opacity-10">
           <svg viewBox="0 0 400 200" className="w-full h-full">
@@ -56,8 +54,16 @@ export default function DriverCardView() {
         <div className="relative z-10 space-y-6">
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-[10px] uppercase tracking-widest opacity-70 font-mono">
-                Sisonkhe In Transit
+              <div className="flex items-center gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/logo.jpg"
+                  alt=""
+                  className="w-6 h-6 rounded-md object-cover ring-1 ring-white/30"
+                />
+                <div className="text-[10px] uppercase tracking-widest opacity-70 font-mono">
+                  Sisonkhe In Transit
+                </div>
               </div>
               <div className="text-base font-black uppercase mt-0.5">
                 {card.cardTier}
@@ -82,7 +88,7 @@ export default function DriverCardView() {
                 {card.cardholderName}
               </div>
               <div className="text-[10px] font-mono opacity-70 mt-0.5">
-                {card.vehicleReg} • {card.vic}
+                {card.vehicleReg} \u2022 {card.vic}
               </div>
             </div>
             <div className="text-right">
@@ -103,7 +109,6 @@ export default function DriverCardView() {
         </div>
       </div>
 
-      {/* Actions */}
       <div className="flex justify-center">
         <button
           onClick={() => setShowTopUp(true)}
@@ -115,7 +120,6 @@ export default function DriverCardView() {
         </button>
       </div>
 
-      {/* Registration info */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
         <div className="text-[10px] uppercase tracking-widest font-black text-zinc-400 mb-2">
           Concession Registration
@@ -129,7 +133,13 @@ export default function DriverCardView() {
           </div>
           <div className="flex justify-between">
             <span className="text-zinc-500">Status:</span>
-            <span className={card.registrationFeePaid ? "text-emerald-600 font-bold" : "text-amber-600 font-bold"}>
+            <span
+              className={
+                card.registrationFeePaid
+                  ? "text-emerald-600 font-bold"
+                  : "text-amber-600 font-bold"
+              }
+            >
               {card.registrationFeePaid ? "PAID" : "PENDING"}
             </span>
           </div>
@@ -142,7 +152,6 @@ export default function DriverCardView() {
         </div>
       </div>
 
-      {/* Transaction history */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
         <div className="px-5 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
@@ -162,7 +171,10 @@ export default function DriverCardView() {
             {card.transactions.map((tx) => {
               const isCredit = tx.direction === "CREDIT";
               return (
-                <div key={tx.id} className="px-5 py-3 flex items-center justify-between gap-3">
+                <div
+                  key={tx.id}
+                  className="px-5 py-3 flex items-center justify-between gap-3"
+                >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div
                       className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
@@ -193,10 +205,12 @@ export default function DriverCardView() {
                   </div>
                   <div
                     className={`font-mono font-bold text-sm shrink-0 ${
-                      isCredit ? "text-emerald-600" : "text-zinc-900 dark:text-white"
+                      isCredit
+                        ? "text-emerald-600"
+                        : "text-zinc-900 dark:text-white"
                     }`}
                   >
-                    {isCredit ? "+" : "−"}E{tx.amountSzl.toFixed(2)}
+                    {isCredit ? "+" : "\u2212"}E{tx.amountSzl.toFixed(2)}
                   </div>
                 </div>
               );
