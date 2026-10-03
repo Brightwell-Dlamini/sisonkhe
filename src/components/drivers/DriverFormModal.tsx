@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { Loader2, X, AlertCircle } from "lucide-react";
+import ImageUploadField from "@/components/common/ImageUploadField";
 import type { DriverRow } from "@/lib/drivers/queries";
 import type { CreateDriverRequest } from "@/hooks/useDrivers";
 
@@ -71,7 +72,6 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto">
-        {/* Header */}
         <div className="sticky top-0 z-10 bg-white dark:bg-zinc-900 flex items-start justify-between p-5 border-b border-zinc-100 dark:border-zinc-800">
           <div>
             <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900 dark:text-white">
@@ -84,6 +84,7 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
@@ -91,7 +92,6 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
           </button>
         </div>
 
-        {/* Body */}
         <form onSubmit={handleSubmit} className="p-5 space-y-5">
           {error && (
             <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 text-xs flex items-start gap-2">
@@ -100,11 +100,17 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
             </div>
           )}
 
-          {/* Personal */}
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
               Personal Details
             </legend>
+
+            <ImageUploadField
+              label="Profile photo"
+              value={form.profilePictureUrl ?? ""}
+              onChange={(url) => update("profilePictureUrl", url)}
+              folder="drivers"
+            />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Full Name *" error={fieldErrors.fullName?.[0]}>
@@ -172,7 +178,6 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
             </div>
           </fieldset>
 
-          {/* Licence */}
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
               Driving Licence
@@ -200,7 +205,6 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
             </div>
           </fieldset>
 
-          {/* PDP */}
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
               Professional Driving Permit (PDP)
@@ -253,7 +257,6 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
             </div>
           </fieldset>
 
-          {/* Emergency contact */}
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
               Emergency Contact
@@ -287,14 +290,13 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
             </div>
           </fieldset>
 
-          {/* Assignment & status */}
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
               Assignment
             </legend>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Assigned Vehicle (registration number)">
+              <Field label="Vehicle number plate">
                 <input
                   type="text"
                   value={form.assignedVehicleReg}
@@ -318,7 +320,6 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
             </div>
           </fieldset>
 
-          {/* Footer */}
           <div className="flex gap-2 pt-2 sticky bottom-0 bg-white dark:bg-zinc-900 pb-1">
             <button
               type="button"
