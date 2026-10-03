@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Public QR verification page. Anonymous access.
- * Reads ?token=... from the URL, POSTs it to /api/qr/verify, and shows the result.
  */
 
 "use client";
@@ -20,6 +19,7 @@ import {
   FileText,
   Calendar,
 } from "lucide-react";
+import BrandMark from "@/components/common/BrandMark";
 
 interface VerifyResult {
   valid: boolean;
@@ -84,21 +84,21 @@ function VerifyInner() {
     <div className="min-h-screen bg-zinc-50 dark:bg-[#050505] flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <span className="text-3xl">🇸🇿</span>
+          <div className="flex justify-center mb-2">
+            <BrandMark size="md" showSubtitle />
+          </div>
           <h1 className="text-lg font-black uppercase tracking-tight text-zinc-900 dark:text-white mt-2">
             QR Verification
           </h1>
           <p className="text-xs text-zinc-500 mt-1">
-            Sisonkhe In Transit • NRTC Official Verification
+            NRTC Official Verification
           </p>
         </div>
 
         {loading && (
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-10 text-center">
             <Loader2 className="w-6 h-6 animate-spin text-emerald-600 mx-auto mb-3" />
-            <div className="text-xs text-zinc-500">
-              Verifying signature…
-            </div>
+            <div className="text-xs text-zinc-500">Verifying signature\u2026</div>
           </div>
         )}
 
@@ -121,43 +121,15 @@ function VerifyInner() {
             </div>
 
             <div className="p-5 space-y-3 text-xs">
-              <Row
-                icon={<Car className="w-4 h-4 text-zinc-400" />}
-                label="Vehicle"
-                value={result.payload!.r}
-                mono
-              />
-              <Row
-                icon={<FileText className="w-4 h-4 text-zinc-400" />}
-                label="VIC"
-                value={result.payload!.v || "—"}
-                mono
-              />
-              <Row
-                icon={<FileText className="w-4 h-4 text-zinc-400" />}
-                label="Permit"
-                value={result.payload!.p || "—"}
-                mono
-              />
-              <Row
-                icon={<CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                label="Status"
-                value={result.permitStatus ?? result.payload!.s}
-              />
+              <Row icon={<Car className="w-4 h-4 text-zinc-400" />} label="Vehicle" value={result.payload!.r} mono />
+              <Row icon={<FileText className="w-4 h-4 text-zinc-400" />} label="VIC" value={result.payload!.v || "\u2014"} mono />
+              <Row icon={<FileText className="w-4 h-4 text-zinc-400" />} label="Permit" value={result.payload!.p || "\u2014"} mono />
+              <Row icon={<CheckCircle2 className="w-4 h-4 text-emerald-500" />} label="Status" value={result.permitStatus ?? result.payload!.s} />
               {result.permitExpiry && (
-                <Row
-                  icon={<Calendar className="w-4 h-4 text-zinc-400" />}
-                  label="Expires"
-                  value={result.permitExpiry}
-                  mono
-                />
+                <Row icon={<Calendar className="w-4 h-4 text-zinc-400" />} label="Expires" value={result.permitExpiry} mono />
               )}
               {result.issuedAt && (
-                <Row
-                  icon={<Calendar className="w-4 h-4 text-zinc-400" />}
-                  label="QR Issued"
-                  value={new Date(result.issuedAt).toLocaleString()}
-                />
+                <Row icon={<Calendar className="w-4 h-4 text-zinc-400" />} label="QR Issued" value={new Date(result.issuedAt).toLocaleString()} />
               )}
             </div>
           </div>
@@ -194,8 +166,8 @@ function VerifyInner() {
                   </div>
                   <div className="font-mono text-[10px] text-zinc-500 space-y-0.5">
                     <div>Vehicle: {result.payload.r}</div>
-                    <div>VIC: {result.payload.v || "—"}</div>
-                    <div>Permit: {result.payload.p || "—"}</div>
+                    <div>VIC: {result.payload.v || "\u2014"}</div>
+                    <div>Permit: {result.payload.p || "\u2014"}</div>
                   </div>
                 </div>
               )}
@@ -204,7 +176,7 @@ function VerifyInner() {
         )}
 
         <div className="mt-6 text-center text-[10px] text-zinc-400">
-          Cryptographic verification by Sisonkhe In Transit • NRTC
+          Cryptographic verification by Sisonkhe In Transit \u2022 NRTC
         </div>
       </div>
     </div>
@@ -228,9 +200,7 @@ function Row({
         {icon}
         <span>{label}</span>
       </div>
-      <span
-        className={`font-bold text-zinc-900 dark:text-white text-right ${mono ? "font-mono" : ""}`}
-      >
+      <span className={`font-bold text-zinc-900 dark:text-white text-right ${mono ? "font-mono" : ""}`}>
         {value}
       </span>
     </div>
