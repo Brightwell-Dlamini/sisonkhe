@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import BrandMark from "@/components/common/BrandMark";
 
 export default function HomePage() {
   const { user, loading } = useAuth();
@@ -50,8 +51,8 @@ export default function HomePage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-[#050505]">
       <div className="text-center">
-        <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mb-2">
-          🇸🇿 Sisonkhe In Transit
+        <div className="flex justify-center mb-3">
+          <BrandMark size="lg" showSubtitle />
         </div>
         <Loader2 className="w-5 h-5 animate-spin text-emerald-600 mx-auto" />
         <div className="text-xs text-zinc-500 mt-3">Redirecting\u2026</div>
