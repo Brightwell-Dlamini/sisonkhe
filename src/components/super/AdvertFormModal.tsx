@@ -1,5 +1,6 @@
 "use client";
 
+import ImageUploadField from "@/components/common/ImageUploadField";
 import { useState } from "react";
 import { X, Loader2 } from "lucide-react";
 import type { Advert } from "@/types";
@@ -71,7 +72,7 @@ export default function AdvertFormModal({ advert, onClose, onSaved }: Props) {
           <h3 className="text-sm font-black uppercase text-zinc-900 dark:text-white">
             {advert ? "Edit Advert" : "New Advert"}
           </h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-zinc-400">
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-zinc-400">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -79,7 +80,13 @@ export default function AdvertFormModal({ advert, onClose, onSaved }: Props) {
         <form onSubmit={handleSubmit} className="p-5 space-y-3">
           <Input label="Title *" value={title} onChange={setTitle} required />
           <Input label="Sponsor *" value={sponsorName} onChange={setSponsorName} required />
-          <Input label="Image URL *" value={imageUrl} onChange={setImageUrl} required />
+          <ImageUploadField
+            label="Advert image"
+            value={imageUrl}
+            onChange={setImageUrl}
+            folder="adverts"
+            required
+          />
 
           <div>
             <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Description</label>
