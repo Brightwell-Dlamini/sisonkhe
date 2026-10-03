@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { Loader2, X, AlertCircle, Building2, CreditCard } from "lucide-react";
+import ImageUploadField from "@/components/common/ImageUploadField";
 import type { OperatorRow } from "@/lib/operators/queries";
 import type { CreateOperatorRequest } from "@/hooks/useOperators";
 
@@ -33,8 +34,8 @@ export default function OperatorFormModal({
     nationalId: operator?.nationalId ?? "",
     taxNumber: operator?.taxNumber ?? "",
     association: operator?.association ?? "",
-    bankAccountRef: operator?.bankAccountRef ?? "",
     operatorLicenseNumber: operator?.operatorLicenseNumber ?? "",
+    bankAccountRef: operator?.bankAccountRef ?? "",
     avatarUrl: operator?.avatarUrl ?? "",
   });
 
@@ -54,10 +55,8 @@ export default function OperatorFormModal({
     setError(null);
     setFieldErrors({});
     setLoading(true);
-
     const result = await onSubmit(form);
     setLoading(false);
-
     if (!result.success) {
       setError(result.error ?? "Failed to save");
       if (result.issues) setFieldErrors(result.issues);
@@ -78,12 +77,13 @@ export default function OperatorFormModal({
               </h2>
               <p className="text-xs text-zinc-500 mt-0.5">
                 {mode === "create"
-                  ? "A Master Card will be issued with an enterprise seed balance."
-                  : "Update operator details."}
+                  ? "Creates login credentials automatically."
+                  : "Update operator profile."}
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
@@ -99,11 +99,17 @@ export default function OperatorFormModal({
             </div>
           )}
 
-          {/* Identity */}
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 tracking-widest">
               Identity
             </legend>
+
+            <ImageUploadField
+              label="Avatar / logo"
+              value={form.avatarUrl ?? ""}
+              onChange={(url) => update("avatarUrl", url)}
+              folder="operators"
+            />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Full Name *" error={fieldErrors.name?.[0]}>
@@ -133,7 +139,6 @@ export default function OperatorFormModal({
                   type="text"
                   value={form.nationalId}
                   onChange={(e) => update("nationalId", e.target.value)}
-                  placeholder="13 digits"
                   className="input font-mono"
                 />
               </Field>
@@ -143,14 +148,12 @@ export default function OperatorFormModal({
                   type="text"
                   value={form.taxNumber}
                   onChange={(e) => update("taxNumber", e.target.value)}
-                  placeholder="TIN-SZ-000000"
                   className="input font-mono"
                 />
               </Field>
             </div>
           </fieldset>
 
-          {/* Contact */}
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 tracking-widest">
               Contact
@@ -174,23 +177,17 @@ export default function OperatorFormModal({
                   required
                   value={form.email}
                   onChange={(e) => update("email", e.target.value)}
-                  placeholder="cyril@transit.co.sz"
-                  disabled={mode === "edit"}
+                  placeholder="operator@example.com"
                   className="input"
+                  disabled={mode === "edit"}
                 />
-                {mode === "edit" && (
-                  <p className="text-[10px] text-zinc-400 mt-1">
-                    Email cannot be changed.
-                  </p>
-                )}
               </Field>
             </div>
           </fieldset>
 
-          {/* Operations */}
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 tracking-widest">
-              Operations
+              Licensing & banking
             </legend>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -199,7 +196,6 @@ export default function OperatorFormModal({
                   type="text"
                   value={form.association}
                   onChange={(e) => update("association", e.target.value)}
-                  placeholder="Hhohho Kombi Association"
                   className="input"
                 />
               </Field>
@@ -209,7 +205,6 @@ export default function OperatorFormModal({
                   type="text"
                   value={form.operatorLicenseNumber}
                   onChange={(e) => update("operatorLicenseNumber", e.target.value)}
-                  placeholder="OP-HHO-2024-0012"
                   className="input font-mono"
                 />
               </Field>
@@ -220,26 +215,10 @@ export default function OperatorFormModal({
                 type="text"
                 value={form.bankAccountRef}
                 onChange={(e) => update("bankAccountRef", e.target.value)}
-                placeholder="FNB Eswatini • Acc ending 4901"
-                className="input"
+                className="input font-mono"
               />
             </Field>
           </fieldset>
-
-          {/* Master Card note */}
-          {mode === "create" && (
-            <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
-              <CreditCard className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-              <div className="text-xs text-amber-900 dark:text-amber-200">
-                <div className="font-bold">Master Card auto-issued</div>
-                <div className="text-[11px] mt-0.5">
-                  On save, an <strong>Enterprise Master Card</strong> is issued
-                  with a <strong>E15,000 seed balance</strong> for disbursing to
-                  the operator's fleet vehicle cards.
-                </div>
-              </div>
-            </div>
-          )}
 
           <div className="flex gap-2 pt-2 sticky bottom-0 bg-white dark:bg-zinc-900 pb-1">
             <button
@@ -264,21 +243,26 @@ export default function OperatorFormModal({
       <style jsx>{`
         .input {
           width: 100%;
-          background-color: rgb(250 250 250);
+          background: rgb(250 250 250);
           border: 1px solid rgb(228 228 231);
           border-radius: 0.75rem;
-          padding: 0.625rem 0.875rem;
-          font-size: 0.875rem;
+          padding: 0.5rem 0.75rem;
+          font-size: 0.8125rem;
           color: rgb(24 24 27);
           outline: none;
         }
-        :global(.dark) .input {
-          background-color: rgb(9 9 11);
+        .input:focus {
+          border-color: rgb(245 158 11);
+          box-shadow: 0 0 0 2px rgb(245 158 11 / 0.2);
+        }
+        .dark .input {
+          background: rgb(9 9 11);
           border-color: rgb(39 39 42);
           color: white;
         }
-        .input:focus {
-          border-color: rgb(245 158 11);
+        .input:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
         }
       `}</style>
     </div>
@@ -296,11 +280,13 @@ function Field({
 }) {
   return (
     <div>
-      <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">
         {label}
       </label>
       {children}
-      {error && <p className="text-[10px] text-red-600 mt-1">{error}</p>}
+      {error && (
+        <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{error}</p>
+      )}
     </div>
   );
 }
