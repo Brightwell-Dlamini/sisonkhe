@@ -2,30 +2,42 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Shared className helpers.
+ * Shared utility functions. Currently the classname merge helper.
  */
 
-type ClassValue = string | number | boolean | null | undefined | ClassValue[];
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 /**
- * Minimal className merger (no clsx / tailwind-merge dependency).
- * Falsy values are skipped; arrays are flattened.
+ * Merge Tailwind classes intelligently:
+ *   cn("px-2 py-1", condition && "px-4") → "py-1 px-4"
+ *
+ * Later classes win over earlier ones when they conflict, but only for
+ * Tailwind utilities that map to the same CSS property.
  */
 export function cn(...inputs: ClassValue[]): string {
-  const out: string[] = [];
+  return twMerge(clsx(inputs));
+}
 
-  const push = (v: ClassValue) => {
-    if (!v && v !== 0) return;
-    if (typeof v === "string" || typeof v === "number") {
-      const s = String(v).trim();
-      if (s) out.push(s);
-      return;
-    }
-    if (Array.isArray(v)) {
-      for (const item of v) push(item);
-    }
-  };
+/**
+ * Format a date for the kiosk display.
+ */
+export function formatKioskDate(d: Date | string): string {
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  });
+}
 
-  for (const input of inputs) push(input);
-  return out.join(" ");
+/**
+ * Format a time for the kiosk display (HH:MM).
+ */
+export function formatKioskTime(d: Date | string): string {
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
