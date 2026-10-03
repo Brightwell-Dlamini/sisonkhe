@@ -13,7 +13,7 @@ import { Loader2 } from "lucide-react";
 import { useKioskData } from "@/hooks/useKioskData";
 import KioskShell from "@/components/kiosk/KioskShell";
 
-export type KioskMode = "transit" | "radar" | "queue" | "tv";
+export type KioskMode = "transit" | "radar" | "tv";
 
 function KioskInner() {
   const searchParams = useSearchParams();

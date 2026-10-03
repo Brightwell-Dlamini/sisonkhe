@@ -1,147 +1,224 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- *
- * Fullscreen TV broadcast table with auto-rotation.
- */
-
 "use client";
 
-import { useState, useEffect } from "react";
-import { Tv, Maximize2, Minimize2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import type { KioskSnapshot } from "@/lib/public/kiosk";
+import StatusIndicator from "./StatusIndicator";
+import LiveClock from "./LiveClock";
 
 interface Props {
   snapshot: KioskSnapshot;
 }
 
-const PAGE_SIZE = 8;
-const ROTATE_MS = 10000;
-
 export default function KioskModeTV({ snapshot }: Props) {
+  // Flatten to rows: every vehicle is a row
+  const rows = useMemo(() => {
+    const out: Array<{
+      routeId: string;
+      routeOrigin: string;
+      routeDestination: string;
+      routeRegion: string;
+      baseFareE: number;
+      distanceKm: number;
+      vehicleReg?: string;
+      vic?: string | null;
+      loadingBay?: string | null;
+      status?: string;
+      queuePos?: number;
+      expectedDepartureTime?: string | null;
+      driverName?: string | null;
+    }> = [];
+
+    const grouped = new Map<string, typeof snapshot.vehicles>();
+    for (const v of snapshot.vehicles) {
+      if (!v.routeId) continue;
+      const list = grouped.get(v.routeId) ?? [];
+      list.push(v);
+      grouped.set(v.routeId, list);
+    }
+
+    for (const route of snapshot.routes) {
+      const vehicles = grouped.get(route.id) ?? [];
+      if (vehicles.length === 0) {
+        out.push({
+          routeId: route.id,
+          routeOrigin: route.origin,
+          routeDestination: route.destination,
+          routeRegion: route.region,
+          baseFareE: route.baseFareE,
+          distanceKm: route.distanceKm,
+        });
+      } else {
+        vehicles
+          .sort(
+            (a, b) =>
+              (a.currentQueuePosition || 999) -
+              (b.currentQueuePosition || 999)
+          )
+          .forEach((v) => {
+            out.push({
+              routeId: route.id,
+              routeOrigin: route.origin,
+              routeDestination: route.destination,
+              routeRegion: route.region,
+              baseFareE: route.baseFareE,
+              distanceKm: route.distanceKm,
+              vehicleReg: v.registrationNumber,
+              vic: v.vic,
+              loadingBay: v.loadingBay,
+              status: v.status,
+              queuePos: v.currentQueuePosition,
+              expectedDepartureTime: v.expectedDepartureTime,
+              driverName: v.driverDisplayName,
+            });
+          });
+      }
+    }
+    return out;
+  }, [snapshot]);
+
   const [pageIndex, setPageIndex] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const PAGE_SIZE = 12;
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const paged = rows.slice(pageIndex * PAGE_SIZE, (pageIndex + 1) * PAGE_SIZE);
 
-  const totalPages = Math.max(1, Math.ceil(snapshot.vehicles.length / PAGE_SIZE));
-  const paged = snapshot.vehicles.slice(
-    pageIndex * PAGE_SIZE,
-    (pageIndex + 1) * PAGE_SIZE
-  );
+  useEffect(() => {
+    if (totalPages <= 1) return;
+    const t = setInterval(() => setPageIndex((i) => (i + 1) % totalPages), 10000);
+    return () => clearInterval(t);
+  }, [totalPages]);
 
-  // Reset page if data shrinks
   useEffect(() => {
     if (pageIndex >= totalPages) setPageIndex(0);
   }, [totalPages, pageIndex]);
 
-  // Auto-rotate
-  useEffect(() => {
-    if (totalPages <= 1) return;
-    const timer = setInterval(() => {
-      setPageIndex((prev) => (prev + 1) % totalPages);
-    }, ROTATE_MS);
-    return () => clearInterval(timer);
-  }, [totalPages]);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
-    }
-  };
-
   return (
-    <div
-      className={`bg-[#0A0A0A] text-white border-2 border-zinc-800 rounded-3xl p-6 shadow-2xl ${
-        isFullscreen ? "fixed inset-0 z-50 rounded-none" : ""
-      }`}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-zinc-800 mb-6">
+    <div className="kiosk-surface rounded-2xl overflow-hidden">
+      {/* Board header */}
+      <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between bg-zinc-950/40">
         <div className="flex items-center gap-3">
-          <div className="px-2.5 py-1 rounded-lg bg-amber-500 text-black font-black text-[10px] tracking-widest font-mono">
-            LIVE TV BOARD
-          </div>
-          <h2 className="text-lg font-black font-space uppercase text-white">
+          <span className="px-2.5 py-1 rounded-md bg-amber-500 text-black font-mono text-[10px] font-black uppercase tracking-[0.15em]">
+            Live Board
+          </span>
+          <h2 className="kiosk-destination text-xl text-white uppercase truncate">
             {snapshot.regionConfig?.terminalName ?? `${snapshot.region} Terminal`}
           </h2>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
+          <LiveClock variant="compact" />
           {totalPages > 1 && (
-            <span className="px-3 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono text-xs font-bold">
-              PAGE {pageIndex + 1} / {totalPages}
+            <span className="font-mono text-[10px] font-black uppercase tracking-[0.15em] text-amber-400 border border-amber-500/30 bg-amber-500/10 px-2 py-1 rounded-md tabular-nums">
+              {pageIndex + 1} / {totalPages}
             </span>
           )}
-          <button
-            onClick={toggleFullscreen}
-            className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800"
-          >
-            {isFullscreen ? (
-              <Minimize2 className="w-4 h-4" />
-            ) : (
-              <Maximize2 className="w-4 h-4" />
-            )}
-          </button>
         </div>
       </div>
 
-      {/* Table */}
-      {snapshot.vehicles.length === 0 ? (
-        <div className="py-20 text-center text-zinc-500 text-sm">
-          No vehicles scheduled in this region.
-        </div>
-      ) : (
-        <div className="min-w-[650px]">
-          <div className="grid grid-cols-12 text-[11px] uppercase font-mono text-zinc-400 font-bold pb-3 border-b border-zinc-800 tracking-wider">
-            <div className="col-span-2">STATUS</div>
-            <div className="col-span-4">DESTINATION</div>
-            <div className="col-span-2">VEHICLE</div>
-            <div className="col-span-2 text-center">BAY</div>
-            <div className="col-span-2 text-right">QUEUE</div>
-          </div>
+      {/* Board columns header */}
+      <div className="grid grid-cols-12 px-5 py-2.5 border-b border-white/[0.06] bg-zinc-950/30 font-mono text-[10px] font-black uppercase tracking-[0.15em] text-zinc-500">
+        <div className="col-span-2">Route</div>
+        <div className="col-span-4">Destination</div>
+        <div className="col-span-2">Vehicle</div>
+        <div className="col-span-1 text-center">Bay</div>
+        <div className="col-span-1 text-center">Queue</div>
+        <div className="col-span-2 text-right">Status</div>
+      </div>
 
-          <div className="divide-y divide-zinc-800">
-            {paged.map((v) => (
+      {/* Rows */}
+      <div className="divide-y divide-white/[0.04]">
+        {paged.length === 0 ? (
+          <div className="py-20 text-center font-mono text-xs text-zinc-500 uppercase tracking-widest">
+            No departures scheduled
+          </div>
+        ) : (
+          paged.map((r, i) => {
+            const routeCode = `${r.routeOrigin
+              .slice(0, 2)
+              .toUpperCase()}·${r.routeDestination.slice(0, 2).toUpperCase()}`;
+            const isBoarding = r.status === "Loading";
+            const isDelayed = r.status === "Delayed";
+
+            return (
               <div
-                key={v.registrationNumber}
-                className="grid grid-cols-12 py-3.5 items-center hover:bg-white/5 border-b border-zinc-850"
+                key={`${r.routeId}-${r.vehicleReg ?? "empty"}-${i}`}
+                className={`grid grid-cols-12 px-5 py-3 items-center transition-colors ${
+                  isBoarding
+                    ? "bg-emerald-500/[0.04] border-l-2 border-l-emerald-500"
+                    : isDelayed
+                    ? "bg-amber-500/[0.04] border-l-2 border-l-amber-500"
+                    : "border-l-2 border-l-transparent hover:bg-white/[0.02]"
+                }`}
               >
                 <div className="col-span-2">
-                  <span
-                    className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                      v.status === "Loading"
-                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500 animate-pulse"
-                        : v.status === "Waiting" && v.currentQueuePosition === 1
-                        ? "bg-blue-500/20 text-blue-400 border border-blue-500"
-                        : v.status === "Delayed"
-                        ? "bg-amber-500/20 text-amber-400 border border-amber-500"
-                        : "bg-zinc-800 text-zinc-400"
-                    }`}
-                  >
-                    {v.status === "Loading" ? "BOARDING" : v.status.toUpperCase()}
+                  <span className="font-mono text-sm font-black tracking-wider text-zinc-200">
+                    {routeCode}
                   </span>
                 </div>
-                <div className="col-span-4 text-white font-black uppercase font-space truncate">
-                  {v.routeOrigin && v.routeDestination
-                    ? `${v.routeOrigin} → ${v.routeDestination}`
-                    : "—"}
+                <div className="col-span-4 min-w-0">
+                  <div className="kiosk-destination text-lg text-white uppercase truncate">
+                    {r.routeDestination}
+                  </div>
+                  <div className="font-mono text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">
+                    from {r.routeOrigin} · E{r.baseFareE.toFixed(2)}
+                  </div>
                 </div>
-                <div className="col-span-2 text-zinc-300 font-bold font-mono">
-                  {v.registrationNumber}
+                <div className="col-span-2 min-w-0">
+                  {r.vehicleReg ? (
+                    <>
+                      <div className="font-mono text-sm font-black text-white tabular-nums truncate">
+                        {r.vehicleReg}
+                      </div>
+                      {r.vic && (
+                        <div className="font-mono text-[10px] text-emerald-500 font-bold tracking-wider">
+                          {r.vic}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <span className="font-mono text-xs text-zinc-600">—</span>
+                  )}
                 </div>
-                <div className="col-span-2 text-center">
-                  <span className="px-2.5 py-1 rounded-lg bg-zinc-800 border border-zinc-700 font-bold text-xs text-white">
-                    {v.loadingBay ?? "—"}
+                <div className="col-span-1 text-center">
+                  <span className="inline-block font-mono text-sm font-black text-zinc-100 bg-zinc-900 border border-white/[0.06] px-2 py-0.5 rounded-md">
+                    {r.loadingBay ?? "—"}
                   </span>
                 </div>
-                <div className="col-span-2 text-right font-mono font-bold text-emerald-400">
-                  {v.currentQueuePosition > 0 ? `#${v.currentQueuePosition}` : "—"}
+                <div className="col-span-1 text-center font-mono text-sm font-black text-zinc-400 tabular-nums">
+                  {r.queuePos && r.queuePos > 0 ? `#${r.queuePos}` : "—"}
+                </div>
+                <div className="col-span-2 text-right">
+                  {r.status ? (
+                    <StatusIndicator
+                      status={r.status}
+                      size="sm"
+                      pulse={isBoarding}
+                    />
+                  ) : (
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-700">
+                      No vehicle
+                    </span>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Footer page indicator */}
+      {totalPages > 1 && (
+        <div className="px-5 py-2.5 border-t border-white/[0.06] bg-zinc-950/40 flex items-center justify-center gap-1.5">
+          {Array.from({ length: totalPages }).map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setPageIndex(i)}
+              className={`transition-all rounded-full ${
+                i === pageIndex
+                  ? "w-6 h-1.5 bg-emerald-500"
+                  : "w-1.5 h-1.5 bg-zinc-700 hover:bg-zinc-500"
+              }`}
+              aria-label={`Page ${i + 1}`}
+            />
+          ))}
         </div>
       )}
     </div>
