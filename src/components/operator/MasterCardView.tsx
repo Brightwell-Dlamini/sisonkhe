@@ -19,7 +19,6 @@ export default function MasterCardView({ card }: Props) {
           : "bg-gradient-to-br from-amber-500 via-amber-600 to-amber-800 text-black"
       }`}
     >
-      {/* Decorative curves */}
       <div className="absolute inset-0 opacity-10">
         <svg viewBox="0 0 400 200" className="w-full h-full">
           <circle cx="350" cy="50" r="120" fill="currentColor" />
@@ -31,8 +30,16 @@ export default function MasterCardView({ card }: Props) {
       <div className="relative z-10 space-y-6">
         <div className="flex items-start justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-widest opacity-70 font-mono">
-              Sisonkhe In Transit
+            <div className="flex items-center gap-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo.jpg"
+                alt=""
+                className="w-6 h-6 rounded-md object-cover ring-1 ring-white/30"
+              />
+              <div className="text-[10px] uppercase tracking-widest opacity-70 font-mono">
+                Sisonkhe In Transit
+              </div>
             </div>
             <div className="text-base font-black uppercase mt-0.5">
               {card.cardTier}
@@ -77,9 +84,7 @@ export default function MasterCardView({ card }: Props) {
             <ShieldCheck className="w-3 h-3" />
             Exp: {card.expiryDate}
           </span>
-          <span className="opacity-70">
-            Status: {card.status}
-          </span>
+          <span className="opacity-70">Status: {card.status}</span>
         </div>
       </div>
     </div>
