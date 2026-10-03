@@ -2,10 +2,10 @@
 
 import PublicShell from "@/components/shell/PublicShell";
 
-export default function KioskLayout({
+export default function VerifyLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <PublicShell hideChrome>{children}</PublicShell>;
+  return <PublicShell>{children}</PublicShell>;
 }
