@@ -17,6 +17,7 @@ import {
   Shield,
   FileText,
   Settings,
+  ShieldCheck,
   ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -41,6 +42,7 @@ const LINKS = [
 
 export default function AdminIndex() {
   const { user } = useAuth();
+  const isSuperAdmin = user?.role === "super-admin";
 
   return (
     <div className="space-y-6">
@@ -52,6 +54,34 @@ export default function AdminIndex() {
           Welcome back, {user?.fullName ?? "Administrator"}.
         </p>
       </header>
+
+      {/* Super Admin Card — only for super-admin */}
+      {isSuperAdmin && (
+        <Link
+          href="/admin/super"
+          className="group block bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-2xl p-5 shadow-lg hover:shadow-xl transition-all"
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-white/15 text-white flex items-center justify-center">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-black tracking-widest opacity-80">
+                  Elevated Access
+                </div>
+                <h2 className="text-base font-black uppercase mt-0.5">
+                  Super Admin Control Centre
+                </h2>
+                <p className="text-xs opacity-80 mt-0.5">
+                  Analytics, security, telemetry, disaster recovery, and system-wide configuration.
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 opacity-70 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {LINKS.map((link) => {

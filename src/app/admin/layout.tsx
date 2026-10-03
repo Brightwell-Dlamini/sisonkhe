@@ -20,13 +20,32 @@ import {
   Shield,
   FileText,
   Settings,
+  Activity,
+  AlertOctagon,
+  Cpu,
+  Database,
+  HardDrive,
+  Megaphone,
+  Sparkles,
 } from "lucide-react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useAuth } from "@/hooks/useAuth";
 import OfflineBanner from "@/components/offline/OfflineBanner";
 import SyncStatusPill from "@/components/offline/SyncStatusPill";
 
-const NAV_GROUPS = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+}
+
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+  superOnly?: boolean;
+}
+
+const NAV_GROUPS: NavGroup[] = [
   {
     label: "Overview",
     items: [{ href: "/admin", label: "Dashboard", icon: LayoutGrid }],
@@ -69,6 +88,22 @@ const NAV_GROUPS = [
     label: "System",
     items: [{ href: "/admin/config", label: "Configuration", icon: Settings }],
   },
+  {
+    label: "Super Admin",
+    superOnly: true,
+    items: [
+      { href: "/admin/super", label: "Control Centre", icon: ShieldCheck },
+      { href: "/admin/super/analytics", label: "Analytics", icon: Activity },
+      { href: "/admin/super/security", label: "Security", icon: Shield },
+      { href: "/admin/super/errors", label: "Error Hub", icon: AlertOctagon },
+      { href: "/admin/super/telemetry", label: "Telemetry", icon: Cpu },
+      { href: "/admin/super/config", label: "System Config", icon: Settings },
+      { href: "/admin/super/recovery", label: "Recovery", icon: Database },
+      { href: "/admin/super/storage", label: "Storage", icon: HardDrive },
+      { href: "/admin/super/adverts", label: "Adverts", icon: Megaphone },
+      { href: "/admin/super/assistant", label: "Assistant", icon: Sparkles },
+    ],
+  },
 ];
 
 export default function AdminLayout({
@@ -95,6 +130,8 @@ export default function AdminLayout({
   const allowed = ["super-admin", "admin", "fleet-manager"];
   if (!allowed.includes(user.role)) return null;
 
+  const isSuperAdmin = user.role === "super-admin";
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-[#050505]">
       <OfflineBanner />
@@ -114,6 +151,11 @@ export default function AdminLayout({
               <span className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
                 Admin Centre
               </span>
+              {isSuperAdmin && (
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300">
+                  Super
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -130,36 +172,51 @@ export default function AdminLayout({
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 md:grid-cols-[240px_1fr] gap-6">
         <aside className="space-y-4 md:sticky md:top-20 md:self-start">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.label}>
-              <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-3 mb-1.5">
-                {group.label}
+          {NAV_GROUPS.map((group) => {
+            if (group.superOnly && !isSuperAdmin) return null;
+
+            return (
+              <div key={group.label}>
+                <div
+                  className={`text-[10px] font-black uppercase tracking-widest px-3 mb-1.5 ${
+                    group.superOnly
+                      ? "text-purple-500"
+                      : "text-zinc-400"
+                  }`}
+                >
+                  {group.label}
+                </div>
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const isActive =
+                      item.href === "/admin" || item.href === "/admin/super"
+                        ? pathname === item.href
+                        : pathname.startsWith(item.href);
+                    const Icon = item.icon;
+
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
+                          isActive
+                            ? group.superOnly
+                              ? "bg-purple-600 text-white shadow-sm"
+                              : "bg-emerald-600 text-white shadow-sm"
+                            : group.superOnly
+                            ? "text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40"
+                            : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="space-y-0.5">
-                {group.items.map((item) => {
-                  const isActive =
-                    item.href === "/admin"
-                      ? pathname === "/admin"
-                      : pathname.startsWith(item.href);
-                  const Icon = item.icon;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
-                        isActive
-                          ? "bg-emerald-600 text-white shadow-sm"
-                          : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </aside>
 
         <main className="min-w-0">{children}</main>
