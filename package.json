@@ -16,14 +16,15 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-"@supabase/ssr": "^0.5.2",
-"@supabase/supabase-js": "^2.45.4",
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.45.4",
     "@auth/core": "^0.34.2",
     "@google/genai": "^2.19.0",
     "@upstash/ratelimit": "^2.0.5",
     "@upstash/redis": "^1.34.3",
     "@vercel/kv": "^3.0.0",
     "bcryptjs": "^2.4.3",
+    "clsx": "^2.1.1",
     "dexie": "^4.0.10",
     "dexie-react-hooks": "^1.1.7",
     "drizzle-orm": "^0.38.2",
@@ -36,6 +37,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "recharts": "^3.10.0",
+    "tailwind-merge": "^2.6.0",
     "zod": "^3.24.1",
     "zustand": "^5.0.2"
   },
