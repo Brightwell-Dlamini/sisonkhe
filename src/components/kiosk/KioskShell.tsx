@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import type { KioskSnapshot } from "@/lib/public/kiosk";
 import type { KioskMode } from "@/app/kiosk/page";
 import { useVoiceAnnouncements } from "@/hooks/useVoiceAnnouncements";
+import Link from "next/link";
 import KioskHeader from "./KioskHeader";
 import KioskModeTabs from "./KioskModeTabs";
 import KioskModeTransit from "./KioskModeTransit";
@@ -94,6 +95,20 @@ export default function KioskShell({
           onClose={() => setShowLostProperty(false)}
         />
       )}
+<footer className="mt-12 pb-6 text-center">
+  <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-zinc-700">
+    Sisonkhe In Transit · Kingdom of Eswatini
+  </p>
+  <div className="mt-2 flex items-center justify-center gap-3 text-[10px] font-mono text-zinc-800">
+    <Link href="/staff" className="hover:text-zinc-500 transition-colors">
+      Staff Access
+    </Link>
+    <span>·</span>
+    <Link href="/verify" className="hover:text-zinc-500 transition-colors">
+      Verify a Permit
+    </Link>
+  </div>
+</footer>
     </div>
   );
 }
