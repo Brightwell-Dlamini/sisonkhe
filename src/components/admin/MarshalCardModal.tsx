@@ -25,8 +25,12 @@ export default function MarshalCardModal({ marshal, onClose }: Props) {
           <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 text-white rounded-2xl p-6 space-y-5">
             <div className="flex items-start justify-between">
               <div>
-                <div className="text-[10px] uppercase tracking-widest opacity-70 font-mono">
-                  Sisonkhe In Transit
+                <div className="flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/logo.jpg" alt="" className="w-6 h-6 rounded-md object-cover ring-1 ring-white/30" />
+                  <div className="text-[10px] uppercase tracking-widest opacity-70 font-mono">
+                    Sisonkhe In Transit
+                  </div>
                 </div>
                 <div className="text-base font-black uppercase mt-0.5">
                   Marshal Pass
@@ -62,7 +66,7 @@ export default function MarshalCardModal({ marshal, onClose }: Props) {
                 <div className="text-[10px] uppercase opacity-70 flex items-center gap-1">
                   <Phone className="w-3 h-3" /> Contact
                 </div>
-                <div className="font-mono">{marshal.cellNo ?? marshal.phone ?? "—"}</div>
+                <div className="font-mono">{marshal.cellNo ?? marshal.phone ?? "\u2014"}</div>
               </div>
             </div>
 
