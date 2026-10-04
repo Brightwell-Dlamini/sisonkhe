@@ -33,7 +33,7 @@ export default function AnalyticsPanel() {
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="text-xl font-black text-zinc-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+        <h1 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-purple-600" />
           Live Analytics
         </h1>
@@ -48,13 +48,13 @@ export default function AnalyticsPanel() {
           return (
             <div
               key={c.label}
-              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4"
+              className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4"
             >
               <Icon className="w-4 h-4 text-purple-600 mb-2" />
               <div className="text-[10px] uppercase font-bold text-zinc-400">
                 {c.label}
               </div>
-              <div className="text-2xl font-mono font-black text-zinc-900 dark:text-white mt-1">
+              <div className="text-2xl font-mono font-black text-white mt-1">
                 {c.value}
               </div>
             </div>
@@ -62,8 +62,8 @@ export default function AnalyticsPanel() {
         })}
       </div>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
-        <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-3">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5">
+        <h3 className="text-xs font-black uppercase tracking-wider text-white mb-3">
           Last 24 Hours
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
@@ -74,18 +74,18 @@ export default function AnalyticsPanel() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
-        <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-3">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5">
+        <h3 className="text-xs font-black uppercase tracking-wider text-white mb-3">
           By Region
         </h3>
         <div className="space-y-2">
           {data.regions.map((r) => (
             <div
               key={r.code}
-              className="flex items-center justify-between p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs"
+              className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-xs"
             >
               <span className="font-bold">{r.code}</span>
-              <div className="flex gap-4 text-zinc-600 dark:text-zinc-400 font-mono">
+              <div className="flex gap-4 text-zinc-400 font-mono">
                 <span>{r.vehicles} vehicles</span>
                 <span>{r.trips30d} trips/30d</span>
                 <span className="text-emerald-600">E{r.revenue30d.toFixed(0)}</span>
@@ -95,8 +95,8 @@ export default function AnalyticsPanel() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
-        <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-3">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5">
+        <h3 className="text-xs font-black uppercase tracking-wider text-white mb-3">
           Top Routes (Last 30 Days)
         </h3>
         {data.topRoutes.length === 0 ? (
@@ -106,7 +106,7 @@ export default function AnalyticsPanel() {
             {data.topRoutes.map((r, i) => (
               <div
                 key={r.routeId}
-                className="flex items-center justify-between p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950 text-xs"
+                className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] text-xs"
               >
                 <div className="flex items-center gap-2">
                   <span className="w-5 h-5 rounded bg-purple-100 text-purple-700 flex items-center justify-center text-[10px] font-bold">
@@ -115,7 +115,7 @@ export default function AnalyticsPanel() {
                   <span className="font-bold">{r.label}</span>
                   <span className="text-zinc-500">({r.region})</span>
                 </div>
-                <div className="flex gap-3 font-mono text-zinc-600 dark:text-zinc-400">
+                <div className="flex gap-3 font-mono text-zinc-400">
                   <span>{r.trips} trips</span>
                   <span className="text-emerald-600 font-bold">E{r.revenue.toFixed(0)}</span>
                 </div>
@@ -130,9 +130,9 @@ export default function AnalyticsPanel() {
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950">
+    <div className="p-3 rounded-xl bg-white/[0.03]">
       <div className="text-[10px] uppercase font-bold text-zinc-400">{label}</div>
-      <div className="text-lg font-mono font-black text-zinc-900 dark:text-white mt-0.5">
+      <div className="text-lg font-mono font-black text-white mt-0.5">
         {value}
       </div>
     </div>

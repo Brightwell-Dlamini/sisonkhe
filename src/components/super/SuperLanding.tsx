@@ -32,7 +32,7 @@ export default function SuperLanding() {
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="text-xl font-black text-zinc-900 dark:text-white uppercase tracking-tight">
+        <h1 className="text-xl font-black text-white uppercase tracking-tight">
           Super Admin Control Centre
         </h1>
         <p className="text-xs text-zinc-500 mt-1">
@@ -47,7 +47,7 @@ export default function SuperLanding() {
             <Link
               key={l.href}
               href={l.href}
-              className="group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-purple-400 rounded-2xl p-4"
+              className="group bg-[#0F0F10] border border-white/[0.06] hover:border-purple-400 rounded-2xl p-4"
             >
               <div className="flex items-start justify-between">
                 <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center">
@@ -55,7 +55,7 @@ export default function SuperLanding() {
                 </div>
                 <ChevronRight className="w-4 h-4 text-zinc-300 group-hover:text-purple-500" />
               </div>
-              <h2 className="text-xs font-black text-zinc-900 dark:text-white uppercase mt-2.5">
+              <h2 className="text-xs font-black text-white uppercase mt-2.5">
                 {l.label}
               </h2>
               <p className="text-[11px] text-zinc-500 mt-0.5">{l.desc}</p>
