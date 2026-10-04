@@ -115,22 +115,22 @@ export default function DriversList() {
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
         <div className="flex flex-1 gap-2 min-w-0">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
             <input
               type="text"
-              placeholder="Search by name, phone, ID, licence, or vehicle…"
+              placeholder="Search by name, phone, ID, licence, or vehicle\u2026"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300"
+            className="bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2 text-xs font-bold text-zinc-300"
           >
             <option value="all">All Statuses</option>
             <option value="Active">Active</option>
@@ -144,7 +144,7 @@ export default function DriversList() {
           <button
             onClick={refresh}
             disabled={loading}
-            className="px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50 flex items-center gap-1.5"
+            className="px-3 py-2 rounded-xl bg-white/[0.06] text-zinc-300 text-xs font-bold hover:bg-white/[0.08] disabled:opacity-50 flex items-center gap-1.5"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -172,14 +172,14 @@ export default function DriversList() {
         </div>
       )}
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl overflow-hidden">
         {loading && drivers.length === 0 ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 px-4">
-            <div className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+            <div className="text-sm font-bold text-zinc-300">
               {drivers.length === 0 ? "No drivers registered yet" : "No matching drivers"}
             </div>
             <div className="text-xs text-zinc-500 mt-1">
@@ -192,7 +192,7 @@ export default function DriversList() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-zinc-200 dark:border-zinc-800 text-left text-[10px] font-black uppercase tracking-wider text-zinc-400">
+                <tr className="border-b border-white/[0.06] text-left text-[10px] font-black uppercase tracking-wider text-zinc-400">
                   <th className="px-4 py-3">Driver</th>
                   <th className="px-4 py-3">Contact</th>
                   <th className="px-4 py-3">Licence / PDP</th>
@@ -205,19 +205,14 @@ export default function DriversList() {
                 {filtered.map((d) => (
                   <tr
                     key={d.id}
-                    className="border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50 dark:hover:bg-zinc-950/50"
+                    className="border-b border-white/[0.06] hover:bg-white/[0.03]"
                   >
                     <td className="px-4 py-3">
-                      <div className="font-bold text-zinc-900 dark:text-white">
+                      <div className="font-bold text-white">
                         {d.fullName}
                       </div>
-                      {d.username && (
-                        <div className="text-[10px] text-zinc-400 font-mono">
-                          @{d.username}
-                        </div>
-                      )}
                     </td>
-                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                    <td className="px-4 py-3 text-zinc-400">
                       <div className="font-mono text-[11px]">{d.phone}</div>
                       {d.nationalId && (
                         <div className="font-mono text-[10px] text-zinc-400">
@@ -225,9 +220,9 @@ export default function DriversList() {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                    <td className="px-4 py-3 text-zinc-400">
                       <div className="font-mono text-[11px]">
-                        {d.licenseNumber ?? "—"}
+                        {d.licenseNumber ?? "\u2014"}
                       </div>
                       {d.pdpStatus && (
                         <div className="text-[10px]">
@@ -248,16 +243,16 @@ export default function DriversList() {
                     </td>
                     <td className="px-4 py-3">
                       {d.assignedVehicleReg ? (
-                        <span className="font-mono text-[11px] font-bold text-zinc-900 dark:text-white">
+                        <span className="font-mono text-[11px] font-bold text-white">
                           {d.assignedVehicleReg}
                         </span>
                       ) : (
-                        <span className="text-zinc-400 text-[11px]">—</span>
+                        <span className="text-zinc-400 text-[11px]">\u2014</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${STATUS_COLORS[d.status] ?? "bg-zinc-100 text-zinc-600"}`}
+                        className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${STATUS_COLORS[d.status] ?? "bg-white/[0.06] text-zinc-400"}`}
                       >
                         {d.status}
                       </span>
