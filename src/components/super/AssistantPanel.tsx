@@ -40,7 +40,7 @@ export default function AssistantPanel() {
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="text-xl font-black text-zinc-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+        <h1 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-purple-600" />
           AI Virtual Assistant
         </h1>
@@ -49,13 +49,13 @@ export default function AssistantPanel() {
         </p>
       </header>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-4">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5 space-y-4">
         <div className="flex flex-wrap gap-1.5">
           {PRESETS.map((p) => (
             <button
               key={p}
               onClick={() => ask(p)}
-              className="px-2.5 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 text-xs font-bold"
+              className="px-2.5 py-1.5 rounded-lg bg-purple-950/40 text-purple-300 text-xs font-bold"
             >
               {p}
             </button>
@@ -73,7 +73,7 @@ export default function AssistantPanel() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Ask a question…"
-            className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm"
+            className="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm"
           />
           <button
             type="submit"
@@ -90,15 +90,15 @@ export default function AssistantPanel() {
         </form>
 
         {response && (
-          <div className="p-4 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 space-y-2">
+          <div className="p-4 rounded-xl bg-purple-950/30 border border-purple-800 space-y-2">
             <div className="text-[10px] uppercase font-bold text-purple-600">
               Response
             </div>
-            <div className="text-sm text-zinc-900 dark:text-white font-bold">
+            <div className="text-sm text-white font-bold">
               {response.answer}
             </div>
             {response.bullets.length > 0 && (
-              <ul className="space-y-1 text-xs text-zinc-700 dark:text-zinc-300">
+              <ul className="space-y-1 text-xs text-zinc-300">
                 {response.bullets.map((b, i) => (
                   <li key={i} className="font-mono">
                     • {b}
