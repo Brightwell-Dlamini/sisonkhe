@@ -35,8 +35,8 @@ export default function DriverCommsPanel({ drivers }: Props) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4">
-        <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-3">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4">
+        <h4 className="text-xs font-black uppercase tracking-wider text-white mb-3">
           Drivers
         </h4>
         {drivers.length === 0 ? (
@@ -52,10 +52,10 @@ export default function DriverCommsPanel({ drivers }: Props) {
                 className={`w-full text-left p-2.5 rounded-xl border transition-colors ${
                   selectedDriverId === d.id
                     ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700"
-                    : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"
+                    : "bg-[#0F0F10] border-white/[0.06]"
                 }`}
               >
-                <div className="font-bold text-xs text-zinc-900 dark:text-white">
+                <div className="font-bold text-xs text-white">
                   {d.name}
                 </div>
                 {d.phone && (
@@ -69,10 +69,10 @@ export default function DriverCommsPanel({ drivers }: Props) {
         )}
       </div>
 
-      <div className="lg:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 flex flex-col">
-        <div className="flex items-center gap-2 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+      <div className="lg:col-span-2 bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4 flex flex-col">
+        <div className="flex items-center gap-2 pb-3 border-b border-white/[0.06]">
           <MessageSquare className="w-4 h-4 text-emerald-600" />
-          <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+          <h4 className="text-xs font-black uppercase tracking-wider text-white">
             {selectedDriver?.name ?? "Select a driver"}
           </h4>
         </div>
@@ -97,7 +97,7 @@ export default function DriverCommsPanel({ drivers }: Props) {
                     className={`max-w-[75%] p-2.5 rounded-2xl text-xs ${
                       m.sender === "marshal"
                         ? "bg-emerald-600 text-white rounded-br-none"
-                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white rounded-bl-none"
+                        : "bg-white/[0.06] text-white rounded-bl-none"
                     }`}
                   >
                     <div>{m.message}</div>
@@ -117,16 +117,16 @@ export default function DriverCommsPanel({ drivers }: Props) {
           )}
         </div>
 
-        <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
+        <div className="pt-3 border-t border-white/[0.06] space-y-2">
           <div className="flex flex-wrap gap-1">
             {PRESETS.map((p) => (
               <button
                 key={p}
                 onClick={() => setText(p)}
-                className="px-2 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-[10px] text-zinc-700 dark:text-zinc-300 font-medium"
+                className="px-2 py-1 rounded-lg bg-white/[0.06] text-[10px] text-zinc-300 font-medium"
               >
                 {p.slice(0, 30)}
-                {p.length > 30 ? "…" : ""}
+                {p.length > 30 ? "\u2026" : ""}
               </button>
             ))}
           </div>
@@ -142,8 +142,8 @@ export default function DriverCommsPanel({ drivers }: Props) {
                   void handleSend();
                 }
               }}
-              placeholder="Type a message…"
-              className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-900 dark:text-white"
+              placeholder="Type a message\u2026"
+              className="flex-1 bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2 text-xs text-white"
             />
             <button
               onClick={handleSend}

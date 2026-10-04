@@ -42,10 +42,10 @@ export default function CardInspectionModal({ registrationNumber, onClose }: Pro
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-md w-full max-h-[92vh] overflow-y-auto">
-        <div className="flex items-start justify-between p-5 border-b border-zinc-100 dark:border-zinc-800">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl max-w-md w-full max-h-[92vh] overflow-y-auto">
+        <div className="flex items-start justify-between p-5 border-b border-white/[0.06]">
           <div>
-            <h3 className="text-sm font-black uppercase text-zinc-900 dark:text-white">
+            <h3 className="text-sm font-black uppercase text-white">
               Vehicle Card
             </h3>
             <p className="text-[11px] text-zinc-500 font-mono">
@@ -78,7 +78,7 @@ export default function CardInspectionModal({ registrationNumber, onClose }: Pro
                   <ShieldCheck className="w-4 h-4 opacity-80" />
                 </div>
                 <div className="font-mono font-black text-lg tracking-wider">
-                  {card.cardNumber ?? "—"}
+                  {card.cardNumber ?? "\u2014"}
                 </div>
                 <div className="flex items-end justify-between pt-3 border-t border-white/20">
                   <div>
@@ -98,7 +98,7 @@ export default function CardInspectionModal({ registrationNumber, onClose }: Pro
 
               {/* Transactions */}
               <div>
-                <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-2">
+                <h4 className="text-xs font-black uppercase tracking-wider text-white mb-2">
                   Recent Transactions
                 </h4>
                 {card.transactions.length === 0 ? (
@@ -106,7 +106,7 @@ export default function CardInspectionModal({ registrationNumber, onClose }: Pro
                     No transactions yet.
                   </div>
                 ) : (
-                  <div className="divide-y divide-zinc-100 dark:divide-zinc-800 max-h-64 overflow-y-auto">
+                  <div className="divide-y divide-white/[0.06] max-h-64 overflow-y-auto">
                     {card.transactions.map((tx) => {
                       const isCredit = tx.direction === "CREDIT";
                       return (
@@ -129,7 +129,7 @@ export default function CardInspectionModal({ registrationNumber, onClose }: Pro
                               )}
                             </div>
                             <div className="min-w-0">
-                              <div className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                              <div className="text-xs font-bold text-white truncate">
                                 {tx.description}
                               </div>
                               <div className="text-[10px] text-zinc-500 font-mono">
@@ -139,10 +139,10 @@ export default function CardInspectionModal({ registrationNumber, onClose }: Pro
                           </div>
                           <div
                             className={`font-mono font-bold text-xs shrink-0 ${
-                              isCredit ? "text-emerald-600" : "text-zinc-900 dark:text-white"
+                              isCredit ? "text-emerald-600" : "text-white"
                             }`}
                           >
-                            {isCredit ? "+" : "−"}E{tx.amountSzl.toFixed(2)}
+                            {isCredit ? "+" : "\u2212"}E{tx.amountSzl.toFixed(2)}
                           </div>
                         </div>
                       );
