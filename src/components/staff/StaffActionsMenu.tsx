@@ -66,19 +66,19 @@ export default function StaffActionsMenu({
       <div className="relative inline-block" ref={menuRef}>
         <button
           onClick={() => setOpen((v) => !v)}
-          className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]"
         >
           <MoreVertical className="w-4 h-4" />
         </button>
 
         {open && (
-          <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl py-1 min-w-[180px]">
+          <div className="absolute right-0 top-full mt-1 z-20 bg-[#0F0F10] border border-white/[0.06] rounded-xl shadow-xl py-1 min-w-[180px]">
             <button
               onClick={() => {
                 setOpen(false);
                 onEdit();
               }}
-              className="w-full text-left px-3 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2"
+              className="w-full text-left px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-white/[0.06] flex items-center gap-2"
             >
               <Edit2 className="w-3.5 h-3.5" />
               Edit
@@ -86,7 +86,7 @@ export default function StaffActionsMenu({
             <button
               onClick={handleReset}
               disabled={resetting}
-              className="w-full text-left px-3 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 disabled:opacity-50"
+              className="w-full text-left px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-white/[0.06] flex items-center gap-2 disabled:opacity-50"
             >
               <KeyRound className="w-3.5 h-3.5" />
               Reset Password
@@ -97,7 +97,7 @@ export default function StaffActionsMenu({
                   setOpen(false);
                   setConfirmDeactivate(true);
                 }}
-                className="w-full text-left px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-950/40 flex items-center gap-2"
               >
                 <UserX className="w-3.5 h-3.5" />
                 Deactivate
@@ -110,9 +110,9 @@ export default function StaffActionsMenu({
       {/* Deactivate confirmation */}
       {confirmDeactivate && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-4">
+          <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-4">
             <div>
-              <h3 className="text-sm font-black uppercase text-zinc-900 dark:text-white">
+              <h3 className="text-sm font-black uppercase text-white">
                 Deactivate Staff?
               </h3>
               <p className="text-xs text-zinc-500 mt-1">
@@ -123,7 +123,7 @@ export default function StaffActionsMenu({
             <div className="flex gap-2">
               <button
                 onClick={() => setConfirmDeactivate(false)}
-                className="flex-1 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold"
+                className="flex-1 py-2 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold"
               >
                 Cancel
               </button>
