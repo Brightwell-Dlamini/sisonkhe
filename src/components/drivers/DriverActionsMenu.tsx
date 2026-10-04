@@ -5,9 +5,11 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MoreVertical, Edit2, KeyRound, UserX } from "lucide-react";
 import type { DriverRow } from "@/lib/drivers/queries";
+import { previewSuspendDriver } from "@/lib/intelligence/consequences";
+import { ConsequencePreviewDialog } from "@/components/intelligence/ConsequencePreviewDialog";
 
 interface Props {
   driver: DriverRow;
@@ -37,6 +39,16 @@ export default function DriverActionsMenu({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  const suspendPreview = useMemo(
+    () =>
+      previewSuspendDriver({
+        driverName: driver.fullName,
+        assignedVehicleReg: driver.assignedVehicleReg,
+        hasActiveQueuePosition: false,
+      }),
+    [driver]
+  );
 
   const handleReset = async () => {
     setOpen(false);
@@ -84,43 +96,24 @@ export default function DriverActionsMenu({
                 className="w-full text-left px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-950/40 flex items-center gap-2"
               >
                 <UserX className="w-3.5 h-3.5" />
-                Deactivate
+                Suspend
               </button>
             )}
           </div>
         )}
       </div>
 
-      {confirmDeactivate && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-4">
-            <h3 className="text-sm font-black uppercase text-white">
-              Deactivate Driver?
-            </h3>
-            <p className="text-xs text-zinc-500">
-              {driver.fullName} will be marked as Suspended and unassigned from any
-              vehicle. Their account remains and can be reactivated by editing.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setConfirmDeactivate(false)}
-                className="flex-1 py-2 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setConfirmDeactivate(false);
-                  onDeactivate();
-                }}
-                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase"
-              >
-                Deactivate
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConsequencePreviewDialog
+        open={confirmDeactivate}
+        preview={suspendPreview}
+        confirmLabel="Suspend"
+        variant="danger"
+        onCancel={() => setConfirmDeactivate(false)}
+        onConfirm={() => {
+          setConfirmDeactivate(false);
+          onDeactivate();
+        }}
+      />
     </>
   );
 }

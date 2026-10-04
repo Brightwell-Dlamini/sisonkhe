@@ -5,9 +5,11 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MoreVertical, Edit2, KeyRound, UserX } from "lucide-react";
 import type { OperatorRow } from "@/lib/operators/queries";
+import { previewDeactivateOperator } from "@/lib/intelligence/consequences";
+import { ConsequencePreviewDialog } from "@/components/intelligence/ConsequencePreviewDialog";
 
 interface Props {
   operator: OperatorRow;
@@ -37,6 +39,18 @@ export default function OperatorActionsMenu({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  const deactivatePreview = useMemo(
+    () =>
+      previewDeactivateOperator({
+        operatorName: operator.companyName || operator.name,
+        vehicleCount: operator.vehicleCount ?? 0,
+        driverCount: 0,
+        masterCardStatus: operator.masterCard?.status ?? "Active",
+        hasPendingRenewals: false,
+      }),
+    [operator]
+  );
 
   const handleReset = async () => {
     setOpen(false);
@@ -89,37 +103,17 @@ export default function OperatorActionsMenu({
         )}
       </div>
 
-      {confirmDeactivate && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-4">
-            <h3 className="text-sm font-black uppercase text-white">
-              Deactivate Operator?
-            </h3>
-            <p className="text-xs text-zinc-500">
-              {operator.name} will be blocked from signing in, and their Master
-              Card will be <strong>frozen</strong>. Vehicles owned by them will
-              be unassigned. This cannot be undone without admin intervention.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setConfirmDeactivate(false)}
-                className="flex-1 py-2 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setConfirmDeactivate(false);
-                  onDeactivate();
-                }}
-                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase"
-              >
-                Deactivate
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConsequencePreviewDialog
+        open={confirmDeactivate}
+        preview={deactivatePreview}
+        confirmLabel="Deactivate"
+        variant="danger"
+        onCancel={() => setConfirmDeactivate(false)}
+        onConfirm={() => {
+          setConfirmDeactivate(false);
+          onDeactivate();
+        }}
+      />
     </>
   );
 }
