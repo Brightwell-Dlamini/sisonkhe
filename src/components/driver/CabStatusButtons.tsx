@@ -64,7 +64,7 @@ export default function CabStatusButtons({ currentStatus, onUpdate }: Props) {
               className={`py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
                 isCurrent
                   ? COLORS[s.color]
-                  : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300"
+                  : "bg-[#0F0F10] border border-white/[0.06] text-zinc-400 hover:border-zinc-500"
               }`}
             >
               {busy === s.id ? (
@@ -79,12 +79,12 @@ export default function CabStatusButtons({ currentStatus, onUpdate }: Props) {
       </div>
 
       {toast && (
-        <div className="text-[11px] text-center text-emerald-700 dark:text-emerald-400 font-bold">
+        <div className="text-[11px] text-center text-emerald-400 font-bold">
           {toast}
         </div>
       )}
 
-      <div className="text-[10px] text-zinc-400 text-center">
+      <div className="text-[10px] text-zinc-500 text-center">
         The marshal has final approval on queue dispatch.
       </div>
     </div>
