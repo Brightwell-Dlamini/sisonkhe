@@ -72,22 +72,22 @@ export default function SendMoneyModal({
       return;
     }
 
-    setSuccess({ receipt: res.masterReceiptRef ?? "—" });
+    setSuccess({ receipt: res.masterReceiptRef ?? "\u2014" });
     setTimeout(onClose, 2000);
   };
 
   if (success) {
     return (
       <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-md w-full p-6 text-center space-y-3">
+        <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl max-w-md w-full p-6 text-center space-y-3">
           <div className="w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-7 h-7 text-emerald-600" />
           </div>
-          <div className="text-sm font-black uppercase text-zinc-900 dark:text-white">
+          <div className="text-sm font-black uppercase text-white">
             Transfer Sent
           </div>
           <div className="text-xs text-zinc-500">
-            E{amount.toFixed(2)} → {vehicleReg}
+            E{amount.toFixed(2)} \u2192 {vehicleReg}
           </div>
           <div className="text-[10px] text-zinc-400 font-mono">
             Receipt: {success.receipt}
@@ -99,10 +99,10 @@ export default function SendMoneyModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-md w-full max-h-[92vh] overflow-y-auto">
-        <div className="flex items-start justify-between p-5 border-b border-zinc-100 dark:border-zinc-800">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl max-w-md w-full max-h-[92vh] overflow-y-auto">
+        <div className="flex items-start justify-between p-5 border-b border-white/[0.06]">
           <div>
-            <h3 className="text-sm font-black uppercase text-zinc-900 dark:text-white">
+            <h3 className="text-sm font-black uppercase text-white">
               Send Money to Vehicle
             </h3>
             <p className="text-[11px] text-zinc-500">
@@ -137,11 +137,11 @@ export default function SendMoneyModal({
               <select
                 value={vehicleReg}
                 onChange={(e) => setVehicleReg(e.target.value)}
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm font-bold text-zinc-900 dark:text-white"
+                className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm font-bold text-white"
               >
                 {vehicles.map((v) => (
                   <option key={v.registrationNumber} value={v.registrationNumber}>
-                    {v.registrationNumber} {v.vic ? `(${v.vic})` : ""} — E
+                    {v.registrationNumber} {v.vic ? `(${v.vic})` : ""} \u2014 E
                     {v.balanceSzl.toFixed(2)}
                   </option>
                 ))}
@@ -150,10 +150,10 @@ export default function SendMoneyModal({
           </div>
 
           {selectedVehicle && (
-            <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs space-y-1">
+            <div className="p-3 rounded-xl bg-[#0F0F10] border border-white/[0.06] text-xs space-y-1">
               <div className="flex justify-between">
                 <span className="text-zinc-500">Driver:</span>
-                <span className="font-bold text-zinc-900 dark:text-white">
+                <span className="font-bold text-white">
                   {selectedVehicle.driverName ?? "Unassigned"}
                 </span>
               </div>
@@ -176,7 +176,7 @@ export default function SendMoneyModal({
               max={masterBalance}
               value={amount}
               onChange={(e) => setAmount(Number(e.target.value) || 0)}
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-lg font-black font-mono text-zinc-900 dark:text-white"
+              className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-lg font-black font-mono text-white"
             />
             <div className="flex flex-wrap gap-1.5 mt-2">
               {PRESET_AMOUNTS.map((a) => (
@@ -187,7 +187,7 @@ export default function SendMoneyModal({
                   className={`px-3 py-1 rounded-lg text-xs font-bold ${
                     amount === a
                       ? "bg-amber-500 text-black"
-                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                      : "bg-white/[0.06] text-zinc-300"
                   }`}
                 >
                   E{a}
@@ -203,7 +203,7 @@ export default function SendMoneyModal({
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white"
+              className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white"
             >
               {CATEGORIES.map((c) => (
                 <option key={c}>{c}</option>
@@ -220,7 +220,7 @@ export default function SendMoneyModal({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="e.g. Weekly fuel float"
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white"
+              className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white"
             />
           </div>
 
@@ -228,7 +228,7 @@ export default function SendMoneyModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold"
+              className="px-4 py-2.5 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold"
             >
               Cancel
             </button>
