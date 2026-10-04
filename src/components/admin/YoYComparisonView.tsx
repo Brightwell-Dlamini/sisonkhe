@@ -1,8 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Scale, TrendingUp, TrendingDown } from "lucide-react";
+import { Scale, TrendingUp, TrendingDown } from "lucide-react";
 import type { YoYView } from "@/lib/admin/yoy";
+import {
+  Select,
+  Input,
+  PageHeader,
+  TableSkeleton,
+  EmptyState,
+} from "@/components/ui";
 
 interface RouteOption {
   id: string;
@@ -55,53 +62,43 @@ export default function YoYComparisonView() {
   }, [load]);
 
   return (
-    <div className="space-y-4">
-      <header>
-        <h1 className="text-xl font-black text-zinc-900 dark:text-white uppercase tracking-tight">
-          Year-over-Year Comparison
-        </h1>
-        <p className="text-xs text-zinc-500 mt-1">
-          Compare corridor performance across years.
-        </p>
-      </header>
+    <div>
+      <PageHeader
+        title="Year-over-Year Comparison"
+        description="Compare corridor performance across years."
+      />
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <select
-          value={routeId}
-          onChange={(e) => setRouteId(e.target.value)}
-          className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2 text-xs font-bold text-zinc-900 dark:text-white"
-        >
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-3 mb-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <Select value={routeId} onChange={(e) => setRouteId(e.target.value)}>
           {routes.map((r) => (
             <option key={r.id} value={r.id}>
               {r.region}: {r.origin} → {r.destination}
             </option>
           ))}
-        </select>
-        <input
+        </Select>
+        <Input
           type="number"
           value={year}
           onChange={(e) => setYear(Number(e.target.value))}
-          className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2 text-xs font-mono text-zinc-900 dark:text-white"
           placeholder="Year A"
+          className="font-mono"
         />
-        <input
+        <Input
           type="number"
           value={compareYear}
           onChange={(e) => setCompareYear(Number(e.target.value))}
-          className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2 text-xs font-mono text-zinc-900 dark:text-white"
           placeholder="Year B"
+          className="font-mono"
         />
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
-        </div>
+        <TableSkeleton rows={3} />
       ) : view ? (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-4">
+        <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2">
-            <Scale className="w-4 h-4 text-purple-600" />
-            <h3 className="text-sm font-black uppercase text-zinc-900 dark:text-white">
+            <Scale className="w-4 h-4 text-purple-400" />
+            <h3 className="text-sm font-black uppercase text-white">
               {view.routeLabel} — {view.year} vs {view.compareYear}
             </h3>
           </div>
@@ -112,12 +109,12 @@ export default function YoYComparisonView() {
               return (
                 <div
                   key={m.label}
-                  className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
+                  className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]"
                 >
                   <div className="text-[10px] uppercase font-bold text-zinc-400">
                     {m.label}
                   </div>
-                  <div className="text-2xl font-mono font-black text-zinc-900 dark:text-white mt-1">
+                  <div className="text-2xl font-mono font-black text-white mt-1">
                     {m.thisYear.toLocaleString()}
                   </div>
                   <div className="flex items-center justify-between mt-2 text-xs">
@@ -126,7 +123,7 @@ export default function YoYComparisonView() {
                     </span>
                     <span
                       className={`font-bold flex items-center gap-1 ${
-                        positive ? "text-emerald-600" : "text-red-600"
+                        positive ? "text-emerald-400" : "text-rose-400"
                       }`}
                     >
                       {positive ? (
@@ -148,7 +145,13 @@ export default function YoYComparisonView() {
             </div>
           )}
         </div>
-      ) : null}
+      ) : (
+        <EmptyState
+          icon={Scale}
+          title="Select a route"
+          description="Choose a corridor and years to compare."
+        />
+      )}
     </div>
   );
 }
