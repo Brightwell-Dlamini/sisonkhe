@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { useOperators, type CreateOperatorRequest } from "@/hooks/useOperators";
 import type { OperatorRow } from "@/lib/operators/queries";
+import { operatorHealth } from "@/lib/intelligence/entityHealth";
+import { HealthChips } from "@/components/intelligence/HealthChips";
 import OperatorFormModal from "./OperatorFormModal";
 import OperatorActionsMenu from "./OperatorActionsMenu";
 import OperatorCredentialsDialog from "./OperatorCredentialsDialog";
@@ -36,6 +38,7 @@ export default function OperatorsList() {
   } = useOperators();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [healthOnly, setHealthOnly] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingOperator, setEditingOperator] = useState<OperatorRow | null>(null);
   const [credentials, setCredentials] = useState<{
@@ -51,6 +54,14 @@ export default function OperatorsList() {
 
   const filtered = useMemo(() => {
     return operators.filter((o) => {
+      if (healthOnly) {
+        const signals = operatorHealth({
+          masterCardStatus: o.masterCard?.status,
+          vehicleCount: o.vehicleCount,
+          isActive: (o as { isActive?: boolean }).isActive,
+        });
+        if (signals.length === 0) return false;
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         return (
@@ -64,7 +75,20 @@ export default function OperatorsList() {
       }
       return true;
     });
-  }, [operators, searchQuery]);
+  }, [operators, searchQuery, healthOnly]);
+
+  const attentionCount = useMemo(
+    () =>
+      operators.filter(
+        (o) =>
+          operatorHealth({
+            masterCardStatus: o.masterCard?.status,
+            vehicleCount: o.vehicleCount,
+            isActive: (o as { isActive?: boolean }).isActive,
+          }).length > 0
+      ).length,
+    [operators]
+  );
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -126,17 +150,29 @@ export default function OperatorsList() {
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
       <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-        <div className="relative flex-1 min-w-0">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-          <input
-            type="text"
-            placeholder="Search by name, company, phone, or email…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-          />
+        <div className="relative flex-1 min-w-0 flex gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[10rem]">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+            <input
+              type="text"
+              placeholder="Search by name, company, phone, or email…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setHealthOnly((v) => !v)}
+            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
+              healthOnly
+                ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                : "bg-white/[0.03] text-zinc-400 border-white/[0.06] hover:text-zinc-200"
+            }`}
+          >
+            Needs attention{attentionCount > 0 ? ` (${attentionCount})` : ""}
+          </button>
         </div>
         <div className="flex gap-2">
           <button
@@ -178,79 +214,112 @@ export default function OperatorsList() {
         <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-12 text-center">
           <Building2 className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
           <p className="text-sm font-bold text-zinc-400">No operators found</p>
-          <p className="text-xs text-zinc-500 mt-1">Register your first operator to get started.</p>
+          <p className="text-xs text-zinc-500 mt-1">
+            Register your first operator to get started.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {filtered.map((op) => (
-            <div
-              key={op.id}
-              className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4 flex flex-col gap-3 hover:border-white/[0.1] transition-colors"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="font-black text-white text-sm truncate">{op.name}</div>
-                  <div className="text-[11px] text-amber-400 font-bold uppercase tracking-wider truncate">
-                    {op.companyName}
+          {filtered.map((op) => {
+            const isActive = (op as { isActive?: boolean }).isActive !== false;
+            const balance =
+              op.masterCard?.balanceSzl ??
+              (op.masterCard as { balance?: number } | null)?.balance ??
+              0;
+            const signals = operatorHealth({
+              masterCardStatus: op.masterCard?.status,
+              vehicleCount: op.vehicleCount,
+              isActive,
+            });
+            return (
+              <div
+                key={op.id}
+                className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4 flex flex-col gap-3 hover:border-white/[0.1] transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-black text-white text-sm truncate">
+                      {op.name}
+                    </div>
+                    <div className="text-[11px] text-amber-400 font-bold uppercase tracking-wider truncate">
+                      {op.companyName}
+                    </div>
+                    <div className="mt-1.5">
+                      <HealthChips signals={signals} />
+                    </div>
+                  </div>
+                  <OperatorActionsMenu
+                    operator={op}
+                    onEdit={() => setEditingOperator(op)}
+                    onDeactivate={() => handleDeactivate(op)}
+                    onResetPassword={() => handleResetPassword(op)}
+                  />
+                </div>
+
+                <div className="space-y-1.5 text-[11px] text-zinc-400">
+                  {op.phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-3 h-3 shrink-0" />
+                      <span className="font-mono">{op.phone}</span>
+                    </div>
+                  )}
+                  {op.email && (
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{op.email}</span>
+                    </div>
+                  )}
+                  <div className="text-[10px] text-zinc-500">
+                    Fleet: {op.vehicleCount ?? 0} vehicle
+                    {(op.vehicleCount ?? 0) === 1 ? "" : "s"}
                   </div>
                 </div>
-                <OperatorActionsMenu
-                  operator={op}
-                  onEdit={() => setEditingOperator(op)}
-                  onDeactivate={() => handleDeactivate(op)}
-                  onResetPassword={() => handleResetPassword(op)}
-                />
-              </div>
 
-              <div className="space-y-1.5 text-[11px] text-zinc-400">
-                {op.phone && (
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-3 h-3 shrink-0" />
-                    <span className="font-mono">{op.phone}</span>
+                {op.masterCard && (
+                  <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                        <CreditCard className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] uppercase font-bold text-amber-500/80 tracking-wider">
+                          Master Card · {op.masterCard.status}
+                        </div>
+                        <div className="font-mono text-xs text-white truncate">
+                          {op.masterCard.cardNumber}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-[10px] text-zinc-500 uppercase font-bold">
+                        Balance
+                      </div>
+                      <div className="font-mono font-black text-emerald-400 text-sm">
+                        E{Number(balance).toFixed(2)}
+                      </div>
+                    </div>
                   </div>
                 )}
-                {op.email && (
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-3 h-3 shrink-0" />
-                    <span className="truncate">{op.email}</span>
-                  </div>
-                )}
-              </div>
 
-              {op.masterCard && (
-                <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 flex items-center justify-between">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
-                      <CreditCard className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[10px] uppercase font-bold text-amber-500/80 tracking-wider">Master Card</div>
-                      <div className="font-mono text-xs text-white truncate">{op.masterCard.cardNumber}</div>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-[10px] text-zinc-500 uppercase font-bold">Balance</div>
-                    <div className="font-mono font-black text-emerald-400 text-sm">
-                      E{(op.masterCard.balance ?? 0).toFixed(2)}
-                    </div>
-                  </div>
+                <div className="flex items-center justify-between pt-1 border-t border-white/[0.06]">
+                  <span
+                    className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                      isActive
+                        ? "bg-emerald-500/15 text-emerald-400"
+                        : "bg-zinc-500/15 text-zinc-400"
+                    }`}
+                  >
+                    {isActive ? "Active" : "Inactive"}
+                  </span>
+                  {op.username && (
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      @{op.username}
+                    </span>
+                  )}
                 </div>
-              )}
-
-              <div className="flex items-center justify-between pt-1 border-t border-white/[0.06]">
-                <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                  op.isActive
-                    ? "bg-emerald-500/15 text-emerald-400"
-                    : "bg-zinc-500/15 text-zinc-400"
-                }`}>
-                  {op.isActive ? "Active" : "Inactive"}
-                </span>
-                {op.username && (
-                  <span className="text-[10px] font-mono text-zinc-500">@{op.username}</span>
-                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
