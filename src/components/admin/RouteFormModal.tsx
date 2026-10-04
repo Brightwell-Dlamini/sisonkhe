@@ -42,9 +42,9 @@ export default function RouteFormModal({ route, onClose, onSaved }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-md w-full">
-        <div className="flex items-start justify-between p-5 border-b border-zinc-100 dark:border-zinc-800">
-          <h3 className="text-sm font-black uppercase text-zinc-900 dark:text-white">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-md w-full">
+        <div className="flex items-start justify-between p-5 border-b border-white/[0.06]">
+          <h3 className="text-sm font-black uppercase text-white">
             {route ? "Edit Route" : "Add Route"}
           </h3>
           <button onClick={onClose} className="p-1.5 rounded-lg text-zinc-400">
@@ -58,7 +58,7 @@ export default function RouteFormModal({ route, onClose, onSaved }: Props) {
                 required
                 value={origin}
                 onChange={(e) => setOrigin(e.target.value)}
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-900 dark:text-white"
+                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2 text-sm text-white"
               />
             </Field>
             <Field label="Destination *">
@@ -66,7 +66,7 @@ export default function RouteFormModal({ route, onClose, onSaved }: Props) {
                 required
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-900 dark:text-white"
+                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2 text-sm text-white"
               />
             </Field>
           </div>
@@ -74,7 +74,7 @@ export default function RouteFormModal({ route, onClose, onSaved }: Props) {
             <select
               value={region}
               onChange={(e) => setRegion(e.target.value)}
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-900 dark:text-white"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2 text-sm text-white"
             >
               {REGIONS.map((r) => <option key={r}>{r}</option>)}
             </select>
@@ -85,7 +85,7 @@ export default function RouteFormModal({ route, onClose, onSaved }: Props) {
                 type="number"
                 value={distanceKm}
                 onChange={(e) => setDistanceKm(Number(e.target.value))}
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm font-mono text-zinc-900 dark:text-white"
+                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2 text-sm font-mono text-white"
               />
             </Field>
             <Field label="Fare (E)">
@@ -93,7 +93,7 @@ export default function RouteFormModal({ route, onClose, onSaved }: Props) {
                 type="number"
                 value={baseFareE}
                 onChange={(e) => setBaseFareE(Number(e.target.value))}
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm font-mono text-zinc-900 dark:text-white"
+                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2 text-sm font-mono text-white"
               />
             </Field>
           </div>
@@ -102,14 +102,14 @@ export default function RouteFormModal({ route, onClose, onSaved }: Props) {
               <input
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm font-mono text-zinc-900 dark:text-white"
+                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2 text-sm font-mono text-white"
               />
             </Field>
             <Field label="Default Bay">
               <input
                 value={defaultBay}
                 onChange={(e) => setDefaultBay(e.target.value)}
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm font-mono text-zinc-900 dark:text-white"
+                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2 text-sm font-mono text-white"
               />
             </Field>
           </div>
@@ -117,7 +117,7 @@ export default function RouteFormModal({ route, onClose, onSaved }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold"
+              className="px-4 py-2.5 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold"
             >
               Cancel
             </button>
