@@ -67,9 +67,9 @@ export default function AdvertFormModal({ advert, onClose, onSaved }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full max-h-[92vh] overflow-y-auto">
-        <div className="flex items-start justify-between p-5 border-b border-zinc-100 dark:border-zinc-800">
-          <h3 className="text-sm font-black uppercase text-zinc-900 dark:text-white">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl max-w-lg w-full max-h-[92vh] overflow-y-auto">
+        <div className="flex items-start justify-between p-5 border-b border-white/[0.06]">
+          <h3 className="text-sm font-black uppercase text-white">
             {advert ? "Edit Advert" : "New Advert"}
           </h3>
           <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-zinc-400">
@@ -94,7 +94,7 @@ export default function AdvertFormModal({ advert, onClose, onSaved }: Props) {
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm resize-none"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2 text-sm text-white resize-none"
             />
           </div>
 
@@ -117,7 +117,7 @@ export default function AdvertFormModal({ advert, onClose, onSaved }: Props) {
                   className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase ${
                     regions.includes(r)
                       ? "bg-amber-500 text-black"
-                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                      : "bg-white/[0.06] text-zinc-500"
                   }`}
                 >
                   {r}
@@ -126,7 +126,7 @@ export default function AdvertFormModal({ advert, onClose, onSaved }: Props) {
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-xs font-bold">
+          <label className="flex items-center gap-2 text-xs font-bold text-zinc-300">
             <input
               type="checkbox"
               checked={isActive}
@@ -140,7 +140,7 @@ export default function AdvertFormModal({ advert, onClose, onSaved }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-xs font-bold"
+              className="px-4 py-2.5 bg-white/[0.06] rounded-xl text-xs font-bold text-zinc-300"
             >
               Cancel
             </button>
@@ -179,7 +179,7 @@ function Input({
         value={value}
         required={required}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-900 dark:text-white"
+        className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2 text-sm text-white"
       />
     </div>
   );
