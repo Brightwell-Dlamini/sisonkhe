@@ -1,6 +1,6 @@
 "use client";
 
-import { Flame, Radio } from "lucide-react";
+import { Flame, Search, X } from "lucide-react";
 import type { KioskSnapshot, PublicRoute, PublicVehicle } from "@/lib/public/kiosk";
 
 interface Props {
@@ -8,17 +8,21 @@ interface Props {
   selectedDestination: string | null;
   onSelectDestination: (destination: string | null) => void;
   activeCorridorCount: number;
+  search: string;
+  onSearchChange: (value: string) => void;
 }
 
 /**
  * Commuter-facing hero: "Where are you heading today?"
- * Destination chips filter the live departures list below.
+ * Search + destination chips live inside this section.
  */
 export default function HeadingTodayHub({
   snapshot,
   selectedDestination,
   onSelectDestination,
   activeCorridorCount,
+  search,
+  onSearchChange,
 }: Props) {
   const popular = buildPopularDestinations(snapshot.routes);
   const announcement =
@@ -28,7 +32,6 @@ export default function HeadingTodayHub({
 
   return (
     <section className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-b from-emerald-950/40 via-[#0a1210] to-[#0A0A0A] p-5 sm:p-7">
-      {/* Soft glow */}
       <div className="pointer-events-none absolute -top-24 left-1/2 h-48 w-[80%] -translate-x-1/2 rounded-full bg-emerald-500/10 blur-3xl" />
 
       <div className="relative">
@@ -50,16 +53,41 @@ export default function HeadingTodayHub({
           loading bay in seconds.
         </p>
 
+        {/* Search — inside the section, under the question */}
+        <div className="relative mt-5 max-w-xl">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search destination, route, or vehicle plate…"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="w-full bg-black/40 border border-white/[0.1] rounded-xl pl-10 pr-10 py-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all font-mono"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => onSearchChange("")}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+              aria-label="Clear search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
         {/* Popular destination chips */}
-        <div className="mt-5 flex flex-wrap items-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1 font-mono text-[10px] font-black uppercase tracking-[0.15em] text-amber-400/90 shrink-0">
             <Flame className="w-3 h-3" />
             Popular:
           </span>
 
           <Chip
-            active={selectedDestination === null}
-            onClick={() => onSelectDestination(null)}
+            active={selectedDestination === null && !search}
+            onClick={() => {
+              onSelectDestination(null);
+              onSearchChange("");
+            }}
             fire
           >
             All Routes
@@ -69,11 +97,12 @@ export default function HeadingTodayHub({
             <Chip
               key={dest}
               active={selectedDestination === dest}
-              onClick={() =>
-                onSelectDestination(
-                  selectedDestination === dest ? null : dest
-                )
-              }
+              onClick={() => {
+                const next =
+                  selectedDestination === dest ? null : dest;
+                onSelectDestination(next);
+                if (next) onSearchChange("");
+              }}
             >
               {dest}
             </Chip>
@@ -99,7 +128,8 @@ export default function HeadingTodayHub({
             <>
               <span className="hidden sm:inline text-zinc-700">·</span>
               <span className="font-mono text-[10px] text-emerald-500/80 shrink-0 whitespace-nowrap">
-                {activeCorridorCount} corridor{activeCorridorCount === 1 ? "" : "s"} active
+                {activeCorridorCount} corridor
+                {activeCorridorCount === 1 ? "" : "s"} active
               </span>
             </>
           )}
@@ -151,7 +181,6 @@ function buildPopularDestinations(routes: PublicRoute[]): string[] {
   const uniquePopular = [...new Set(popular)];
   if (uniquePopular.length >= 3) return uniquePopular.slice(0, 8);
 
-  // Fall back to most common destinations in this region
   const counts = new Map<string, number>();
   for (const r of routes) {
     counts.set(r.destination, (counts.get(r.destination) ?? 0) + 1);
@@ -164,10 +193,7 @@ function buildPopularDestinations(routes: PublicRoute[]): string[] {
 
 function deriveRankStatus(vehicles: PublicVehicle[]): string {
   if (vehicles.length === 0) return "Standby";
-  const delayed = vehicles.some((v) => v.status === "Delayed");
-  if (delayed) return "Delays reported";
-  const boarding = vehicles.some((v) => v.status === "Loading");
-  if (boarding) return "Normal Service";
+  if (vehicles.some((v) => v.status === "Delayed")) return "Delays reported";
   return "Normal Service";
 }
 
