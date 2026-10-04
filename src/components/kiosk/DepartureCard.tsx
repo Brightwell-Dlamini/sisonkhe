@@ -1,10 +1,9 @@
 "use client";
 
-import { Clock, MapPin, User } from "lucide-react";
+import { MapPin, User } from "lucide-react";
 import type { PublicVehicle, PublicRoute } from "@/lib/public/kiosk";
 import RoutePill from "./RoutePill";
 import StatusIndicator from "./StatusIndicator";
-import OccupancyBar from "./OccupancyBar";
 import DestinationHero from "./DestinationHero";
 
 interface Props {
@@ -13,53 +12,47 @@ interface Props {
   onSpeak?: () => void;
   voiceEnabled?: boolean;
   prominent?: boolean;
+  /** Stagger delay index for entrance animation */
+  index?: number;
 }
 
 export default function DepartureCard({
   route,
   vehicles,
-  onSpeak,
-  voiceEnabled,
   prominent = false,
+  index = 0,
 }: Props) {
   const lead = vehicles[0];
   const isBoarding = lead?.status === "Loading";
-  const isFull = lead?.status === "Full";
-  const isDelayed = lead?.status === "Delayed";
   const isDeparted = lead?.status === "Departed";
 
   const routeCode = makeRouteCode(route.origin, route.destination);
   const tone = regionTone(route.region);
-
-  // Simulated occupancy — real value comes from the API later
-  const seatsTotal = lead?.seatingCapacity ?? 15;
-  const seatsFilled = isBoarding
-    ? Math.min(seatsTotal, 12 + ((lead?.currentQueuePosition ?? 0) % 3))
-    : isFull
-    ? seatsTotal
-    : isDeparted
-    ? seatsTotal
-    : Math.min(seatsTotal - 1, 4 + ((lead?.currentQueuePosition ?? 0) % 6));
-
   const departingInMin = estimatedDepartureMinutes(lead);
 
   return (
     <article
-      className={`kiosk-surface kiosk-surface-hover kiosk-card-in rounded-2xl overflow-hidden transition-all ${
-        isBoarding ? "ring-1 ring-emerald-500/40 shadow-[0_0_40px_-10px_rgba(16,185,129,0.35)]" : ""
+      className={`relative kiosk-surface kiosk-surface-hover kiosk-card-in rounded-2xl overflow-hidden transition-all ${
+        isBoarding
+          ? "ring-1 ring-emerald-500/40 shadow-[0_0_40px_-10px_rgba(16,185,129,0.35)]"
+          : ""
       }`}
+      style={{ animationDelay: `${Math.min(index, 12) * 35}ms` }}
     >
-      {/* Top status bar — visible only when boarding */}
+      {/* Left emphasis bar for boarding */}
+      {isBoarding && (
+        <span className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500" />
+      )}
+
       {isBoarding && (
         <div className="h-0.5 w-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500" />
       )}
 
-      <div className={`p-5 sm:p-6 ${prominent ? "sm:p-7" : ""}`}>
-        {/* Row 1 — route code + destination + status */}
+      <div className={`p-5 sm:p-6 ${isBoarding || prominent ? "sm:p-7" : ""}`}>
         <div className="flex items-start gap-4 sm:gap-5">
           <RoutePill
             code={routeCode}
-            size={prominent ? "xl" : "lg"}
+            size={isBoarding || prominent ? "xl" : "lg"}
             tone={tone}
           />
 
@@ -68,7 +61,7 @@ export default function DepartureCard({
               origin={route.origin}
               destination={route.destination}
               region={route.region}
-              prominent={prominent}
+              prominent={isBoarding || prominent}
             />
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <span className="font-mono text-xs font-black text-emerald-400 tracking-tight">
@@ -90,13 +83,12 @@ export default function DepartureCard({
             </div>
           </div>
 
-          {/* Right column — status + departure time */}
           <div className="text-right shrink-0">
             {lead ? (
               <>
                 <StatusIndicator
                   status={lead.status}
-                  size={prominent ? "lg" : "md"}
+                  size={isBoarding || prominent ? "lg" : "md"}
                   pulse={isBoarding}
                 />
                 {!isDeparted && (
@@ -125,7 +117,6 @@ export default function DepartureCard({
           </div>
         </div>
 
-        {/* Row 2 — the vehicle details */}
         {lead && !isDeparted && (
           <div className="mt-5 pt-5 border-t border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4 sm:gap-6 flex-wrap min-w-0">
@@ -140,18 +131,10 @@ export default function DepartureCard({
                 </div>
               )}
             </div>
-
-            <div className="w-full sm:w-52 shrink-0">
-              <OccupancyBar
-                filled={seatsFilled}
-                total={seatsTotal}
-                boarding={isBoarding}
-              />
-            </div>
+            {/* Occupancy hidden until real seat counts exist in the API */}
           </div>
         )}
 
-        {/* Row 3 — queue (upcoming vehicles on same route) */}
         {vehicles.length > 1 && (
           <div className="mt-4 pt-4 border-t border-white/[0.04] flex items-center gap-3 overflow-x-auto scrollbar-none">
             <span className="font-mono text-[10px] font-black uppercase tracking-[0.15em] text-zinc-600 shrink-0">

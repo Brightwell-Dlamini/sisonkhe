@@ -170,7 +170,7 @@ export default function KioskModeTransit({
         <EmptyRegion region={snapshot.region} />
       ) : (
         <div className="space-y-3">
-          {sortedRoutes.map((route) => {
+          {sortedRoutes.map((route, i) => {
             const vehicles = grouped.get(route.id) ?? [];
             return (
               <DepartureCard
@@ -180,6 +180,7 @@ export default function KioskModeTransit({
                 onSpeak={() => handleSpeak(route, vehicles[0])}
                 voiceEnabled={voiceEnabled}
                 prominent={vehicles[0]?.status === "Loading"}
+                index={i}
               />
             );
           })}

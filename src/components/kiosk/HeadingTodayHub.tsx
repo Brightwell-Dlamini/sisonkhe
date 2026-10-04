@@ -12,10 +12,6 @@ interface Props {
   onSearchChange: (value: string) => void;
 }
 
-/**
- * Commuter-facing hero: "Where are you heading today?"
- * Search + destination chips live inside this section.
- */
 export default function HeadingTodayHub({
   snapshot,
   selectedDestination,
@@ -25,9 +21,10 @@ export default function HeadingTodayHub({
   onSearchChange,
 }: Props) {
   const popular = buildPopularDestinations(snapshot.routes);
-  const announcement =
+  const announcement = cleanAnnouncement(
     snapshot.regionConfig?.announcement?.trim() ||
-    defaultAnnouncement(snapshot);
+      defaultAnnouncement(snapshot)
+  );
   const rankStatus = deriveRankStatus(snapshot.vehicles);
 
   return (
@@ -45,7 +42,7 @@ export default function HeadingTodayHub({
           </span>
         </div>
 
-        <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white uppercase leading-[1.1]">
+        <h1 className="font-space text-2xl sm:text-[2.35rem] font-bold tracking-[-0.03em] text-white uppercase leading-[1.08]">
           Where are you heading today?
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-zinc-400">
@@ -53,15 +50,15 @@ export default function HeadingTodayHub({
           loading bay in seconds.
         </p>
 
-        {/* Search — inside the section, under the question */}
-        <div className="relative mt-5 max-w-xl">
+        {/* Full-width search inside the section */}
+        <div className="relative mt-5">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
           <input
             type="text"
             placeholder="Search destination, route, or vehicle plate…"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full bg-black/40 border border-white/[0.1] rounded-xl pl-10 pr-10 py-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all font-mono"
+            className="w-full bg-black/40 border border-white/[0.1] rounded-xl pl-10 pr-10 py-3.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all font-mono"
           />
           {search && (
             <button
@@ -75,7 +72,6 @@ export default function HeadingTodayHub({
           )}
         </div>
 
-        {/* Popular destination chips */}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1 font-mono text-[10px] font-black uppercase tracking-[0.15em] text-amber-400/90 shrink-0">
             <Flame className="w-3 h-3" />
@@ -98,8 +94,7 @@ export default function HeadingTodayHub({
               key={dest}
               active={selectedDestination === dest}
               onClick={() => {
-                const next =
-                  selectedDestination === dest ? null : dest;
+                const next = selectedDestination === dest ? null : dest;
                 onSelectDestination(next);
                 if (next) onSearchChange("");
               }}
@@ -109,7 +104,6 @@ export default function HeadingTodayHub({
           ))}
         </div>
 
-        {/* Rank status + announcement */}
         <div className="mt-5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-xl border border-emerald-500/15 bg-black/30 px-3.5 py-2.5">
           <div className="flex items-center gap-2 shrink-0">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
@@ -172,6 +166,11 @@ function Chip({
       )}
     </button>
   );
+}
+
+/** Strip leading "Announcement:" if the DB string already includes it. */
+function cleanAnnouncement(raw: string): string {
+  return raw.replace(/^\s*announcement\s*:\s*/i, "").trim();
 }
 
 function buildPopularDestinations(routes: PublicRoute[]): string[] {

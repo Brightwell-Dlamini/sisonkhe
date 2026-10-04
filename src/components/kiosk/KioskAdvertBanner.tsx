@@ -76,28 +76,28 @@ export default function KioskAdvertBanner({ region }: Props) {
       onMouseLeave={() => setPaused(false)}
       className="fixed bottom-0 left-0 right-0 z-30"
     >
-      <div className="h-px bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
-      <div className="bg-black/85 backdrop-blur-lg border-t border-amber-500/20">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+      <div className="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
+      <div className="bg-black/90 backdrop-blur-lg border-t border-amber-500/15">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-900 border border-amber-500/30 shrink-0">
+            <div className="w-9 h-9 rounded-lg overflow-hidden bg-zinc-900 border border-white/[0.08] shrink-0">
               <img
                 src={current.imageUrl}
-                alt={current.title}
+                alt=""
                 className="w-full h-full object-cover"
               />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500 text-black font-mono text-[9px] font-black uppercase tracking-[0.15em]">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/90 text-black font-mono text-[9px] font-black uppercase tracking-[0.12em]">
                   <Megaphone className="w-2.5 h-2.5" />
                   Sponsored
                 </span>
-                <span className="font-mono text-[10px] font-black uppercase tracking-widest text-amber-400">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500 truncate">
                   {current.sponsorName}
                 </span>
               </div>
-              <div className="kiosk-destination text-sm text-white uppercase truncate mt-1">
+              <div className="font-space text-sm font-semibold text-white truncate mt-0.5">
                 {current.title}
               </div>
             </div>
@@ -107,7 +107,8 @@ export default function KioskAdvertBanner({ region }: Props) {
             {current.promoCode && (
               <button
                 onClick={handleCopy}
-                className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-mono text-[11px] font-black cursor-pointer transition-colors"
+                type="button"
+                className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] text-zinc-300 font-mono text-[11px] font-bold cursor-pointer transition-colors"
               >
                 <Tag className="w-3 h-3" />
                 {current.promoCode}
@@ -132,8 +133,10 @@ export default function KioskAdvertBanner({ region }: Props) {
             )}
 
             <button
+              type="button"
               onClick={() => setDismissed(true)}
               className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-white/[0.06] transition-colors"
+              aria-label="Dismiss advert"
             >
               <X className="w-4 h-4" />
             </button>

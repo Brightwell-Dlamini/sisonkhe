@@ -19,8 +19,8 @@ export default function DestinationHero({
         {region} Region · from {origin}
       </div>
       <h2
-        className={`kiosk-destination text-white truncate ${
-          prominent ? "text-4xl sm:text-5xl" : "text-2xl sm:text-3xl"
+        className={`font-space font-bold tracking-tight text-white truncate ${
+          prominent ? "text-3xl sm:text-4xl" : "text-xl sm:text-2xl"
         }`}
       >
         {destination}
