@@ -86,10 +86,10 @@ export default function VehicleDetailsModal({ registrationNumber, onClose }: Pro
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-start justify-between p-5 border-b border-zinc-100 dark:border-zinc-800">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-start justify-between p-5 border-b border-white/[0.06]">
           <div>
-            <h3 className="text-sm font-black uppercase tracking-wide text-zinc-900 dark:text-white">
+            <h3 className="text-sm font-black uppercase tracking-wide text-white">
               Vehicle Details
             </h3>
             <p className="text-xs text-zinc-500 font-mono mt-0.5">
@@ -120,40 +120,40 @@ export default function VehicleDetailsModal({ registrationNumber, onClose }: Pro
           {data && (
             <>
               <Row label="Plate" value={data.registrationNumber} mono />
-              <Row label="VIC" value={data.vic ?? "—"} mono />
+              <Row label="VIC" value={data.vic ?? "\u2014"} mono />
               <Row label="Vehicle" value={`${data.make} ${data.model}`} />
               <Row label="Classification" value={data.classification} />
               <Row label="Seats" value={String(data.seatingCapacity)} />
               <Row label="Status" value={data.status} />
-              <Row label="Loading Bay" value={data.loadingBay ?? "—"} />
+              <Row label="Loading Bay" value={data.loadingBay ?? "\u2014"} />
 
-              <div className="pt-2 mt-2 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+              <div className="pt-2 mt-2 border-t border-white/[0.06] space-y-3">
                 <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400">
                   Permit & Compliance
                 </span>
-                <Row label="Permit #" value={data.permitNumber ?? "—"} mono />
-                <Row label="Permit Status" value={data.permitStatus ?? "—"} />
-                <Row label="Permit Expiry" value={data.permitExpiryDate ?? "—"} mono />
-                <Row label="COF #" value={data.cofNumber ?? "—"} mono />
-                <Row label="COF Expiry" value={data.cofExpiryDate ?? "—"} mono />
+                <Row label="Permit #" value={data.permitNumber ?? "\u2014"} mono />
+                <Row label="Permit Status" value={data.permitStatus ?? "\u2014"} />
+                <Row label="Permit Expiry" value={data.permitExpiryDate ?? "\u2014"} mono />
+                <Row label="COF #" value={data.cofNumber ?? "\u2014"} mono />
+                <Row label="COF Expiry" value={data.cofExpiryDate ?? "\u2014"} mono />
               </div>
 
-              <div className="pt-2 mt-2 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+              <div className="pt-2 mt-2 border-t border-white/[0.06] space-y-3">
                 <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400">
                   Ownership
                 </span>
-                <Row label="Owner" value={data.ownerName ?? "—"} />
-                <Row label="Owner Phone" value={data.ownerPhone ?? "—"} mono />
-                <Row label="Association" value={data.association ?? "—"} />
+                <Row label="Owner" value={data.ownerName ?? "\u2014"} />
+                <Row label="Owner Phone" value={data.ownerPhone ?? "\u2014"} mono />
+                <Row label="Association" value={data.association ?? "\u2014"} />
               </div>
 
-              <div className="pt-2 mt-2 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+              <div className="pt-2 mt-2 border-t border-white/[0.06] space-y-3">
                 <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400">
                   Driver
                 </span>
-                <Row label="Name" value={data.driverName ?? "—"} />
-                <Row label="Phone" value={data.driverPhone ?? "—"} mono />
-                <Row label="PDP Status" value={data.driverPdpStatus ?? "—"} />
+                <Row label="Name" value={data.driverName ?? "\u2014"} />
+                <Row label="Phone" value={data.driverPhone ?? "\u2014"} mono />
+                <Row label="PDP Status" value={data.driverPdpStatus ?? "\u2014"} />
               </div>
             </>
           )}
@@ -165,9 +165,9 @@ export default function VehicleDetailsModal({ registrationNumber, onClose }: Pro
 
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-1.5 border-b border-zinc-100 dark:border-zinc-800 last:border-0">
+    <div className="flex items-center justify-between gap-3 py-1.5 border-b border-white/[0.06] last:border-0">
       <span className="text-zinc-500">{label}</span>
-      <span className={`font-bold text-zinc-900 dark:text-white text-right ${mono ? "font-mono" : ""}`}>
+      <span className={`font-bold text-white text-right ${mono ? "font-mono" : ""}`}>
         {value}
       </span>
     </div>
