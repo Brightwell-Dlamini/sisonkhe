@@ -71,10 +71,10 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-white dark:bg-zinc-900 flex items-start justify-between p-5 border-b border-zinc-100 dark:border-zinc-800">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto">
+        <div className="sticky top-0 z-10 bg-[#0F0F10] flex items-start justify-between p-5 border-b border-white/[0.06]">
           <div>
-            <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900 dark:text-white">
+            <h2 className="text-sm font-black uppercase tracking-wide text-white">
               {mode === "create" ? "Register Driver" : "Edit Driver"}
             </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
@@ -86,7 +86,7 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]"
           >
             <X className="w-4 h-4" />
           </button>
@@ -94,14 +94,14 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
 
         <form onSubmit={handleSubmit} className="p-5 space-y-5">
           {error && (
-            <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 text-xs flex items-start gap-2">
+            <div className="bg-red-950/40 border border-red-800 text-red-300 rounded-xl p-3 text-xs flex items-start gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
           <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
+            <legend className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
               Personal Details
             </legend>
 
@@ -179,7 +179,7 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
           </fieldset>
 
           <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
+            <legend className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
               Driving Licence
             </legend>
 
@@ -206,7 +206,7 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
           </fieldset>
 
           <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
+            <legend className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
               Professional Driving Permit (PDP)
             </legend>
 
@@ -258,7 +258,7 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
           </fieldset>
 
           <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
+            <legend className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
               Emergency Contact
             </legend>
 
@@ -291,7 +291,7 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
           </fieldset>
 
           <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
+            <legend className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
               Assignment
             </legend>
 
@@ -320,11 +320,11 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
             </div>
           </fieldset>
 
-          <div className="flex gap-2 pt-2 sticky bottom-0 bg-white dark:bg-zinc-900 pb-1">
+          <div className="flex gap-2 pt-2 sticky bottom-0 bg-[#0F0F10] pb-1">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold"
+              className="px-4 py-2.5 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold"
             >
               Cancel
             </button>
@@ -343,18 +343,13 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
       <style jsx>{`
         .input {
           width: 100%;
-          background-color: rgb(250 250 250);
-          border: 1px solid rgb(228 228 231);
+          background-color: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: 0.75rem;
           padding: 0.625rem 0.875rem;
           font-size: 0.875rem;
-          color: rgb(24 24 27);
-          outline: none;
-        }
-        :global(.dark) .input {
-          background-color: rgb(9 9 11);
-          border-color: rgb(39 39 42);
           color: white;
+          outline: none;
         }
         .input:focus {
           border-color: rgb(16 185 129);
@@ -375,11 +370,11 @@ function Field({
 }) {
   return (
     <div>
-      <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+      <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
         {label}
       </label>
       {children}
-      {error && <p className="text-[10px] text-red-600 mt-1">{error}</p>}
+      {error && <p className="text-[10px] text-red-400 mt-1">{error}</p>}
     </div>
   );
 }
