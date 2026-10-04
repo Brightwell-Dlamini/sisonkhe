@@ -67,19 +67,19 @@ export default function TripsTab() {
       />
 
       {error && (
-        <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl px-4 py-3 text-xs flex items-center gap-2">
+        <div className="bg-red-950/40 border border-red-800 text-red-300 rounded-xl px-4 py-3 text-xs flex items-center gap-2">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {error}
         </div>
       )}
 
       {loading && !data ? (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-center py-16">
+        <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl flex items-center justify-center py-16">
           <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
         </div>
       ) : !data || data.trips.length === 0 ? (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-center py-16 px-4">
-          <div className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+        <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl text-center py-16 px-4">
+          <div className="text-sm font-bold text-zinc-300">
             No trips in this range
           </div>
           <div className="text-xs text-zinc-500 mt-1">
@@ -91,7 +91,7 @@ export default function TripsTab() {
           <TripsTable trips={data.trips} />
 
           {data.totalPages > 1 && (
-            <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-3">
+            <div className="flex items-center justify-between bg-[#0F0F10] border border-white/[0.06] rounded-2xl px-4 py-3">
               <div className="text-xs text-zinc-500">
                 Page <strong>{data.page}</strong> of <strong>{data.totalPages}</strong> •{" "}
                 <strong>{data.total}</strong> total trips
@@ -100,14 +100,14 @@ export default function TripsTab() {
                 <button
                   onClick={() => setPage(Math.max(1, page - 1))}
                   disabled={page <= 1}
-                  className="p-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 cursor-pointer"
+                  className="p-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.08] text-zinc-300 disabled:opacity-40 cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setPage(Math.min(data.totalPages, page + 1))}
                   disabled={page >= data.totalPages}
-                  className="p-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 cursor-pointer"
+                  className="p-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.08] text-zinc-300 disabled:opacity-40 cursor-pointer"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
