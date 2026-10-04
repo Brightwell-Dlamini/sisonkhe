@@ -12,13 +12,13 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-[#050505] flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-[#050505] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex justify-center mb-3">
             <BrandMark href="/kiosk" size="lg" showSubtitle />
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="text-xs text-zinc-400">
             National Taxi Rank Management • Kingdom of Eswatini
           </p>
         </div>
