@@ -2,11 +2,13 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Heuristic diagnostic assistant. Queries real data, produces readable answers.
+ * Heuristic diagnostic assistant powered by the intelligence snapshot.
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
+import type { ResolvedUser } from "../auth/roles";
+import { buildIntelligenceSnapshot } from "../intelligence/snapshot";
 
 export interface AssistantResponse {
   query: string;
@@ -14,11 +16,105 @@ export interface AssistantResponse {
   bullets: string[];
 }
 
-export async function runAssistantQuery(query: string): Promise<AssistantResponse> {
-  const admin = createSupabaseAdminClient();
+export async function runAssistantQuery(
+  query: string,
+  user?: ResolvedUser | null
+): Promise<AssistantResponse> {
   const q = query.toLowerCase();
 
-  // Expired / expiring permits
+  if (user) {
+    try {
+      const snap = await buildIntelligenceSnapshot(user);
+
+      if (
+        q.includes("what should") ||
+        q.includes("next") ||
+        q.includes("priority") ||
+        q.includes("do now") ||
+        q.includes("focus")
+      ) {
+        const top = snap.queue.slice(0, 8);
+        return {
+          query,
+          answer: snap.briefing,
+          bullets: top.map(
+            (w) => `[${w.severity.toUpperCase()}] ${w.title} — ${w.detail}`
+          ),
+        };
+      }
+
+      if (q.includes("risk") || q.includes("threat") || q.includes("exposure")) {
+        return {
+          query,
+          answer:
+            snap.risks.length === 0
+              ? "No elevated risk signals in the current window."
+              : `${snap.risks.length} active risk signal${snap.risks.length === 1 ? "" : "s"}.`,
+          bullets: snap.risks.map((r) => `${r.label}: ${r.value} — ${r.detail}`),
+        };
+      }
+
+      if (
+        q.includes("permit") ||
+        q.includes("expir") ||
+        q.includes("cof") ||
+        q.includes("compliance")
+      ) {
+        const k = snap.kpis;
+        return {
+          query,
+          answer: `${k.permitsExpired} expired permits, ${k.permitsExpiring30d} within 30 days, ${k.cofExpired} expired COF, ${k.renewalsPending} renewals pending.`,
+          bullets: snap.queue
+            .filter((w) =>
+              [
+                "permit_expired",
+                "permit_expiring",
+                "cof_expired",
+                "cof_expiring",
+                "renewal_pending",
+              ].includes(w.kind)
+            )
+            .slice(0, 10)
+            .map((w) => `${w.title} — ${w.detail}`),
+        };
+      }
+
+      if (q.includes("queue") || q.includes("work") || q.includes("backlog")) {
+        return {
+          query,
+          answer: `${snap.queue.length} ranked work items. ${snap.primaryAction ? `Primary: ${snap.primaryAction.label}.` : ""}`,
+          bullets: snap.queue.slice(0, 10).map((w) => `${w.title} — ${w.detail}`),
+        };
+      }
+
+      if (
+        q.includes("status") ||
+        q.includes("health") ||
+        q.includes("summary") ||
+        q.trim().length < 12
+      ) {
+        const k = snap.kpis;
+        return {
+          query,
+          answer: snap.briefing,
+          bullets: [
+            `Fleet: ${k.vehiclesTotal} vehicles · ${k.driversTotal} drivers · ${k.operatorsTotal} operators`,
+            `Compliance: ${k.permitsExpired} expired permits · ${k.cofExpired} expired COF`,
+            `Pipeline: ${k.renewalsPending} renewals · ${k.printQueueOpen} print candidates`,
+            `Assignment: ${k.vehiclesUnassigned} vehicles without drivers · ${k.driversSuspended} suspended`,
+            ...(snap.primaryAction
+              ? [`Next: ${snap.primaryAction.label} — ${snap.primaryAction.reason}`]
+              : []),
+          ],
+        };
+      }
+    } catch (err) {
+      console.warn("[assistant] snapshot failed, falling back:", err);
+    }
+  }
+
+  const admin = createSupabaseAdminClient();
+
   if (q.includes("permit") || q.includes("expir")) {
     const today = new Date().toISOString().split("T")[0];
     const in30 = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
@@ -39,16 +135,17 @@ export async function runAssistantQuery(query: string): Promise<AssistantRespons
       answer: `${expired?.length ?? 0} permits are expired and ${expiring?.length ?? 0} expire within 30 days.`,
       bullets: [
         ...(expired ?? []).slice(0, 5).map(
-          (v) => `EXPIRED: ${v.registration_number} (${v.owner_name}) — ${v.permit_expiry_date}`
+          (v) =>
+            `EXPIRED: ${v.registration_number} (${v.owner_name}) — ${v.permit_expiry_date}`
         ),
         ...(expiring ?? []).slice(0, 5).map(
-          (v) => `EXPIRING SOON: ${v.registration_number} (${v.owner_name}) — ${v.permit_expiry_date}`
+          (v) =>
+            `EXPIRING SOON: ${v.registration_number} (${v.owner_name}) — ${v.permit_expiry_date}`
         ),
       ],
     };
   }
 
-  // Security
   if (q.includes("security") || q.includes("threat")) {
     const { data: events } = await admin
       .from("sync_events")
@@ -60,9 +157,7 @@ export async function runAssistantQuery(query: string): Promise<AssistantRespons
       const cid = e.client_id as string;
       clientCounts.set(cid, (clientCounts.get(cid) ?? 0) + 1);
     }
-    const suspicious = Array.from(clientCounts.entries()).filter(
-      ([, c]) => c >= 20
-    );
+    const suspicious = Array.from(clientCounts.entries()).filter(([, c]) => c >= 20);
 
     return {
       query,
@@ -71,26 +166,6 @@ export async function runAssistantQuery(query: string): Promise<AssistantRespons
     };
   }
 
-  // System health
-  if (q.includes("health") || q.includes("status") || q.includes("error")) {
-    const { count: pending } = await admin
-      .from("system_errors")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "Pending");
-
-    const { count: resolved } = await admin
-      .from("system_errors")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "Resolved");
-
-    return {
-      query,
-      answer: `${pending ?? 0} errors pending, ${resolved ?? 0} resolved.`,
-      bullets: [],
-    };
-  }
-
-  // Default
   const { count: vehicles } = await admin
     .from("vehicles")
     .select("*", { count: "exact", head: true });
