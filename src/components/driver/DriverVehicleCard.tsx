@@ -36,9 +36,9 @@ export default function DriverVehicleCard({
 }: Props) {
   if (!vehicle) {
     return (
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 text-center">
-        <Car className="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-700 mb-2" />
-        <div className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-6 text-center">
+        <Car className="w-8 h-8 mx-auto text-zinc-600 mb-2" />
+        <div className="text-sm font-bold text-zinc-300">
           No vehicle assigned
         </div>
         <div className="text-xs text-zinc-500 mt-1">
@@ -55,7 +55,7 @@ export default function DriverVehicleCard({
       {/* 8:30 PM indicator */}
       {isAfter830PM && (
         <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl p-3 flex items-center gap-2 text-xs">
-          <Moon className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+          <Moon className="w-4 h-4 text-purple-400" />
           <span className="text-purple-900 dark:text-purple-200 font-bold">
             After 8:30 PM — Queue advances to tomorrow's rotation.
           </span>
@@ -64,24 +64,24 @@ export default function DriverVehicleCard({
 
       {/* Main card */}
       <div
-        className={`bg-white dark:bg-zinc-900 border rounded-2xl p-5 ${
+        className={`bg-[#0F0F10] border rounded-2xl p-5 ${
           isLead
             ? "border-emerald-500 dark:border-emerald-500 ring-2 ring-emerald-500/20"
-            : "border-zinc-200 dark:border-zinc-800"
+            : "border-white/[0.06]"
         }`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
-            <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-cyan-400 flex items-center justify-center shrink-0">
               <Car className="w-6 h-6" />
             </div>
             <div>
-              <div className="font-mono font-black text-zinc-900 dark:text-white text-lg">
+              <div className="font-mono font-black text-white text-lg">
                 {vehicle.registrationNumber}
               </div>
               <div className="flex items-center gap-2 text-xs text-zinc-500 mt-0.5">
                 {vehicle.vic && (
-                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                  <span className="font-mono font-bold text-emerald-400">
                     {vehicle.vic}
                   </span>
                 )}
@@ -102,18 +102,18 @@ export default function DriverVehicleCard({
               {vehicle.status}
             </span>
             {isLead && (
-              <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">
+              <div className="text-[10px] text-emerald-400 font-bold mt-1">
                 LEAD VEHICLE
               </div>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 pt-4 border-t border-white/[0.06] text-xs">
           {vehicle.routeOrigin && vehicle.routeDestination && (
             <div className="col-span-2 flex items-center gap-2">
-              <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span className="text-zinc-700 dark:text-zinc-300">
+              <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="text-zinc-300">
                 <strong>{vehicle.routeOrigin}</strong> → {vehicle.routeDestination}
               </span>
             </div>
@@ -121,7 +121,7 @@ export default function DriverVehicleCard({
           {vehicle.loadingBay && (
             <div className="text-right">
               <span className="text-zinc-500">Bay: </span>
-              <strong className="font-mono text-zinc-900 dark:text-white">
+              <strong className="font-mono text-white">
                 {vehicle.loadingBay}
               </strong>
             </div>
@@ -173,12 +173,12 @@ export default function DriverVehicleCard({
         )}
 
         {marshal && (
-          <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+          <div className="mt-4 pt-4 border-t border-white/[0.06] flex items-center justify-between">
             <div>
               <div className="text-[10px] uppercase font-black text-zinc-400">
                 Station Marshal
               </div>
-              <div className="text-xs font-bold text-zinc-900 dark:text-white">
+              <div className="text-xs font-bold text-white">
                 {marshal.fullName}
               </div>
               {marshal.phone && (
@@ -197,7 +197,7 @@ export default function DriverVehicleCard({
           </div>
         )}
 
-        <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+        <div className="mt-4 pt-4 border-t border-white/[0.06]">
           <CabStatusButtons
             currentStatus={vehicle.status}
             onUpdate={onStatusUpdate}
