@@ -25,17 +25,17 @@ const STATUS_COLORS: Record<string, string> = {
 export default function TicketList({ tickets, loading }: Props) {
   if (loading && tickets.length === 0) {
     return (
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-center py-16">
-        <Loader2 className="w-5 h-5 animate-spin text-red-600" />
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin text-rose-400" />
       </div>
     );
   }
 
   if (tickets.length === 0) {
     return (
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-center py-16 px-4">
-        <Inbox className="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-700 mb-2" />
-        <div className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl text-center py-16 px-4">
+        <Inbox className="w-8 h-8 mx-auto text-zinc-600 mb-2" />
+        <div className="text-sm font-bold text-zinc-300">
           No tickets issued yet
         </div>
         <div className="text-xs text-zinc-500 mt-1">
@@ -46,14 +46,14 @@ export default function TicketList({ tickets, loading }: Props) {
   }
 
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
-      <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+    <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl overflow-hidden">
+      <div className="divide-y divide-white/[0.06]">
         {tickets.map((t) => (
           <div key={t.id} className="p-4 space-y-2">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-mono font-black text-sm text-zinc-900 dark:text-white">
+                  <span className="font-mono font-black text-sm text-white">
                     {t.ticketNumber}
                   </span>
                   <span
@@ -67,26 +67,26 @@ export default function TicketList({ tickets, loading }: Props) {
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <div className="text-lg font-black font-mono text-zinc-900 dark:text-white">
+                <div className="text-lg font-black font-mono text-white">
                   E {t.amountSzl.toFixed(2)}
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              <div className="bg-zinc-50 dark:bg-zinc-950 p-2.5 rounded-lg">
+              <div className="bg-white/[0.03] p-2.5 rounded-lg">
                 <div className="text-[9px] uppercase font-bold text-zinc-400">
                   Vehicle
                 </div>
-                <div className="font-mono font-bold text-zinc-900 dark:text-white">
+                <div className="font-mono font-bold text-white">
                   {t.vehicleReg}
                 </div>
               </div>
-              <div className="bg-zinc-50 dark:bg-zinc-950 p-2.5 rounded-lg">
+              <div className="bg-white/[0.03] p-2.5 rounded-lg">
                 <div className="text-[9px] uppercase font-bold text-zinc-400">
                   Offence
                 </div>
-                <div className="font-bold text-zinc-900 dark:text-white">
+                <div className="font-bold text-white">
                   {t.offenseType}
                 </div>
               </div>
