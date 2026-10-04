@@ -11,12 +11,12 @@ interface Props {
 export default function MarshalCardModal({ marshal, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-md w-full">
-        <div className="flex items-start justify-between p-5 border-b border-zinc-100 dark:border-zinc-800">
-          <h3 className="text-sm font-black uppercase text-zinc-900 dark:text-white">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-md w-full">
+        <div className="flex items-start justify-between p-5 border-b border-white/[0.06]">
+          <h3 className="text-sm font-black uppercase text-white">
             Marshal Card
           </h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700">
+          <button onClick={onClose} className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -66,7 +66,7 @@ export default function MarshalCardModal({ marshal, onClose }: Props) {
                 <div className="text-[10px] uppercase opacity-70 flex items-center gap-1">
                   <Phone className="w-3 h-3" /> Contact
                 </div>
-                <div className="font-mono">{marshal.cellNo ?? marshal.phone ?? "\u2014"}</div>
+                <div className="font-mono">{marshal.cellNo ?? marshal.phone ?? "—"}</div>
               </div>
             </div>
 
