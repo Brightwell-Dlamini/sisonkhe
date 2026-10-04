@@ -75,7 +75,7 @@ export default function SecurityCentre() {
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="text-xl font-black text-zinc-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+        <h1 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-2">
           <Shield className="w-5 h-5 text-red-600" />
           Security Centre
         </h1>
@@ -84,8 +84,8 @@ export default function SecurityCentre() {
         </p>
       </header>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
-        <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-3 flex items-center gap-2">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5">
+        <h3 className="text-xs font-black uppercase tracking-wider text-white mb-3 flex items-center gap-2">
           <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
           Live Threats ({threats.length})
         </h3>
@@ -115,8 +115,8 @@ export default function SecurityCentre() {
         )}
       </div>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-4">
-        <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5 space-y-4">
+        <h3 className="text-xs font-black uppercase tracking-wider text-white">
           IP Access Lists
         </h3>
 
@@ -124,7 +124,7 @@ export default function SecurityCentre() {
           <select
             value={listType}
             onChange={(e) => setListType(e.target.value as "white" | "black")}
-            className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold"
+            className="bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2 text-xs font-bold text-white"
           >
             <option value="white">Whitelist</option>
             <option value="black">Blacklist</option>
@@ -133,7 +133,7 @@ export default function SecurityCentre() {
             value={newIp}
             onChange={(e) => setNewIp(e.target.value)}
             placeholder="192.168.1.1"
-            className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono min-w-[150px]"
+            className="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2 text-xs font-mono text-white min-w-[150px]"
           />
           <button
             onClick={addIp}

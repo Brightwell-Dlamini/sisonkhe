@@ -19,12 +19,12 @@ export default function AuthLayout({
             <BrandMark href="/kiosk" size="lg" showSubtitle />
           </div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            National Taxi Rank Management \u2022 Kingdom of Eswatini
+            National Taxi Rank Management • Kingdom of Eswatini
           </p>
         </div>
         {children}
         <p className="text-center text-[10px] text-zinc-400 mt-8">
-          \u00a9 2026 National Road Transportation Council
+          © 2026 National Road Transportation Council
         </p>
       </div>
     </div>
