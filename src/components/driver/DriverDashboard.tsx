@@ -63,7 +63,9 @@ export default function DriverDashboard() {
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
-        <DriverHeader context={context} onMessage={() => setShowMessage(true)} />
+        <div className="flex-1 min-w-0">
+          <DriverHeader context={context} onPhotoUploaded={refresh} />
+        </div>
         <IconButton
           icon={RefreshCw}
           label="Refresh"
@@ -97,7 +99,11 @@ export default function DriverDashboard() {
 
       {tab === "vehicle" && (
         <div className="space-y-4">
-          <DriverVehicleCard context={context} onStatusUpdate={handleStatusUpdate} />
+          <DriverVehicleCard
+            context={context}
+            onStatusUpdate={handleStatusUpdate}
+            onMessageMarshal={() => setShowMessage(true)}
+          />
           <DriverTripsList trips={trips} />
         </div>
       )}
