@@ -4,7 +4,6 @@ import { useState } from "react";
 import {
   Loader2,
   AlertCircle,
-  RefreshCw,
   ListOrdered,
   Calendar,
   Scale,
@@ -62,7 +61,6 @@ export default function MarshalDashboard() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Build driver list for comms tab
   const drivers = useMemo(() => {
     const map = new Map<string, { id: string; name: string; phone: string | null }>();
     for (const v of allVehicles) {
@@ -80,14 +78,14 @@ export default function MarshalDashboard() {
   if (loading && !context) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+        <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
       </div>
     );
   }
 
   if (error && !context) {
     return (
-      <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl px-4 py-3 text-xs flex items-start gap-2">
+      <div className="bg-rose-500/10 border border-rose-500/25 text-rose-400 rounded-xl px-4 py-3 text-xs flex items-start gap-2">
         <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
         <div>
           <div className="font-bold">Could not load terminal</div>
@@ -102,9 +100,9 @@ export default function MarshalDashboard() {
   return (
     <div className="space-y-5">
       {toast && (
-        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 rounded-xl px-4 py-3 text-xs font-bold flex items-center justify-between">
+        <div className="bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 rounded-xl px-4 py-3 text-xs font-bold flex items-center justify-between">
           <span>{toast}</span>
-          <button onClick={() => setToast(null)} className="text-emerald-600">✕</button>
+          <button onClick={() => setToast(null)} className="text-emerald-400">✕</button>
         </div>
       )}
 
@@ -112,8 +110,7 @@ export default function MarshalDashboard() {
 
       {summary && <SummaryCards summary={summary} />}
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-x-auto scrollbar-none">
+      <div className="flex items-center gap-1 bg-[#0F0F10] border border-white/[0.06] p-1 rounded-2xl overflow-x-auto scrollbar-none">
         {TABS.map((t) => {
           const Icon = t.icon;
           return (
@@ -122,8 +119,8 @@ export default function MarshalDashboard() {
               onClick={() => setTab(t.id)}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
                 tab === t.id
-                  ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
-                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+                  ? "bg-white/[0.08] text-white"
+                  : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -133,17 +130,16 @@ export default function MarshalDashboard() {
         })}
       </div>
 
-      {/* Tab content */}
       {tab === "queue" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2 space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+              <h2 className="text-sm font-black uppercase tracking-wider text-white">
                 Live Queue
               </h2>
               <button
                 onClick={() => setShowAddVehicle(true)}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-bold flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Add Vehicle
