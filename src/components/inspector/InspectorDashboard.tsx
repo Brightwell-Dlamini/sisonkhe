@@ -122,9 +122,9 @@ export default function InspectorDashboard() {
       )}
 
       {/* Search inputs */}
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-4">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5 space-y-4">
         <div>
-          <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900 dark:text-white mb-3">
+          <h2 className="text-sm font-black uppercase tracking-wide text-white mb-3">
             Scan or Search Vehicle
           </h2>
 
@@ -136,7 +136,7 @@ export default function InspectorDashboard() {
                 placeholder="Enter registration (e.g. HSD 101 BM)"
                 value={manualReg}
                 onChange={(e) => setManualReg(e.target.value.toUpperCase())}
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-red-500"
+                className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl pl-10 pr-4 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-red-500"
               />
             </div>
             <button
@@ -161,7 +161,7 @@ export default function InspectorDashboard() {
               className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1.5"
             >
               <QrCode className="w-3.5 h-3.5" />
-              {scanner.scanning ? "Scanning…" : "Scan QR Code"}
+              {scanner.scanning ? "Scanning\u2026" : "Scan QR Code"}
             </button>
           </div>
         </div>
