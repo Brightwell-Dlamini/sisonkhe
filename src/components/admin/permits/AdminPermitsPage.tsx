@@ -6,18 +6,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  Search,
-  Loader2,
-  AlertCircle,
-  RefreshCw,
-  Printer,
-} from "lucide-react";
+import { Search, RefreshCw, Printer } from "lucide-react";
 import Link from "next/link";
 import { useRenewals } from "@/hooks/useRenewals";
 import type { RenewalRow } from "@/lib/renewals/queries";
 import PendingRenewalsTable from "./PendingRenewalsTable";
 import RenewalApprovalModal from "./RenewalApprovalModal";
+import {
+  Button,
+  IconButton,
+  Input,
+  PageHeader,
+  TableSkeleton,
+  useToast,
+} from "@/components/ui";
 
 type Tab = "pending" | "approved" | "rejected";
 
@@ -34,7 +36,7 @@ export default function AdminPermitsPage() {
 
   const [search, setSearch] = useState("");
   const [active, setActive] = useState<RenewalRow | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const toast = useToast();
 
   const filtered = useMemo(() => {
     if (!search.trim()) return renewals;
@@ -47,18 +49,13 @@ export default function AdminPermitsPage() {
     );
   }, [renewals, search]);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 4000);
-  };
-
   const handleApprove = async (
     id: string,
     input: Parameters<typeof approveRenewal>[1]
   ) => {
     const result = await approveRenewal(id, input);
     if (result.success) {
-      showToast(`Renewal ${input.decision.toLowerCase()}`);
+      toast.success(`Renewal ${input.decision.toLowerCase()}`);
       setActive(null);
       return { success: true };
     }
@@ -66,35 +63,28 @@ export default function AdminPermitsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-black text-zinc-900 dark:text-white uppercase tracking-tight">
-            Permit Renewals
-          </h1>
-          <p className="text-xs text-zinc-500 mt-1">
-            Review operator-submitted renewal requests. Approvals update the
-            vehicle's permit and archive the old one.
-          </p>
-        </div>
-        <Link
-          href="/admin/permits/print"
-          className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm self-start sm:self-auto"
-        >
-          <Printer className="w-4 h-4" />
-          Print Queue
-        </Link>
-      </header>
+    <div>
+      <PageHeader
+        title="Permit Renewals"
+        description="Review operator-submitted renewal requests. Approvals update the vehicle's permit and archive the old one."
+        actions={
+          <Link href="/admin/permits/print">
+            <Button leadingIcon={Printer} size="sm">
+              Print Queue
+            </Button>
+          </Link>
+        }
+      />
 
-      <div className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 w-fit">
+      <div className="flex items-center gap-1.5 bg-[#0F0F10] border border-white/[0.06] p-1 rounded-2xl w-fit mb-4">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               tab === t.id
-                ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
-                : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+                ? "bg-white/[0.08] text-white"
+                : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
             {t.label}
@@ -102,44 +92,32 @@ export default function AdminPermitsPage() {
         ))}
       </div>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-          <input
-            type="text"
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-3 mb-4 flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+        <div className="flex-1 min-w-0">
+          <Input
+            leadingIcon={Search}
             placeholder="Search by vehicle, operator, or request ID…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500"
           />
         </div>
-        <button
+        <IconButton
+          icon={RefreshCw}
+          label="Refresh"
           onClick={refresh}
           disabled={loading}
-          className="px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold hover:bg-zinc-200 flex items-center gap-1.5"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+          className={loading ? "[&_svg]:animate-spin" : ""}
+        />
       </div>
 
-      {toast && (
-        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 rounded-xl px-4 py-3 text-xs font-bold">
-          {toast}
-        </div>
-      )}
-
       {error && (
-        <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl px-4 py-3 text-xs flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        <div className="mb-4 bg-rose-500/10 border border-rose-500/25 text-rose-400 rounded-xl p-3 text-xs font-medium">
           {error}
         </div>
       )}
 
       {loading && renewals.length === 0 ? (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-center py-16">
-          <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
-        </div>
+        <TableSkeleton rows={6} />
       ) : (
         <PendingRenewalsTable
           renewals={filtered}
