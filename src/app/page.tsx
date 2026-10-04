@@ -55,7 +55,7 @@ export default function HomePage() {
           <BrandMark size="lg" showSubtitle />
         </div>
         <Loader2 className="w-5 h-5 animate-spin text-emerald-600 mx-auto" />
-        <div className="text-xs text-zinc-500 mt-3">Redirecting\u2026</div>
+        <div className="text-xs text-zinc-500 mt-3">Redirecting </div>
       </div>
     </div>
   );
