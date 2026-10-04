@@ -65,14 +65,14 @@ export default function OperatorFormModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-white dark:bg-zinc-900 flex items-start justify-between p-5 border-b border-zinc-100 dark:border-zinc-800">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto">
+        <div className="sticky top-0 z-10 bg-[#0F0F10] flex items-start justify-between p-5 border-b border-white/[0.06]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950/60 flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            <div className="w-9 h-9 rounded-xl bg-amber-950/60 flex items-center justify-center">
+              <Building2 className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900 dark:text-white">
+              <h2 className="text-sm font-black uppercase tracking-wide text-white">
                 {mode === "create" ? "Register Operator" : "Edit Operator"}
               </h2>
               <p className="text-xs text-zinc-500 mt-0.5">
@@ -85,7 +85,7 @@ export default function OperatorFormModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]"
           >
             <X className="w-4 h-4" />
           </button>
@@ -93,14 +93,14 @@ export default function OperatorFormModal({
 
         <form onSubmit={handleSubmit} className="p-5 space-y-6">
           {error && (
-            <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 text-xs flex items-start gap-2">
+            <div className="bg-red-950/40 border border-red-800 text-red-300 rounded-xl p-3 text-xs flex items-start gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
           <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 tracking-widest">
+            <legend className="text-[10px] font-black uppercase text-amber-400 tracking-widest">
               Identity
             </legend>
 
@@ -155,7 +155,7 @@ export default function OperatorFormModal({
           </fieldset>
 
           <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 tracking-widest">
+            <legend className="text-[10px] font-black uppercase text-amber-400 tracking-widest">
               Contact
             </legend>
 
@@ -186,7 +186,7 @@ export default function OperatorFormModal({
           </fieldset>
 
           <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 tracking-widest">
+            <legend className="text-[10px] font-black uppercase text-amber-400 tracking-widest">
               Licensing & banking
             </legend>
 
@@ -220,11 +220,11 @@ export default function OperatorFormModal({
             </Field>
           </fieldset>
 
-          <div className="flex gap-2 pt-2 sticky bottom-0 bg-white dark:bg-zinc-900 pb-1">
+          <div className="flex gap-2 pt-2 sticky bottom-0 bg-[#0F0F10] pb-1">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold"
+              className="px-4 py-2.5 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold"
             >
               Cancel
             </button>
@@ -243,22 +243,17 @@ export default function OperatorFormModal({
       <style jsx>{`
         .input {
           width: 100%;
-          background: rgb(250 250 250);
-          border: 1px solid rgb(228 228 231);
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: 0.75rem;
           padding: 0.5rem 0.75rem;
           font-size: 0.8125rem;
-          color: rgb(24 24 27);
+          color: white;
           outline: none;
         }
         .input:focus {
           border-color: rgb(245 158 11);
           box-shadow: 0 0 0 2px rgb(245 158 11 / 0.2);
-        }
-        .dark .input {
-          background: rgb(9 9 11);
-          border-color: rgb(39 39 42);
-          color: white;
         }
         .input:disabled {
           opacity: 0.6;
@@ -285,7 +280,7 @@ function Field({
       </label>
       {children}
       {error && (
-        <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{error}</p>
+        <p className="text-[10px] text-red-400 mt-0.5">{error}</p>
       )}
     </div>
   );
