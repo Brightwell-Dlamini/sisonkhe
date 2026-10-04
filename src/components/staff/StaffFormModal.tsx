@@ -69,7 +69,7 @@ export default function StaffFormModal({
       phone,
       role,
       region: requiresRegion ? region : null,
-      password: mode === "create" ? password : "", // password ignored on edit
+      password: mode === "create" ? password : "",
     };
 
     const result = await onSubmit(input);
@@ -86,11 +86,10 @@ export default function StaffFormModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-lg w-full max-h-[92vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-start justify-between p-5 border-b border-zinc-100 dark:border-zinc-800">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-lg w-full max-h-[92vh] overflow-y-auto">
+        <div className="flex items-start justify-between p-5 border-b border-white/[0.06]">
           <div>
-            <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900 dark:text-white">
+            <h2 className="text-sm font-black uppercase tracking-wide text-white">
               {mode === "create" ? "Add Staff Member" : "Edit Staff Member"}
             </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
@@ -101,23 +100,22 @@ export default function StaffFormModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Body */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {error && (
-            <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 text-xs flex items-start gap-2">
+            <div className="bg-red-950/40 border border-red-800 text-red-300 rounded-xl p-3 text-xs flex items-start gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
               Full Name
             </label>
             <input
@@ -126,15 +124,15 @@ export default function StaffFormModal({
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="e.g. Sipho Dlamini"
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
             />
             {fieldErrors.fullName && (
-              <p className="text-[10px] text-red-600 mt-1">{fieldErrors.fullName[0]}</p>
+              <p className="text-[10px] text-red-400 mt-1">{fieldErrors.fullName[0]}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
               Email
             </label>
             <input
@@ -144,7 +142,7 @@ export default function StaffFormModal({
               onChange={(e) => setEmail(e.target.value)}
               placeholder="e.g. sipho@transport.gov.sz"
               disabled={mode === "edit"}
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
             />
             {mode === "edit" && (
               <p className="text-[10px] text-zinc-400 mt-1">
@@ -152,12 +150,12 @@ export default function StaffFormModal({
               </p>
             )}
             {fieldErrors.email && (
-              <p className="text-[10px] text-red-600 mt-1">{fieldErrors.email[0]}</p>
+              <p className="text-[10px] text-red-400 mt-1">{fieldErrors.email[0]}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
               Phone (optional)
             </label>
             <input
@@ -165,19 +163,19 @@ export default function StaffFormModal({
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="e.g. +268 7600 0000"
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
               Role
             </label>
             <select
               value={role}
               onChange={(e) => setRole(e.target.value)}
               disabled={mode === "edit"}
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm font-bold text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 disabled:opacity-60"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 disabled:opacity-60"
             >
               {ROLES.map((r) => (
                 <option key={r.value} value={r.value}>
@@ -192,14 +190,14 @@ export default function StaffFormModal({
 
           {requiresRegion && (
             <div>
-              <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+              <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
                 Assigned Region
               </label>
               <select
                 required
                 value={region}
                 onChange={(e) => setRegion(e.target.value)}
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
               >
                 <option value="">— Select region —</option>
                 {REGIONS.map((r) => (
@@ -209,14 +207,14 @@ export default function StaffFormModal({
                 ))}
               </select>
               {fieldErrors.region && (
-                <p className="text-[10px] text-red-600 mt-1">{fieldErrors.region[0]}</p>
+                <p className="text-[10px] text-red-400 mt-1">{fieldErrors.region[0]}</p>
               )}
             </div>
           )}
 
           {mode === "create" && (
             <div>
-              <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+              <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
                 Initial Password
               </label>
               <div className="relative">
@@ -226,13 +224,13 @@ export default function StaffFormModal({
                   minLength={8}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 pr-20 text-sm font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 pr-20 text-sm font-mono text-white focus:outline-none focus:border-emerald-500"
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
-                    className="p-1 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                    className="p-1 rounded text-zinc-400 hover:text-zinc-200"
                     tabIndex={-1}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -240,7 +238,7 @@ export default function StaffFormModal({
                   <button
                     type="button"
                     onClick={regeneratePassword}
-                    className="text-[10px] font-bold uppercase text-emerald-600 hover:text-emerald-700 px-1.5"
+                    className="text-[10px] font-bold uppercase text-emerald-600 hover:text-emerald-500 px-1.5"
                   >
                     New
                   </button>
@@ -256,7 +254,7 @@ export default function StaffFormModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              className="px-4 py-2.5 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold hover:bg-white/[0.08]"
             >
               Cancel
             </button>
