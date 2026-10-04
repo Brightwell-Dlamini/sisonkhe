@@ -44,7 +44,7 @@ export default function RoutesList() {
   };
 
   const handleDelete = async (route: RouteRow) => {
-    if (!confirm(`Delete route ${route.origin} → ${route.destination}?`)) return;
+    if (!confirm(`Delete route ${route.origin} \u2192 ${route.destination}?`)) return;
     const res = await fetch(`/api/admin/routes/${route.id}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) {
@@ -59,7 +59,7 @@ export default function RoutesList() {
     <div className="space-y-4">
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-black text-zinc-900 dark:text-white uppercase tracking-tight">
+          <h1 className="text-xl font-black text-white uppercase tracking-tight">
             Corridors & Routes
           </h1>
           <p className="text-xs text-zinc-500 mt-1">
@@ -84,15 +84,15 @@ export default function RoutesList() {
         </div>
       )}
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
           <input
             type="text"
-            placeholder="Search routes…"
+            placeholder="Search routes\u2026"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-xs text-zinc-900 dark:text-white"
+            className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl pl-10 pr-4 py-2 text-xs text-white"
           />
         </div>
       </div>
@@ -102,10 +102,10 @@ export default function RoutesList() {
           <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
         </div>
       ) : (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
+        <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl overflow-hidden">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-800 text-left text-[10px] font-black uppercase tracking-wider text-zinc-400 bg-zinc-50/50 dark:bg-zinc-950/50">
+              <tr className="border-b border-white/[0.06] text-left text-[10px] font-black uppercase tracking-wider text-zinc-400 bg-white/[0.02]">
                 <th className="px-4 py-3">Region</th>
                 <th className="px-4 py-3">Route</th>
                 <th className="px-4 py-3 text-right">Distance</th>
@@ -118,17 +118,17 @@ export default function RoutesList() {
               {filtered.map((r) => (
                 <tr
                   key={r.id}
-                  className="border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50 dark:hover:bg-zinc-950/50"
+                  className="border-b border-white/[0.06] hover:bg-white/[0.03]"
                 >
-                  <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">{r.region}</td>
-                  <td className="px-4 py-3 font-bold text-zinc-900 dark:text-white">
-                    {r.origin} → {r.destination}
+                  <td className="px-4 py-3 text-zinc-300">{r.region}</td>
+                  <td className="px-4 py-3 font-bold text-white">
+                    {r.origin} \u2192 {r.destination}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-zinc-600">{r.distanceKm} km</td>
+                  <td className="px-4 py-3 text-right font-mono text-zinc-400">{r.distanceKm} km</td>
                   <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
                     E{r.baseFareE.toFixed(2)}
                   </td>
-                  <td className="px-4 py-3 font-mono text-zinc-500 text-[11px]">{r.startTime ?? "—"}</td>
+                  <td className="px-4 py-3 font-mono text-zinc-500 text-[11px]">{r.startTime ?? "\u2014"}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <button
@@ -136,13 +136,13 @@ export default function RoutesList() {
                           setEditing(r);
                           setShowForm(true);
                         }}
-                        className="p-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-600"
+                        className="p-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.10] text-zinc-300"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDelete(r)}
-                        className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/40 hover:bg-red-100 text-red-600"
+                        className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
