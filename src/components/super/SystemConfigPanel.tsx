@@ -45,7 +45,7 @@ export default function SystemConfigPanel() {
   return (
     <div className="space-y-4 max-w-2xl">
       <header>
-        <h1 className="text-xl font-black text-zinc-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+        <h1 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-2">
           <Settings className="w-5 h-5 text-emerald-600" />
           System Configuration
         </h1>
@@ -54,10 +54,10 @@ export default function SystemConfigPanel() {
         </p>
       </header>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-3">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5 space-y-3">
         <div className="flex items-center gap-2">
           <Palette className="w-4 h-4 text-purple-600" />
-          <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+          <h3 className="text-xs font-black uppercase tracking-wider text-white">
             Theme
           </h3>
         </div>
@@ -67,7 +67,7 @@ export default function SystemConfigPanel() {
             setConfig({ ...config, theme: e.target.value });
             void save("theme", e.target.value);
           }}
-          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm font-bold text-zinc-900 dark:text-white"
+          className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2.5 text-sm font-bold text-white"
         >
           {THEMES.map((t) => (
             <option key={t.id} value={t.id}>{t.label}</option>
@@ -78,10 +78,10 @@ export default function SystemConfigPanel() {
         )}
       </div>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-3">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5 space-y-3">
         <div className="flex items-center gap-2">
           <Timer className="w-4 h-4 text-blue-600" />
-          <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+          <h3 className="text-xs font-black uppercase tracking-wider text-white">
             Auto-Switching Display Timer
           </h3>
         </div>
@@ -95,7 +95,7 @@ export default function SystemConfigPanel() {
             max={60}
             value={config.cycle_timer_seconds ?? 12}
             onChange={(e) => setConfig({ ...config, cycle_timer_seconds: Number(e.target.value) })}
-            className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm font-mono font-bold text-zinc-900 dark:text-white"
+            className="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2.5 text-sm font-mono font-bold text-white"
           />
           <button
             onClick={() => save("cycle_timer_seconds", config.cycle_timer_seconds)}
