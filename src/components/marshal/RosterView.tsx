@@ -31,7 +31,7 @@ export default function RosterView() {
 
   if (error || !roster) {
     return (
-      <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl px-4 py-3 text-xs">
+      <div className="bg-rose-500/10 border border-rose-500/25 text-rose-400 rounded-xl px-4 py-3 text-xs">
         {error ?? "No route assigned"}
       </div>
     );
@@ -39,12 +39,12 @@ export default function RosterView() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5">
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-purple-600" />
-              <h3 className="text-sm font-black uppercase tracking-wide text-zinc-900 dark:text-white">
+              <h3 className="text-sm font-black uppercase tracking-wide text-white">
                 {roster.routeOrigin} → {roster.routeDestination}
               </h3>
             </div>
@@ -67,8 +67,8 @@ export default function RosterView() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
-        <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-3">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5">
+        <h4 className="text-xs font-black uppercase tracking-wider text-white mb-3">
           30-Day Calendar
         </h4>
         <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 gap-1.5">
@@ -78,7 +78,7 @@ export default function RosterView() {
               className={`p-2 rounded-xl border text-center ${
                 day.isToday
                   ? "bg-purple-600 text-white border-purple-600"
-                  : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"
+                  : "bg-white/[0.03] border-white/[0.06]"
               }`}
             >
               <div className="text-[9px] uppercase opacity-70 font-bold">
@@ -95,8 +95,8 @@ export default function RosterView() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
-        <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-3">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5">
+        <h4 className="text-xs font-black uppercase tracking-wider text-white mb-3">
           Base Rotation Sequence
         </h4>
         <div className="space-y-2">
@@ -106,7 +106,7 @@ export default function RosterView() {
               className={`p-3 rounded-xl border flex items-center justify-between ${
                 v.isLead
                   ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300"
-                  : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"
+                  : "bg-white/[0.03] border-white/[0.06]"
               }`}
             >
               <div className="flex items-center gap-3">
@@ -118,7 +118,7 @@ export default function RosterView() {
                   #{v.position}
                 </span>
                 <div>
-                  <div className="font-mono font-bold text-zinc-900 dark:text-white text-xs">
+                  <div className="font-mono font-bold text-white text-xs">
                     {v.registrationNumber}
                   </div>
                   <div className="text-[10px] text-zinc-500">
