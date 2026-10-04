@@ -64,10 +64,10 @@ export default function TicketForm({ vehicle, onCancel, onSubmit }: Props) {
   };
 
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-red-300 dark:border-red-800 rounded-2xl p-5 space-y-4">
+    <div className="bg-[#0F0F10] border border-rose-500/30 rounded-2xl p-5 space-y-4">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-sm font-black uppercase text-zinc-900 dark:text-white flex items-center gap-2">
+          <h3 className="text-sm font-black uppercase text-white flex items-center gap-2">
             <FileWarning className="w-4 h-4 text-red-600" />
             Issue Traffic Ticket
           </h3>
@@ -98,7 +98,7 @@ export default function TicketForm({ vehicle, onCancel, onSubmit }: Props) {
           <select
             value={offenseType}
             onChange={(e) => handleOffenceChange(e.target.value)}
-            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white"
+            className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white"
           >
             {OFFENCE_TYPES.map((o) => (
               <option key={o} value={o}>
@@ -118,7 +118,7 @@ export default function TicketForm({ vehicle, onCancel, onSubmit }: Props) {
             max={10000}
             value={amount}
             onChange={(e) => setAmount(Number(e.target.value) || 0)}
-            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-lg font-mono font-black text-zinc-900 dark:text-white"
+            className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-lg font-mono font-black text-white"
           />
         </div>
 
@@ -131,7 +131,7 @@ export default function TicketForm({ vehicle, onCancel, onSubmit }: Props) {
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             placeholder="e.g. Malagwane Hill Speed Trap"
-            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white"
+            className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white"
           />
         </div>
 
@@ -144,7 +144,7 @@ export default function TicketForm({ vehicle, onCancel, onSubmit }: Props) {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Clocked at 98 km/h in an 80 km/h zone…"
-            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white resize-none"
+            className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white resize-none"
           />
         </div>
 
@@ -152,7 +152,7 @@ export default function TicketForm({ vehicle, onCancel, onSubmit }: Props) {
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold"
+            className="px-4 py-2.5 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold"
           >
             Cancel
           </button>
