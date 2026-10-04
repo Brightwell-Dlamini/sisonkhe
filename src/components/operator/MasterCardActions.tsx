@@ -36,7 +36,7 @@ export default function MasterCardActions({
       <button
         onClick={onSend}
         disabled={isFrozen}
-        className="py-3 px-4 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-black rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm"
+        className="py-3 px-4 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-black rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2"
       >
         <Send className="w-4 h-4" />
         Send Money
@@ -44,7 +44,7 @@ export default function MasterCardActions({
 
       <button
         onClick={onReload}
-        className="py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm"
+        className="py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2"
       >
         <Plus className="w-4 h-4" />
         Reload
@@ -55,8 +55,8 @@ export default function MasterCardActions({
         disabled={freezing}
         className={`py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 border ${
           isFrozen
-            ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
-            : "bg-zinc-50 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800"
+            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+            : "bg-white/[0.04] text-zinc-300 border-white/[0.08] hover:bg-white/[0.08]"
         }`}
       >
         {freezing ? (
