@@ -17,7 +17,7 @@ interface Props {
 export default function RenewalsList({ renewals, loading }: Props) {
   if (loading && renewals.length === 0) {
     return (
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-center py-16">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl flex items-center justify-center py-16">
         <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
       </div>
     );
@@ -25,9 +25,9 @@ export default function RenewalsList({ renewals, loading }: Props) {
 
   if (renewals.length === 0) {
     return (
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-12 text-center">
-        <Inbox className="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-700 mb-2" />
-        <div className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-12 text-center">
+        <Inbox className="w-8 h-8 mx-auto text-zinc-600 mb-2" />
+        <div className="text-sm font-bold text-zinc-300">
           No renewal requests yet
         </div>
         <div className="text-xs text-zinc-500 mt-1">
@@ -42,16 +42,16 @@ export default function RenewalsList({ renewals, loading }: Props) {
       {renewals.map((r) => (
         <div
           key={r.id}
-          className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-3"
+          className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5 space-y-3"
         >
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-mono font-black text-zinc-900 dark:text-white">
+                <span className="font-mono font-black text-white">
                   {r.vehicleReg}
                 </span>
                 {r.fleetId && (
-                  <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400">
+                  <span className="text-[10px] font-mono text-amber-400">
                     {r.fleetId}
                   </span>
                 )}
@@ -67,7 +67,7 @@ export default function RenewalsList({ renewals, loading }: Props) {
                 <div className="text-[10px] uppercase font-bold text-zinc-400">
                   Fee
                 </div>
-                <div className="font-mono font-black text-zinc-900 dark:text-white text-sm">
+                <div className="font-mono font-black text-white text-sm">
                   E {r.renewalFeeAmountSzl.toFixed(2)}
                 </div>
               </div>
@@ -75,19 +75,19 @@ export default function RenewalsList({ renewals, loading }: Props) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
-            <div className="bg-zinc-50 dark:bg-zinc-950 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <div className="bg-white/[0.03] p-2.5 rounded-xl border border-white/[0.06]">
               <div className="text-[10px] uppercase text-zinc-400 font-bold">
                 Reason
               </div>
-              <div className="text-zinc-700 dark:text-zinc-300 mt-0.5">
+              <div className="text-zinc-300 mt-0.5">
                 {r.reasonForRenewal}
               </div>
             </div>
-            <div className="bg-zinc-50 dark:bg-zinc-950 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <div className="bg-white/[0.03] p-2.5 rounded-xl border border-white/[0.06]">
               <div className="text-[10px] uppercase text-zinc-400 font-bold">
                 Permit Status
               </div>
-              <div className="text-zinc-700 dark:text-zinc-300 mt-0.5 font-mono">
+              <div className="text-zinc-300 mt-0.5 font-mono">
                 {r.newPermitNumber ?? r.currentPermitNumber ?? "—"}
                 {r.permitExpiryDate && ` (exp ${r.permitExpiryDate})`}
               </div>
@@ -95,7 +95,7 @@ export default function RenewalsList({ renewals, loading }: Props) {
           </div>
 
           {r.renewalNotes && (
-            <div className="text-[11px] text-zinc-500 italic border-t border-zinc-100 dark:border-zinc-800 pt-2">
+            <div className="text-[11px] text-zinc-500 italic border-t border-white/[0.06] pt-2">
               {r.renewalNotes}
             </div>
           )}
