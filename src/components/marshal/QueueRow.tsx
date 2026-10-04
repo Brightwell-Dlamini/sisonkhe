@@ -75,7 +75,7 @@ export default function QueueRow({
     } else if (action === "load") {
       showToast(`${vehicle.registrationNumber}: moved to Loading.`);
     } else if (action === "full_cabin") {
-      showToast(`${vehicle.registrationNumber}: full cabin → departed.`);
+      showToast(`${vehicle.registrationNumber}: full cabin \u2192 departed.`);
     } else if (action === "depart") {
       showToast(`${vehicle.registrationNumber}: departed.`);
     } else {
@@ -109,10 +109,10 @@ export default function QueueRow({
   return (
     <>
       <div
-        className={`bg-white dark:bg-zinc-900 border rounded-2xl p-4 transition-colors ${
+        className={`bg-[#0F0F10] border rounded-2xl p-4 transition-colors ${
           isLead
             ? "border-emerald-500 dark:border-emerald-500 ring-2 ring-emerald-500/20"
-            : "border-zinc-200 dark:border-zinc-800"
+            : "border-white/[0.06]"
         }`}
       >
         <div className="flex items-start gap-3">
@@ -122,11 +122,11 @@ export default function QueueRow({
               isLead
                 ? "bg-emerald-600 text-white"
                 : isQueued
-                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                : "bg-zinc-50 dark:bg-zinc-900 text-zinc-400 border border-dashed border-zinc-300 dark:border-zinc-700"
+                ? "bg-white/[0.06] text-zinc-300"
+                : "bg-[#0F0F10] text-zinc-400 border border-dashed border-white/[0.08]"
             }`}
           >
-            {isQueued ? `#${vehicle.currentQueuePosition}` : "—"}
+            {isQueued ? `#${vehicle.currentQueuePosition}` : "\u2014"}
           </div>
 
           {/* Identity (clickable for details) */}
@@ -136,7 +136,7 @@ export default function QueueRow({
             title="View vehicle details"
           >
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono font-black text-zinc-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+              <span className="font-mono font-black text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                 {vehicle.registrationNumber}
               </span>
               {vehicle.vic && (
@@ -161,12 +161,12 @@ export default function QueueRow({
             <div className="flex items-center gap-3 mt-1 text-[11px] text-zinc-500 flex-wrap">
               <span className="flex items-center gap-1">
                 <Bus className="w-3 h-3" />
-                {vehicle.make} {vehicle.model} • {vehicle.seatingCapacity} seats
+                {vehicle.make} {vehicle.model} \u2022 {vehicle.seatingCapacity} seats
               </span>
               {vehicle.routeOrigin && vehicle.routeDestination && (
                 <span className="flex items-center gap-1">
                   <MapPin className="w-3 h-3" />
-                  {vehicle.routeOrigin} → {vehicle.routeDestination}
+                  {vehicle.routeOrigin} \u2192 {vehicle.routeDestination}
                 </span>
               )}
               {vehicle.driverName && (
@@ -178,13 +178,13 @@ export default function QueueRow({
             </div>
 
             <span className="text-[10px] text-zinc-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors inline-block mt-1 opacity-0 group-hover:opacity-100">
-              View details →
+              View details \u2192
             </span>
           </div>
         </div>
 
         {/* Actions */}
-        <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center gap-1.5 flex-wrap">
+        <div className="mt-3 pt-3 border-t border-white/[0.06] flex items-center gap-1.5 flex-wrap">
           {!isDeparted && vehicle.status !== "Loading" && (
             <ActionButton
               onClick={() => handle("load")}
