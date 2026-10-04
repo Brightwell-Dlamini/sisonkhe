@@ -56,18 +56,18 @@ function LoginForm() {
   }
 
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl p-6 sm:p-8">
+    <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-xl p-6 sm:p-8">
       <div className="mb-6">
-        <h2 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-wide">
+        <h2 className="text-lg font-black text-white uppercase tracking-wide">
           Sign In
         </h2>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+        <p className="text-xs text-zinc-400 mt-1">
           Enter your username, phone number, or National ID
         </p>
       </div>
 
       {error && (
-        <div className="mb-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 flex items-start gap-2 text-xs">
+        <div className="mb-4 bg-red-950/40 border border-red-800 text-red-300 rounded-xl p-3 flex items-start gap-2 text-xs">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
@@ -84,7 +84,7 @@ function LoginForm() {
             onChange={(e) => setIdentifier(e.target.value)}
             autoComplete="username"
             required
-            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+            className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
           />
         </div>
 
@@ -99,12 +99,12 @@ function LoginForm() {
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
               required
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 pr-10 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 pr-10 text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
             />
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200"
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? (
@@ -124,7 +124,7 @@ function LoginForm() {
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Signing in\u2026</span>
+              <span>Signing in…</span>
             </>
           ) : (
             <>
@@ -138,7 +138,7 @@ function LoginForm() {
       <div className="mt-5 space-y-3">
         <Link
           href="/kiosk"
-          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:border-emerald-500/50 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors"
+          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-white/[0.06] bg-white/[0.03] text-xs font-bold text-zinc-200 hover:border-emerald-500/50 hover:text-emerald-400 transition-colors"
         >
           <Monitor className="w-3.5 h-3.5" />
           View public kiosk (live terminal board)
@@ -156,7 +156,7 @@ function LoginForm() {
             <Link href="/register/driver" className="font-bold text-emerald-600 hover:underline">
               Self-register
             </Link>
-            {" \u00b7 "}
+            {" · "}
             <Link href="/register/vehicle" className="font-bold text-emerald-600 hover:underline">
               Register vehicle
             </Link>
@@ -171,7 +171,7 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="text-center text-xs text-zinc-500">Loading\u2026</div>
+        <div className="text-center text-xs text-zinc-500">Loading…</div>
       }
     >
       <LoginForm />
