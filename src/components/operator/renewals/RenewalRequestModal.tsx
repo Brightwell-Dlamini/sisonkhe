@@ -132,10 +132,10 @@ export default function RenewalRequestModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-white dark:bg-zinc-900 flex items-start justify-between p-5 border-b border-zinc-100 dark:border-zinc-800">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto">
+        <div className="sticky top-0 z-10 bg-[#0F0F10] flex items-start justify-between p-5 border-b border-white/[0.06]">
           <div>
-            <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900 dark:text-white">
+            <h2 className="text-sm font-black uppercase tracking-wide text-white">
               Request Permit Renewal
             </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
@@ -164,7 +164,7 @@ export default function RenewalRequestModal({
               Vehicle *
             </label>
             {loadingVehicles ? (
-              <div className="text-xs text-zinc-500">Loading vehicles…</div>
+              <div className="text-xs text-zinc-500">Loading vehicles\u2026</div>
             ) : vehicles.length === 0 ? (
               <div className="text-xs text-red-600">
                 No vehicles registered to your account.
@@ -173,7 +173,7 @@ export default function RenewalRequestModal({
               <select
                 value={vehicleReg}
                 onChange={(e) => setVehicleReg(e.target.value)}
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm font-bold text-zinc-900 dark:text-white"
+                className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm font-bold text-white"
               >
                 {vehicles.map((v) => (
                   <option key={v.registrationNumber} value={v.registrationNumber}>
@@ -185,17 +185,17 @@ export default function RenewalRequestModal({
           </div>
 
           {selectedVehicle && (
-            <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs space-y-1">
+            <div className="p-3 bg-[#0F0F10] rounded-xl border border-white/[0.06] text-xs space-y-1">
               <div className="flex justify-between">
                 <span className="text-zinc-500">Current permit:</span>
-                <span className="font-mono font-bold text-zinc-900 dark:text-white">
-                  {selectedVehicle.permitNumber ?? "—"}
+                <span className="font-mono font-bold text-white">
+                  {selectedVehicle.permitNumber ?? "\u2014"}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-zinc-500">Expires:</span>
                 <span className="font-mono text-amber-600 dark:text-amber-400">
-                  {selectedVehicle.permitExpiryDate ?? "—"}
+                  {selectedVehicle.permitExpiryDate ?? "\u2014"}
                 </span>
               </div>
             </div>
@@ -213,7 +213,7 @@ export default function RenewalRequestModal({
                   className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer text-xs transition-all ${
                     termMonths === t.months
                       ? "border-amber-400 bg-amber-50 dark:bg-amber-950/40"
-                      : "border-zinc-200 dark:border-zinc-800"
+                      : "border-white/[0.06]"
                   }`}
                 >
                   <div className="flex items-center gap-2">
@@ -223,7 +223,7 @@ export default function RenewalRequestModal({
                       onChange={() => setTermMonths(t.months)}
                       className="text-amber-600"
                     />
-                    <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                    <span className="font-bold text-zinc-200">
                       {t.label}
                     </span>
                   </div>
@@ -243,7 +243,7 @@ export default function RenewalRequestModal({
             <select
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white"
+              className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white"
             >
               <option>Routine annual renewal</option>
               <option>Permit already expired</option>
@@ -262,8 +262,8 @@ export default function RenewalRequestModal({
               rows={2}
               value={comments}
               onChange={(e) => setComments(e.target.value)}
-              placeholder="Any additional context for the reviewing officer…"
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white resize-none"
+              placeholder="Any additional context for the reviewing officer\u2026"
+              className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white resize-none"
             />
           </div>
 
@@ -278,7 +278,7 @@ export default function RenewalRequestModal({
                 value={operatorLicenseNumber}
                 onChange={(e) => setOperatorLicenseNumber(e.target.value)}
                 placeholder="OP-HHO-2024-0012"
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs font-mono text-zinc-900 dark:text-white"
+                className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-xs font-mono text-white"
               />
             </div>
             <div>
@@ -290,7 +290,7 @@ export default function RenewalRequestModal({
                 value={concessionId}
                 onChange={(e) => setConcessionId(e.target.value)}
                 placeholder="CNC-SZ-402"
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs font-mono text-zinc-900 dark:text-white"
+                className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-xs font-mono text-white"
               />
             </div>
             <div>
@@ -302,7 +302,7 @@ export default function RenewalRequestModal({
                 value={odometerReading}
                 onChange={(e) => setOdometerReading(e.target.value)}
                 placeholder="124500"
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs font-mono text-zinc-900 dark:text-white"
+                className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-xs font-mono text-white"
               />
             </div>
             <div>
@@ -314,7 +314,7 @@ export default function RenewalRequestModal({
                 value={yearOfManufacture}
                 onChange={(e) => setYearOfManufacture(e.target.value)}
                 placeholder="2018"
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs font-mono text-zinc-900 dark:text-white"
+                className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-xs font-mono text-white"
               />
             </div>
             <div className="sm:col-span-2">
@@ -325,8 +325,8 @@ export default function RenewalRequestModal({
                 type="text"
                 value={insurancePolicy}
                 onChange={(e) => setInsurancePolicy(e.target.value)}
-                placeholder="e.g. Swaziland Royal Insurance — SR-FLT-2911"
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 dark:text-white"
+                placeholder="e.g. Swaziland Royal Insurance \u2014 SR-FLT-2911"
+                className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-xs text-white"
               />
             </div>
           </div>
@@ -348,7 +348,7 @@ export default function RenewalRequestModal({
                 />
               </label>
             </div>
-            <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <div className="p-3 bg-[#0F0F10] rounded-xl border border-white/[0.06]">
               {supportingDocuments.length === 0 ? (
                 <div className="text-[11px] text-zinc-400">
                   No files attached. Optional.
@@ -358,9 +358,9 @@ export default function RenewalRequestModal({
                   {supportingDocuments.map((f, i) => (
                     <div
                       key={i}
-                      className="flex items-center justify-between text-[11px] text-zinc-700 dark:text-zinc-300 font-mono"
+                      className="flex items-center justify-between text-[11px] text-zinc-300 font-mono"
                     >
-                      <span className="truncate">📄 {f}</span>
+                      <span className="truncate">\ud83d\udcc4 {f}</span>
                       <button
                         type="button"
                         onClick={() =>
@@ -370,7 +370,7 @@ export default function RenewalRequestModal({
                         }
                         className="text-red-500 hover:text-red-700 ml-2"
                       >
-                        ✕
+                        \u2715
                       </button>
                     </div>
                   ))}
@@ -404,7 +404,7 @@ export default function RenewalRequestModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold"
+              className="px-4 py-2.5 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold"
             >
               Cancel
             </button>
