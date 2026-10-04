@@ -33,7 +33,7 @@ export default function TelemetryPanel() {
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="text-xl font-black text-zinc-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
+        <h1 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-2">
           <Activity className="w-5 h-5 text-blue-600" />
           Telemetry
         </h1>
@@ -61,10 +61,10 @@ export default function TelemetryPanel() {
 
 function Card({ icon: Icon, label, value }: any) {
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4">
+    <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4">
       <Icon className="w-4 h-4 text-blue-600 mb-2" />
       <div className="text-[10px] uppercase font-bold text-zinc-400">{label}</div>
-      <div className="text-lg font-mono font-black text-zinc-900 dark:text-white mt-1">
+      <div className="text-lg font-mono font-black text-white mt-1">
         {value}
       </div>
     </div>
@@ -73,9 +73,9 @@ function Card({ icon: Icon, label, value }: any) {
 
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4">
+    <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4">
       <div className="text-[10px] uppercase font-bold text-zinc-400">{label}</div>
-      <div className="text-lg font-mono font-black text-zinc-900 dark:text-white mt-1">
+      <div className="text-lg font-mono font-black text-white mt-1">
         {value}
       </div>
     </div>

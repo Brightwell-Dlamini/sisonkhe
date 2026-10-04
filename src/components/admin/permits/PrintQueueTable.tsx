@@ -87,7 +87,6 @@ export default function PrintQueueTable() {
   };
 
   const openSingle = (reg: string) => {
-    // Route handler lives at /print/[registrationNumber]
     window.open(
       `/print/${encodeURIComponent(reg)}`,
       "_blank",
@@ -107,15 +106,15 @@ export default function PrintQueueTable() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
           <input
             type="text"
-            placeholder="Search by plate, VIC, permit, make…"
+            placeholder="Search by plate, VIC, permit, make\u2026"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500"
+            className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -141,21 +140,21 @@ export default function PrintQueueTable() {
       )}
 
       {loading ? (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-center py-16">
+        <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl flex items-center justify-center py-16">
           <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-center py-16 px-4">
-          <div className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+        <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl text-center py-16 px-4">
+          <div className="text-sm font-bold text-zinc-300">
             No matching vehicles
           </div>
         </div>
       ) : (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
+        <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-zinc-200 dark:border-zinc-800 text-left text-[10px] font-black uppercase tracking-wider text-zinc-400 bg-zinc-50/50 dark:bg-zinc-950/50">
+                <tr className="border-b border-white/[0.06] text-left text-[10px] font-black uppercase tracking-wider text-zinc-400 bg-white/[0.02]">
                   <th className="px-4 py-3 w-10">
                     <input
                       type="checkbox"
@@ -177,7 +176,7 @@ export default function PrintQueueTable() {
                 {filtered.map((v) => (
                   <tr
                     key={v.registrationNumber}
-                    className="border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50 dark:hover:bg-zinc-950/50"
+                    className="border-b border-white/[0.06] hover:bg-white/[0.03]"
                   >
                     <td className="px-4 py-3">
                       <input
@@ -188,7 +187,7 @@ export default function PrintQueueTable() {
                       />
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-mono font-bold text-zinc-900 dark:text-white">
+                      <div className="font-mono font-bold text-white">
                         {v.registrationNumber}
                       </div>
                       <div className="text-[10px] text-zinc-500">
@@ -196,13 +195,13 @@ export default function PrintQueueTable() {
                       </div>
                     </td>
                     <td className="px-4 py-3 font-mono text-emerald-600 dark:text-emerald-400 text-[11px]">
-                      {v.vic ?? "—"}
+                      {v.vic ?? "\u2014"}
                     </td>
-                    <td className="px-4 py-3 font-mono text-zinc-700 dark:text-zinc-300 text-[11px]">
-                      {v.permitNumber ?? "—"}
+                    <td className="px-4 py-3 font-mono text-zinc-300 text-[11px]">
+                      {v.permitNumber ?? "\u2014"}
                     </td>
-                    <td className="px-4 py-3 font-mono text-zinc-700 dark:text-zinc-300 text-[11px]">
-                      {v.permitExpiryDate ?? "—"}
+                    <td className="px-4 py-3 font-mono text-zinc-300 text-[11px]">
+                      {v.permitExpiryDate ?? "\u2014"}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
