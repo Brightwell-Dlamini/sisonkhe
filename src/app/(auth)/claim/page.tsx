@@ -34,7 +34,6 @@ export default function ClaimPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Form fields
   const [idNumber, setIdNumber] = useState("");
   const [phone, setPhone] = useState("");
   const [username, setUsername] = useState("");
@@ -43,7 +42,6 @@ export default function ClaimPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState("");
 
-  // --- Step 1: Verify identity -------------------------------------------
   async function onVerify(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -72,7 +70,6 @@ export default function ClaimPage() {
     }
   }
 
-  // --- Step 2: Create account --------------------------------------------
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -103,7 +100,6 @@ export default function ClaimPage() {
 
       setStep("success");
 
-      // Auto-redirect after 2.5s
       setTimeout(() => {
         router.push("/");
         router.refresh();
@@ -115,8 +111,7 @@ export default function ClaimPage() {
   }
 
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl p-6 sm:p-8">
-      {/* Progress indicator */}
+    <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-xl p-6 sm:p-8">
       <div className="flex items-center gap-2 mb-6">
         {(["verify", "credentials", "success"] as Step[]).map((s, idx) => {
           const stepIndex = ["verify", "credentials", "success"].indexOf(step);
@@ -125,16 +120,15 @@ export default function ClaimPage() {
             <div
               key={s}
               className={`flex-1 h-1.5 rounded-full transition-colors ${
-                isActive ? "bg-emerald-500" : "bg-zinc-200 dark:bg-zinc-800"
+                isActive ? "bg-emerald-500" : "bg-zinc-700"
               }`}
             />
           );
         })}
       </div>
 
-      {/* Header */}
       <div className="mb-6">
-        <h2 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-wide flex items-center gap-2">
+        <h2 className="text-lg font-black text-white uppercase tracking-wide flex items-center gap-2">
           {step === "verify" && (
             <>
               <ShieldCheck className="w-5 h-5 text-emerald-500" />
@@ -154,7 +148,7 @@ export default function ClaimPage() {
             </>
           )}
         </h2>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+        <p className="text-xs text-zinc-400 mt-1">
           {step === "verify" &&
             "Enter the National ID and phone number you registered with."}
           {step === "credentials" &&
@@ -164,17 +158,16 @@ export default function ClaimPage() {
       </div>
 
       {error && (
-        <div className="mb-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 flex items-start gap-2 text-xs">
+        <div className="mb-4 bg-red-950/40 border border-red-800 text-red-300 rounded-xl p-3 flex items-start gap-2 text-xs">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Step 1: Verify */}
       {step === "verify" && (
         <form onSubmit={onVerify} className="space-y-4">
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
               National ID Number
             </label>
             <input
@@ -184,12 +177,12 @@ export default function ClaimPage() {
               onChange={(e) => setIdNumber(e.target.value)}
               required
               placeholder="13 digits, e.g. 7609236100542"
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
               Registered Phone Number
             </label>
             <input
@@ -198,7 +191,7 @@ export default function ClaimPage() {
               onChange={(e) => setPhone(e.target.value)}
               required
               placeholder="e.g. 78653001"
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
             />
           </div>
 
@@ -222,20 +215,19 @@ export default function ClaimPage() {
         </form>
       )}
 
-      {/* Step 2: Credentials */}
       {step === "credentials" && (
         <form onSubmit={onCreate} className="space-y-4">
-          <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-xs">
-            <div className="font-bold text-emerald-900 dark:text-emerald-200">
+          <div className="bg-emerald-950/40 border border-emerald-800 rounded-xl p-3 text-xs">
+            <div className="font-bold text-emerald-200">
               Welcome, {fullName}
             </div>
-            <div className="text-emerald-700 dark:text-emerald-300 text-[11px] mt-0.5">
+            <div className="text-emerald-300 text-[11px] mt-0.5">
               Identity verified. Now set your login credentials.
             </div>
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
               Username
             </label>
             <input
@@ -246,7 +238,7 @@ export default function ClaimPage() {
               placeholder="e.g. bongani.hlophe"
               pattern="[a-z0-9._]{3,32}"
               title="3-32 characters, lowercase letters, numbers, dots or underscores"
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm font-medium text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
             />
             <p className="text-[10px] text-zinc-400 mt-1">
               You'll use this to sign in. Lowercase letters, numbers, dots, underscores.
@@ -254,7 +246,7 @@ export default function ClaimPage() {
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
               Password
             </label>
             <div className="relative">
@@ -265,12 +257,12 @@ export default function ClaimPage() {
                 required
                 minLength={8}
                 placeholder="At least 8 characters"
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 pr-10 text-sm font-medium text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 pr-10 text-sm font-medium text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200"
                 tabIndex={-1}
               >
                 {showPassword ? (
@@ -283,7 +275,7 @@ export default function ClaimPage() {
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
               Confirm Password
             </label>
             <input
@@ -293,7 +285,7 @@ export default function ClaimPage() {
               required
               minLength={8}
               placeholder="Re-enter your password"
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm font-medium text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
             />
           </div>
 
@@ -301,7 +293,7 @@ export default function ClaimPage() {
             <button
               type="button"
               onClick={() => setStep("verify")}
-              className="px-4 py-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold flex items-center gap-1.5"
+              className="px-4 py-3 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold flex items-center gap-1.5"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               Back
@@ -327,29 +319,27 @@ export default function ClaimPage() {
         </form>
       )}
 
-      {/* Step 3: Success */}
       {step === "success" && (
         <div className="text-center py-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/60 mb-4">
-            <CheckCircle2 className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-950/60 mb-4">
+            <CheckCircle2 className="w-8 h-8 text-emerald-400" />
           </div>
-          <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase">
+          <h3 className="text-base font-black text-white uppercase">
             Account Ready
           </h3>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
+          <p className="text-xs text-zinc-400 mt-2">
             You are being signed in to Sisonkhe In Transit.
           </p>
         </div>
       )}
 
-      {/* Footer link */}
       {step === "verify" && (
-        <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 text-center">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        <div className="mt-6 pt-4 border-t border-white/[0.06] text-center">
+          <p className="text-xs text-zinc-400">
             Already claimed your account?{" "}
             <Link
               href="/login"
-              className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+              className="font-bold text-emerald-400 hover:underline"
             >
               Sign in
             </Link>
