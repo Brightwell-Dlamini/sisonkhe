@@ -26,9 +26,9 @@ export default function DriverCardView() {
 
   if (error || !card) {
     return (
-      <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 text-center">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-8 text-center">
         <CreditCard className="w-8 h-8 mx-auto text-zinc-300 mb-2" />
-        <div className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+        <div className="text-sm font-bold text-zinc-300">
           No virtual card issued
         </div>
         <div className="text-xs text-zinc-500 mt-1">
@@ -88,7 +88,7 @@ export default function DriverCardView() {
                 {card.cardholderName}
               </div>
               <div className="text-[10px] font-mono opacity-70 mt-0.5">
-                {card.vehicleReg} \u2022 {card.vic}
+                {card.vehicleReg} • {card.vic}
               </div>
             </div>
             <div className="text-right">
@@ -120,14 +120,14 @@ export default function DriverCardView() {
         </button>
       </div>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5">
         <div className="text-[10px] uppercase tracking-widest font-black text-zinc-400 mb-2">
           Concession Registration
         </div>
         <div className="space-y-1.5 text-xs font-mono">
           <div className="flex justify-between">
             <span className="text-zinc-500">Fee Amount:</span>
-            <span className="text-zinc-900 dark:text-white font-bold">
+            <span className="text-white font-bold">
               E {card.registrationFeeAmount.toFixed(2)}
             </span>
           </div>
@@ -145,16 +145,16 @@ export default function DriverCardView() {
           </div>
           <div className="flex justify-between">
             <span className="text-zinc-500">Receipt:</span>
-            <span className="text-zinc-700 dark:text-zinc-300 truncate ml-2">
+            <span className="text-zinc-300 truncate ml-2">
               {card.registrationReceiptRef}
             </span>
           </div>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-          <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between">
+          <h3 className="text-xs font-black uppercase tracking-wider text-white">
             Statement
           </h3>
           <span className="text-[10px] text-zinc-400 font-mono">
@@ -167,7 +167,7 @@ export default function DriverCardView() {
             No transactions yet.
           </div>
         ) : (
-          <div className="divide-y divide-zinc-100 dark:divide-zinc-800 max-h-96 overflow-y-auto">
+          <div className="divide-y divide-white/[0.06] max-h-96 overflow-y-auto">
             {card.transactions.map((tx) => {
               const isCredit = tx.direction === "CREDIT";
               return (
@@ -190,7 +190,7 @@ export default function DriverCardView() {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <div className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                      <div className="text-xs font-bold text-white truncate">
                         {tx.description}
                       </div>
                       <div className="text-[10px] text-zinc-500 font-mono">
@@ -207,7 +207,7 @@ export default function DriverCardView() {
                     className={`font-mono font-bold text-sm shrink-0 ${
                       isCredit
                         ? "text-emerald-600"
-                        : "text-zinc-900 dark:text-white"
+                        : "text-white"
                     }`}
                   >
                     {isCredit ? "+" : "\u2212"}E{tx.amountSzl.toFixed(2)}
