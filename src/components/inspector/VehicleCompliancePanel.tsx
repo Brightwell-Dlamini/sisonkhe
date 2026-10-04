@@ -35,7 +35,7 @@ export default function VehicleCompliancePanel({
       ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800"
       : overallColor === "amber"
       ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800"
-      : "bg-red-50 dark:bg-red-950/40 border-red-300 dark:border-red-800";
+      : "bg-rose-500/10 border-rose-500/30";
 
   const textClass =
     overallColor === "emerald"
@@ -95,19 +95,19 @@ export default function VehicleCompliancePanel({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <ComplianceRow
           label="Permit"
-          value={vehicle.permitNumber ?? "—"}
+          value={vehicle.permitNumber ?? "\u2014"}
           expiry={vehicle.permitExpiryDate}
           valid={vehicle.permitValid}
         />
         <ComplianceRow
           label="Fitness (COF)"
-          value={vehicle.cofNumber ?? "—"}
+          value={vehicle.cofNumber ?? "\u2014"}
           expiry={vehicle.cofExpiryDate}
           valid={vehicle.cofValid}
         />
         <ComplianceRow
           label="Insurance"
-          value="—"
+          value="\u2014"
           expiry={vehicle.insuranceExpiry}
           valid={vehicle.insuranceValid}
         />
@@ -139,7 +139,7 @@ export default function VehicleCompliancePanel({
           <div className="text-[10px] uppercase font-bold opacity-70">
             Owner
           </div>
-          <div className="font-bold">{vehicle.ownerName ?? "—"}</div>
+          <div className="font-bold">{vehicle.ownerName ?? "\u2014"}</div>
           {vehicle.ownerPhone && (
             <div className="text-[10px] font-mono opacity-80">
               {vehicle.ownerPhone}
@@ -152,15 +152,15 @@ export default function VehicleCompliancePanel({
           </div>
           <div className="font-bold">
             {vehicle.routeOrigin && vehicle.routeDestination
-              ? `${vehicle.routeOrigin} → ${vehicle.routeDestination}`
-              : "—"}
+              ? `${vehicle.routeOrigin} \u2192 ${vehicle.routeDestination}`
+              : "\u2014"}
           </div>
         </div>
         <div>
           <div className="text-[10px] uppercase font-bold opacity-70">
             Association
           </div>
-          <div className="font-bold">{vehicle.association ?? "—"}</div>
+          <div className="font-bold">{vehicle.association ?? "\u2014"}</div>
         </div>
       </div>
     </div>
@@ -179,7 +179,7 @@ function ComplianceRow({
   valid: boolean;
 }) {
   return (
-    <div className="bg-white/60 dark:bg-black/40 rounded-xl p-3 border border-current/20">
+    <div className="bg-white/[0.03] rounded-xl p-3 border border-current/20">
       <div className="flex items-center justify-between mb-1">
         <span className="text-[10px] uppercase font-black opacity-70">
           {label}
