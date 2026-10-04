@@ -1,52 +1,61 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 "use client";
 
 import { useMemo, useState } from "react";
 import {
   Plus,
   Search,
-  Loader2,
-  AlertCircle,
+  Car,
+  QrCode,
+  Printer,
+  Eye,
+  Edit2,
+  Trash2,
   RefreshCw,
 } from "lucide-react";
-import {
-  useVehicleRegistry,
-  type CreateVehicleRequest,
-} from "@/hooks/useVehicleRegistry";
+import { useVehicleRegistry, type CreateVehicleRequest } from "@/hooks/useVehicleRegistry";
 import type { VehicleRow } from "@/lib/vehicles/queries";
+import {
+  Button,
+  IconButton,
+  Input,
+  Select,
+  Badge,
+  Table,
+  TableHead,
+  TableBody,
+  Th,
+  Tr,
+  Td,
+  PageHeader,
+  EmptyState,
+  TableSkeleton,
+  ConfirmDialog,
+  useToast,
+} from "@/components/ui";
+import { cn } from "@/lib/utils";
 import VehicleFormModal from "./VehicleFormModal";
-import VehicleActionsMenu from "./VehicleActionsMenu";
-import OfficialPlaqueQRModal from "../fleet/OfficialPlaqueQRModal";
-import A4PermitPrintModal from "../fleet/A4PermitPrintModal";
+import OfficialPlaqueQRModal from "@/components/fleet/OfficialPlaqueQRModal";
+import A4PermitPrintModal from "@/components/fleet/A4PermitPrintModal";
 import { Vehicle, Route, Driver } from "@/types";
 
-const CLASSIFICATION_LABEL: Record<string, string> = {
-  kombi: "Kombi",
-  midbus: "Midibus",
-  bus: "Bus",
-};
-
-const PERMIT_COLORS: Record<string, string> = {
-  Active:
-    "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
-  Expired: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300",
-  Suspended:
-    "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
-};
-
-interface VehiclesListProps {
+interface Props {
   routes?: Route[];
   drivers?: Driver[];
 }
 
-export default function VehiclesList({
-  routes = [],
-  drivers = [],
-}: VehiclesListProps) {
+const CLASSIFICATION_LABEL: Record<string, string> = {
+  kombi: "Kombi",
+  midbus: "Midbus",
+  bus: "Bus",
+};
+
+const PERMIT_TONE: Record<string, "success" | "danger" | "warning"> = {
+  Active: "success",
+  Expired: "danger",
+  Suspended: "warning",
+};
+
+export default function VehiclesList({ routes = [], drivers = [] }: Props) {
   const {
     vehicles,
     loading,
@@ -57,17 +66,16 @@ export default function VehiclesList({
     deactivateVehicle,
   } = useVehicleRegistry();
 
+  const toast = useToast();
+
   const [searchQuery, setSearchQuery] = useState("");
   const [permitFilter, setPermitFilter] = useState<string>("all");
   const [classFilter, setClassFilter] = useState<string>("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<VehicleRow | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-
-  // QR plaque modal state
   const [qrVehicle, setQrVehicle] = useState<Vehicle | null>(null);
-  // A4 permit print modal state
   const [printVehicle, setPrintVehicle] = useState<Vehicle | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<VehicleRow | null>(null);
 
   const filtered = useMemo(() => {
     return vehicles.filter((v) => {
@@ -89,53 +97,46 @@ export default function VehiclesList({
     });
   }, [vehicles, permitFilter, classFilter, searchQuery]);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 4000);
-  };
-
-  /**
-   * Convert a VehicleRow (from the API) into a full Vehicle object
-   * for the legacy modals (QR plaque, A4 print) that expect the old shape.
-   */
-  const toFullVehicle = (row: VehicleRow): Vehicle => ({
-    registrationNumber: row.registrationNumber,
-    fleetNumber: row.vic ?? row.registrationNumber,
-    vic: row.vic ?? undefined,
-    make: row.make,
-    model: row.model,
-    seatingCapacity: row.seatingCapacity,
-    classification: row.classification as Vehicle["classification"],
-    routeAssignmentId: row.routeAssignmentId ?? "",
-    loadingBay: row.loadingBay ?? "Bay 01",
-    ownerName: row.ownerName ?? "",
-    ownerPhone: row.ownerPhone ?? "",
-    driverId: row.driverId ?? "",
-    status: (row as any).status ?? "Waiting",
-    currentQueuePosition: row.currentQueuePosition ?? 0,
-    tripsToday: 0,
-    lastActive: new Date().toISOString(),
-    permitNumber: row.permitNumber ?? undefined,
-    permitStatus: (row.permitStatus as Vehicle["permitStatus"]) ?? "Active",
-    permitIssueDate: row.permitIssueDate ?? undefined,
-    permitExpiryDate: row.permitExpiryDate ?? undefined,
-    cofNumber: row.cofNumber ?? undefined,
-    cofIssueDate: row.cofIssueDate ?? undefined,
-    cofExpiryDate: row.cofExpiryDate ?? undefined,
-    lastInspectionDate: row.lastInspectionDate ?? undefined,
-    association: row.association ?? undefined,
-    insuranceExpiry: row.insuranceExpiry ?? undefined,
-    roadworthinessExpiry: row.roadworthinessExpiry ?? undefined,
-    isMidMonthAddition: row.isMidMonthAddition,
-    monthRegistered: row.monthRegistered ?? undefined,
-    midMonthJoinDay: row.midMonthJoinDay ?? undefined,
-  });
+  const toFullVehicle = (row: VehicleRow): Vehicle =>
+    ({
+      registrationNumber: row.registrationNumber,
+      fleetNumber: row.vic ?? row.registrationNumber,
+      vic: row.vic ?? undefined,
+      make: row.make,
+      model: row.model,
+      seatingCapacity: row.seatingCapacity,
+      classification: row.classification as Vehicle["classification"],
+      routeAssignmentId: row.routeAssignmentId ?? "",
+      loadingBay: row.loadingBay ?? "Bay 01",
+      ownerName: row.ownerName ?? "",
+      ownerPhone: row.ownerPhone ?? "",
+      driverId: row.driverId ?? "",
+      status: (row as any).status ?? "Waiting",
+      currentQueuePosition: row.currentQueuePosition ?? 0,
+      tripsToday: 0,
+      lastActive: new Date().toISOString(),
+      permitNumber: row.permitNumber ?? undefined,
+      permitStatus: (row.permitStatus as Vehicle["permitStatus"]) ?? "Active",
+      permitIssueDate: row.permitIssueDate ?? undefined,
+      permitExpiryDate: row.permitExpiryDate ?? undefined,
+      cofNumber: row.cofNumber ?? undefined,
+      cofIssueDate: row.cofIssueDate ?? undefined,
+      cofExpiryDate: row.cofExpiryDate ?? undefined,
+      lastInspectionDate: row.lastInspectionDate ?? undefined,
+      association: row.association ?? undefined,
+      insuranceExpiry: row.insuranceExpiry ?? undefined,
+      roadworthinessExpiry: row.roadworthinessExpiry ?? undefined,
+      isMidMonthAddition: row.isMidMonthAddition,
+      monthRegistered: row.monthRegistered ?? undefined,
+      midMonthJoinDay: row.midMonthJoinDay ?? undefined,
+    }) as Vehicle;
 
   const handleCreate = async (input: CreateVehicleRequest) => {
     const result = await createVehicle(input);
     if (result.success) {
-      showToast(
-        `Registered ${result.registrationNumber} (VIC ${result.vic}). Virtual card issued.`
+      toast.success(
+        "Vehicle registered",
+        `${result.registrationNumber} · VIC ${result.vic}. Virtual card issued.`
       );
       setShowCreateModal(false);
       return { success: true };
@@ -153,198 +154,257 @@ export default function VehiclesList({
   ) => {
     const ok = await updateVehicle(reg, input);
     if (ok) {
-      showToast("Vehicle updated");
+      toast.success("Vehicle updated", reg);
       setEditingVehicle(null);
+    } else {
+      toast.error("Update failed", reg);
     }
     return ok;
   };
 
-  const handleDeactivate = async (v: VehicleRow) => {
-    const ok = await deactivateVehicle(v.registrationNumber);
-    if (ok) showToast(`Deactivated ${v.registrationNumber}`);
+  const handleDeactivate = async () => {
+    if (!deleteTarget) return;
+    const ok = await deactivateVehicle(deleteTarget.registrationNumber);
+    if (ok) {
+      toast.success("Vehicle deactivated", deleteTarget.registrationNumber);
+    } else {
+      toast.error("Deactivate failed");
+    }
+    setDeleteTarget(null);
   };
 
   return (
-    <div className="space-y-4">
+    <div>
+      <PageHeader
+        title="Vehicle Registry"
+        description="Register commercial vehicles, manage permits, fitness, and driver assignments."
+        actions={
+          <Button
+            onClick={() => setShowCreateModal(true)}
+            leadingIcon={Plus}
+          >
+            Register Vehicle
+          </Button>
+        }
+      />
+
       {/* Toolbar */}
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-        <div className="flex flex-1 gap-2 min-w-0 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-            <input
-              type="text"
-              placeholder="Search by plate, VIC, make, model, permit…"
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-3 mb-4">
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+          <div className="flex-1 min-w-0">
+            <Input
+              leadingIcon={Search}
+              placeholder="Search by plate, VIC, make, model, permit, or owner…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500"
             />
           </div>
-          <select
-            value={classFilter}
-            onChange={(e) => setClassFilter(e.target.value)}
-            className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300"
-          >
-            <option value="all">All Types</option>
-            <option value="kombi">Kombi</option>
-            <option value="midbus">Midibus</option>
-            <option value="bus">Bus</option>
-          </select>
-          <select
-            value={permitFilter}
-            onChange={(e) => setPermitFilter(e.target.value)}
-            className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300"
-          >
-            <option value="all">All Permits</option>
-            <option value="Active">Active</option>
-            <option value="Expired">Expired</option>
-            <option value="Suspended">Suspended</option>
-          </select>
-        </div>
 
-        <div className="flex gap-2">
-          <button
-            onClick={refresh}
-            disabled={loading}
-            className="px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50 flex items-center gap-1.5"
-          >
-            <RefreshCw
-              className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
+          <div className="flex items-center gap-2 shrink-0">
+            <Select
+              value={classFilter}
+              onChange={(e) => setClassFilter(e.target.value)}
+              className="w-32"
+            >
+              <option value="all">All Types</option>
+              <option value="kombi">Kombi</option>
+              <option value="midbus">Midbus</option>
+              <option value="bus">Bus</option>
+            </Select>
+
+            <Select
+              value={permitFilter}
+              onChange={(e) => setPermitFilter(e.target.value)}
+              className="w-32"
+            >
+              <option value="all">All Permits</option>
+              <option value="Active">Active</option>
+              <option value="Expired">Expired</option>
+              <option value="Suspended">Suspended</option>
+            </Select>
+
+            <IconButton
+              icon={RefreshCw}
+              label="Refresh"
+              onClick={refresh}
+              disabled={loading}
+              className={loading ? "[&_svg]:animate-spin" : ""}
             />
-            Refresh
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Register Vehicle
-          </button>
+          </div>
         </div>
       </div>
 
-      {toast && (
-        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 rounded-xl px-4 py-3 text-xs font-bold">
-          {toast}
-        </div>
-      )}
-
       {error && (
-        <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl px-4 py-3 text-xs flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        <div className="mb-4 bg-rose-500/10 border border-rose-500/25 text-rose-400 rounded-xl p-3 text-xs font-medium">
           {error}
         </div>
       )}
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
-        {loading && vehicles.length === 0 ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-16 px-4">
-            <div className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
-              {vehicles.length === 0
-                ? "No vehicles registered yet"
-                : "No matching vehicles"}
-            </div>
-            <div className="text-xs text-zinc-500 mt-1">
-              {vehicles.length === 0
-                ? "Click 'Register Vehicle' to add the first one."
-                : "Try a different search or filter."}
-            </div>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-zinc-200 dark:border-zinc-800 text-left text-[10px] font-black uppercase tracking-wider text-zinc-400">
-                  <th className="px-4 py-3">Vehicle</th>
-                  <th className="px-4 py-3">VIC</th>
-                  <th className="px-4 py-3">Driver</th>
-                  <th className="px-4 py-3">Permit</th>
-                  <th className="px-4 py-3">Bay</th>
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3 w-12"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((v) => (
-                  <tr
-                    key={v.registrationNumber}
-                    className="border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50 dark:hover:bg-zinc-950/50"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="font-mono font-bold text-zinc-900 dark:text-white">
-                        {v.registrationNumber}
+      {loading && vehicles.length === 0 ? (
+        <TableSkeleton rows={6} />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={Car}
+          title={
+            vehicles.length === 0
+              ? "No vehicles registered"
+              : "No matching vehicles"
+          }
+          description={
+            vehicles.length === 0
+              ? "Register your first commercial vehicle to enable dispatch, permits, and tracking."
+              : "Try adjusting your search or filters."
+          }
+          action={
+            vehicles.length === 0 ? (
+              <Button onClick={() => setShowCreateModal(true)} leadingIcon={Plus}>
+                Register Vehicle
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl overflow-hidden">
+          <Table>
+            <TableHead>
+              <Th>Vehicle</Th>
+              <Th>VIC</Th>
+              <Th>Driver</Th>
+              <Th>Permit</Th>
+              <Th>Bay</Th>
+              <Th>Type</Th>
+              <Th align="right">Actions</Th>
+            </TableHead>
+            <TableBody>
+              {filtered.map((v) => (
+                <Tr key={v.registrationNumber}>
+                  <Td>
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center shrink-0">
+                        <Car className="w-4 h-4 text-zinc-500" />
                       </div>
-                      <div className="text-[10px] text-zinc-500">
-                        {v.make} {v.model} • {v.seatingCapacity} seats
+                      <div className="min-w-0">
+                        <div className="font-mono font-black text-white text-sm tracking-wider truncate">
+                          {v.registrationNumber}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 truncate">
+                          {v.make} {v.model} · {v.seatingCapacity} seats
+                        </div>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 font-mono font-bold text-emerald-600 dark:text-emerald-400 text-[11px]">
-                      {v.vic ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400 text-[11px]">
-                      {v.driverName ?? (
-                        <span className="italic text-zinc-400">Unassigned</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-mono text-[10px] text-zinc-700 dark:text-zinc-300">
+                    </div>
+                  </Td>
+
+                  <Td>
+                    {v.vic ? (
+                      <span className="font-mono text-xs font-bold text-emerald-400 tracking-wider">
+                        {v.vic}
+                      </span>
+                    ) : (
+                      <span className="text-zinc-600">—</span>
+                    )}
+                  </Td>
+
+                  <Td>
+                    {v.driverName ? (
+                      <span className="text-zinc-300 text-xs truncate block max-w-[140px]">
+                        {v.driverName}
+                      </span>
+                    ) : (
+                      <span className="text-zinc-600 italic text-xs">
+                        Unassigned
+                      </span>
+                    )}
+                  </Td>
+
+                  <Td>
+                    <div className="space-y-1">
+                      <div className="font-mono text-[11px] text-zinc-400">
                         {v.permitNumber ?? "—"}
                       </div>
                       {v.permitStatus && (
-                        <span
-                          className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${PERMIT_COLORS[v.permitStatus] ?? ""}`}
+                        <Badge
+                          variant={PERMIT_TONE[v.permitStatus] ?? "default"}
+                          size="sm"
                         >
                           {v.permitStatus}
-                        </span>
+                        </Badge>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400 text-[11px]">
+                    </div>
+                  </Td>
+
+                  <Td>
+                    <span className="font-mono text-[11px] text-zinc-300">
                       {v.loadingBay ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400 text-[11px]">
+                    </span>
+                  </Td>
+
+                  <Td>
+                    <span className="text-[11px] text-zinc-500">
                       {CLASSIFICATION_LABEL[v.classification] ?? v.classification}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <VehicleActionsMenu
-                        vehicle={v}
-                        onEdit={() => setEditingVehicle(v)}
-                        onDeactivate={() => handleDeactivate(v)}
-                        onViewQR={() => setQrVehicle(toFullVehicle(v))}
-                        onPrintPermit={() => setPrintVehicle(toFullVehicle(v))}
+                    </span>
+                  </Td>
+
+                  <Td align="right">
+                    <div className="flex items-center justify-end gap-0.5">
+                      <IconButton
+                        icon={QrCode}
+                        label="View QR plaque"
+                        onClick={() => setQrVehicle(toFullVehicle(v))}
+                        tone="emerald"
                       />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {showCreateModal && (
-        <VehicleFormModal
-          mode="create"
-          onClose={() => setShowCreateModal(false)}
-          onSubmit={handleCreate}
-        />
+                      <IconButton
+                        icon={Printer}
+                        label="Print A4 permit"
+                        onClick={() => setPrintVehicle(toFullVehicle(v))}
+                      />
+                      <IconButton
+                        icon={Edit2}
+                        label="Edit vehicle"
+                        onClick={() => setEditingVehicle(v)}
+                      />
+                      <IconButton
+                        icon={Trash2}
+                        label="Deactivate vehicle"
+                        onClick={() => setDeleteTarget(v)}
+                        tone="danger"
+                      />
+                    </div>
+                  </Td>
+                </Tr>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
 
-      {editingVehicle && (
-        <VehicleFormModal
-          mode="edit"
-          vehicle={editingVehicle}
-          onClose={() => setEditingVehicle(null)}
-          onSubmit={async (input) => {
-            const ok = await handleUpdate(editingVehicle.registrationNumber, input);
-            return { success: ok };
-          }}
-        />
-      )}
+      {/* Modals */}
+      <VehicleFormModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSubmit={handleCreate}
+        routes={routes}
+        drivers={drivers}
+        associations={[]}
+      />
 
-      {/* QR Plaque Modal */}
+      <VehicleFormModal
+        isOpen={!!editingVehicle}
+        onClose={() => setEditingVehicle(null)}
+        onSubmit={async (input) => {
+          if (!editingVehicle) return { success: false };
+          const ok = await handleUpdate(editingVehicle.registrationNumber, input);
+          return { success: ok };
+        }}
+        editingVehicle={
+          editingVehicle
+            ? (toFullVehicle(editingVehicle) as Vehicle)
+            : null
+        }
+        routes={routes}
+        drivers={drivers}
+        associations={[]}
+      />
+
       {qrVehicle && (
         <OfficialPlaqueQRModal
           vehicle={qrVehicle}
@@ -359,7 +419,6 @@ export default function VehiclesList({
         />
       )}
 
-      {/* A4 Print Modal */}
       {printVehicle && (
         <A4PermitPrintModal
           vehicle={printVehicle}
@@ -368,6 +427,19 @@ export default function VehiclesList({
           onClose={() => setPrintVehicle(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Deactivate Vehicle?"
+        description={
+          deleteTarget
+            ? `${deleteTarget.registrationNumber} will be marked Offline, removed from any active queue, and unassigned from its driver. Its history remains intact.`
+            : ""
+        }
+        confirmLabel="Deactivate"
+        onConfirm={handleDeactivate}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import OfflineBanner from "@/components/offline/OfflineBanner";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import MobileDrawer from "./MobileDrawer";
+import { ToastProvider } from "@/components/ui";
 
 interface Props {
   children: React.ReactNode;
@@ -50,6 +51,7 @@ export default function AppShell({ children, allowedRoles }: Props) {
   const groups = navForRole(role);
 
   return (
+  <ToastProvider>
     <div className="min-h-screen flex bg-[#0A0A0A] text-white">
       {/* Desktop sidebar */}
       <div className="hidden lg:block shrink-0">
@@ -85,5 +87,6 @@ export default function AppShell({ children, allowedRoles }: Props) {
         </main>
       </div>
     </div>
+</ToastProvider>
   );
 }

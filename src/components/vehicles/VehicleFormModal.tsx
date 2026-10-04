@@ -1,525 +1,382 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 "use client";
 
-import { useState, useEffect } from "react";
-import { Loader2, X, AlertCircle, Car, CreditCard } from "lucide-react";
-import type { VehicleRow } from "@/lib/vehicles/queries";
+import { useState } from "react";
+import { Modal, Button, Input, Textarea, Select, Checkbox, useToast } from "@/components/ui";
+import type { Vehicle, Route, Driver } from "@/types";
 import type { CreateVehicleRequest } from "@/hooks/useVehicleRegistry";
 
 interface Props {
-  mode: "create" | "edit";
-  vehicle?: VehicleRow;
+  isOpen: boolean;
   onClose: () => void;
   onSubmit: (
     input: CreateVehicleRequest
   ) => Promise<{ success: boolean; error?: string; issues?: Record<string, string[]> }>;
-}
-
-function generateVICPreview(reg: string): string {
-  if (!reg) return "";
-  const clean = reg.toUpperCase().replace(/\s+/g, "");
-  const letters = clean.replace(/[^A-Z]/g, "");
-  const digits = clean.replace(/[^0-9]/g, "");
-
-  let prefix = "";
-  if (clean.startsWith("MSD") || clean.includes("MZ")) prefix = "MMZ";
-  else if (clean.startsWith("HSD") || clean.includes("BM")) prefix = "HBM";
-  else if (clean.startsWith("LSD") || clean.includes("LU")) prefix = "SLU";
-  else if (clean.startsWith("SSD") || clean.includes("SH")) prefix = "SNH";
-  else if (letters.length >= 3) prefix = `${letters.charAt(0)}${letters.slice(-2)}`;
-  else if (letters.length > 0) prefix = (letters + "MZ").slice(0, 3);
-  else prefix = "MMZ";
-
-  const digitsPadded =
-    digits.length > 0 ? digits.padStart(3, "0").slice(-3) : "001";
-  return `${prefix}-${digitsPadded}`;
+  editingVehicle?: Vehicle | null;
+  routes: Route[];
+  drivers: Driver[];
+  associations: string[];
 }
 
 export default function VehicleFormModal({
-  mode,
-  vehicle,
+  isOpen,
   onClose,
   onSubmit,
+  editingVehicle,
+  routes,
+  drivers,
+  associations,
 }: Props) {
+  const isEditing = !!editingVehicle;
+  const toast = useToast();
+
   const [form, setForm] = useState<CreateVehicleRequest>({
-    registrationNumber: vehicle?.registrationNumber ?? "",
-    vic: vehicle?.vic ?? "",
-    make: vehicle?.make ?? "",
-    model: vehicle?.model ?? "",
-    seatingCapacity: vehicle?.seatingCapacity ?? 15,
-    classification: vehicle?.classification ?? "kombi",
-    routeAssignmentId: vehicle?.routeAssignmentId ?? "",
-    loadingBay: vehicle?.loadingBay ?? "",
-    ownerName: vehicle?.ownerName ?? "",
-    ownerPhone: vehicle?.ownerPhone ?? "",
-    ownerOperatorId: vehicle?.ownerOperatorId ?? "",
-    driverId: vehicle?.driverId ?? "",
-    driverNationalId: "",
-    permitNumber: vehicle?.permitNumber ?? "",
-    permitStatus: vehicle?.permitStatus ?? "Active",
-    permitIssueDate: vehicle?.permitIssueDate ?? "",
-    permitExpiryDate: vehicle?.permitExpiryDate ?? "",
-    cofNumber: vehicle?.cofNumber ?? "",
-    cofIssueDate: vehicle?.cofIssueDate ?? "",
-    cofExpiryDate: vehicle?.cofExpiryDate ?? "",
-    lastInspectionDate: vehicle?.lastInspectionDate ?? "",
-    association: vehicle?.association ?? "",
-    insuranceExpiry: vehicle?.insuranceExpiry ?? "",
-    roadworthinessExpiry: vehicle?.roadworthinessExpiry ?? "",
-    isMidMonthAddition: vehicle?.isMidMonthAddition ?? false,
-    monthRegistered: vehicle?.monthRegistered ?? "",
-    midMonthJoinDay: vehicle?.midMonthJoinDay ?? undefined,
+    registrationNumber: editingVehicle?.registrationNumber ?? "",
+    vic: editingVehicle?.vic ?? "",
+    make: editingVehicle?.make ?? "",
+    model: editingVehicle?.model ?? "",
+    seatingCapacity: editingVehicle?.seatingCapacity ?? 15,
+    classification: editingVehicle?.classification ?? "kombi",
+    routeAssignmentId: editingVehicle?.routeAssignmentId ?? "",
+    loadingBay: editingVehicle?.loadingBay ?? "Bay 01",
+    ownerName: editingVehicle?.ownerName ?? "",
+    ownerPhone: editingVehicle?.ownerPhone ?? "",
+    ownerOperatorId: "",
+    driverId: editingVehicle?.driverId ?? "",
+    permitNumber: editingVehicle?.permitNumber ?? "",
+    permitStatus: editingVehicle?.permitStatus ?? "Active",
+    permitIssueDate: editingVehicle?.permitIssueDate ?? "",
+    permitExpiryDate: editingVehicle?.permitExpiryDate ?? "",
+    cofNumber: editingVehicle?.cofNumber ?? "",
+    cofIssueDate: editingVehicle?.cofIssueDate ?? "",
+    cofExpiryDate: editingVehicle?.cofExpiryDate ?? "",
+    lastInspectionDate: editingVehicle?.lastInspectionDate ?? "",
+    association: editingVehicle?.association ?? "",
+    insuranceExpiry: editingVehicle?.insuranceExpiry ?? "",
+    roadworthinessExpiry: editingVehicle?.roadworthinessExpiry ?? "",
+    isMidMonthAddition: editingVehicle?.isMidMonthAddition ?? false,
+    monthRegistered: editingVehicle?.monthRegistered ?? "",
+    midMonthJoinDay: editingVehicle?.midMonthJoinDay ?? undefined,
   });
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
-
-  useEffect(() => {
-    if (mode === "create" && !form.vic && form.registrationNumber) {
-      generateVICPreview(form.registrationNumber);
-    }
-  }, [form.registrationNumber, form.vic, mode]);
+  const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string[]>>({});
 
   const update = <K extends keyof CreateVehicleRequest>(
     key: K,
     value: CreateVehicleRequest[K]
-  ) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  };
+  ) => setForm((p) => ({ ...p, [key]: value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setFieldErrors({});
-    setLoading(true);
+    setErrors({});
+    setSubmitting(true);
 
-    const result = await onSubmit(form);
-    setLoading(false);
+    const res = await onSubmit(form);
+    setSubmitting(false);
 
-    if (!result.success) {
-      setError(result.error ?? "Failed to save");
-      if (result.issues) setFieldErrors(result.issues);
+    if (!res.success) {
+      if (res.issues) setErrors(res.issues);
+      toast.error(res.error ?? "Save failed");
+      return;
     }
+    onClose();
   };
 
-  const vicPreview = form.vic || generateVICPreview(form.registrationNumber);
-
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-white dark:bg-zinc-900 flex items-start justify-between p-5 border-b border-zinc-100 dark:border-zinc-800">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 flex items-center justify-center">
-              <Car className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div>
-              <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900 dark:text-white">
-                {mode === "create" ? "Register Vehicle" : "Edit Vehicle"}
-              </h2>
-              <p className="text-xs text-zinc-500 mt-0.5">
-                {mode === "create"
-                  ? "A Virtual Transit Card will be issued automatically."
-                  : "Update vehicle details and assignments."}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      title={isEditing ? "Edit Vehicle" : "Register Vehicle"}
+      description={
+        isEditing
+          ? "Update vehicle particulars and assignments."
+          : "A Virtual Transit Card will be issued automatically with the registration fee recorded."
+      }
+      size="lg"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            loading={submitting}
+            form="vehicle-form"
+            type="submit"
           >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-5 space-y-6">
-          {error && (
-            <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 text-xs flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
-              Identification
-            </legend>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Field label="Registration Number *" error={fieldErrors.registrationNumber?.[0]}>
-                <input
-                  type="text"
-                  required
-                  value={form.registrationNumber}
-                  onChange={(e) =>
-                    update("registrationNumber", e.target.value.toUpperCase())
-                  }
-                  disabled={mode === "edit"}
-                  placeholder="HSD 101 BM"
-                  className="input font-mono"
-                />
-              </Field>
-
-              <Field label="FLEET-VIC" error={fieldErrors.vic?.[0]}>
-                <input
-                  type="text"
-                  value={form.vic ?? ""}
-                  onChange={(e) => update("vic", e.target.value.toUpperCase())}
-                  placeholder={vicPreview || "Auto-generated"}
-                  className="input font-mono"
-                />
-                {!form.vic && vicPreview && (
-                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">
-                    Will be: <strong>{vicPreview}</strong>
-                  </p>
-                )}
-              </Field>
-
-              <Field label="Classification *">
-                <select
-                  value={form.classification}
-                  onChange={(e) => update("classification", e.target.value)}
-                  className="input"
-                >
-                  <option value="kombi">Kombi (15-19 seats)</option>
-                  <option value="midbus">Midibus (20-35 seats)</option>
-                  <option value="bus">Bus (36+ seats)</option>
-                </select>
-              </Field>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <Field label="Make *" error={fieldErrors.make?.[0]}>
-                <input
-                  type="text"
-                  required
-                  value={form.make}
-                  onChange={(e) => update("make", e.target.value)}
-                  placeholder="Toyota"
-                  className="input"
-                />
-              </Field>
-              <Field label="Model *" error={fieldErrors.model?.[0]}>
-                <input
-                  type="text"
-                  required
-                  value={form.model}
-                  onChange={(e) => update("model", e.target.value)}
-                  placeholder="Quantum Ses'fikile"
-                  className="input"
-                />
-              </Field>
-              <Field label="Seating Capacity *" error={fieldErrors.seatingCapacity?.[0]}>
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  max={120}
-                  value={form.seatingCapacity}
-                  onChange={(e) =>
-                    update("seatingCapacity", Number(e.target.value) || 0)
-                  }
-                  className="input font-mono"
-                />
-              </Field>
-              <Field label="Loading Bay">
-                <input
-                  type="text"
-                  value={form.loadingBay}
-                  onChange={(e) => update("loadingBay", e.target.value)}
-                  placeholder="Bay 01"
-                  className="input"
-                />
-              </Field>
-            </div>
-          </fieldset>
-
-          <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
-              Assignment
-            </legend>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Route Assignment">
-                <input
-                  type="text"
-                  value={form.routeAssignmentId}
-                  onChange={(e) => update("routeAssignmentId", e.target.value)}
-                  placeholder="e.g. h_mb_mz"
-                  className="input font-mono"
-                />
-              </Field>
-              <Field label="Driver National ID">
-                <input
-                  type="text"
-                  value={form.driverNationalId ?? ""}
-                  onChange={(e) => update("driverNationalId", e.target.value)}
-                  placeholder="e.g. 8701016123456"
-                  className="input font-mono text-xs"
-                />
-                <p className="text-[10px] text-zinc-500 mt-1">
-                  Human key — links both sides via the assignment service.
-                  {form.driverId ? (
-                    <>
-                      {" "}
-                      Current internal id:{" "}
-                      <span className="font-mono">{form.driverId}</span>
-                    </>
-                  ) : null}
-                </p>
-              </Field>
-            </div>
-          </fieldset>
-
-          <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
-              Ownership
-            </legend>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Field label="Owner Name">
-                <input
-                  type="text"
-                  value={form.ownerName}
-                  onChange={(e) => update("ownerName", e.target.value)}
-                  placeholder="e.g. Cyril Kunene"
-                  className="input"
-                />
-              </Field>
-              <Field label="Owner Phone">
-                <input
-                  type="tel"
-                  value={form.ownerPhone}
-                  onChange={(e) => update("ownerPhone", e.target.value)}
-                  placeholder="+268 7600 0000"
-                  className="input font-mono"
-                />
-              </Field>
-              <Field label="Association">
-                <input
-                  type="text"
-                  value={form.association}
-                  onChange={(e) => update("association", e.target.value)}
-                  placeholder="e.g. Mbabane Transport Association"
-                  className="input"
-                />
-              </Field>
-            </div>
-          </fieldset>
-
-          <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
-              Permits & Compliance
-            </legend>
-
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <Field label="Permit Number">
-                <input
-                  type="text"
-                  value={form.permitNumber}
-                  onChange={(e) => update("permitNumber", e.target.value)}
-                  placeholder="G1090/2026"
-                  className="input font-mono"
-                />
-              </Field>
-              <Field label="Permit Status">
-                <select
-                  value={form.permitStatus}
-                  onChange={(e) => update("permitStatus", e.target.value)}
-                  className="input"
-                >
-                  <option value="Active">Active</option>
-                  <option value="Expired">Expired</option>
-                  <option value="Suspended">Suspended</option>
-                </select>
-              </Field>
-              <Field label="Permit Issue">
-                <input
-                  type="date"
-                  value={form.permitIssueDate ?? ""}
-                  onChange={(e) => update("permitIssueDate", e.target.value)}
-                  className="input font-mono"
-                />
-              </Field>
-              <Field label="Permit Expiry">
-                <input
-                  type="date"
-                  value={form.permitExpiryDate ?? ""}
-                  onChange={(e) => update("permitExpiryDate", e.target.value)}
-                  className="input font-mono"
-                />
-              </Field>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <Field label="COF Number">
-                <input
-                  type="text"
-                  value={form.cofNumber}
-                  onChange={(e) => update("cofNumber", e.target.value)}
-                  placeholder="COF-5020-SZ"
-                  className="input font-mono"
-                />
-              </Field>
-              <Field label="COF Issue">
-                <input
-                  type="date"
-                  value={form.cofIssueDate ?? ""}
-                  onChange={(e) => update("cofIssueDate", e.target.value)}
-                  className="input font-mono"
-                />
-              </Field>
-              <Field label="COF Expiry">
-                <input
-                  type="date"
-                  value={form.cofExpiryDate ?? ""}
-                  onChange={(e) => update("cofExpiryDate", e.target.value)}
-                  className="input font-mono"
-                />
-              </Field>
-              <Field label="Last Inspection">
-                <input
-                  type="date"
-                  value={form.lastInspectionDate ?? ""}
-                  onChange={(e) => update("lastInspectionDate", e.target.value)}
-                  className="input font-mono"
-                />
-              </Field>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Insurance Expiry">
-                <input
-                  type="date"
-                  value={form.insuranceExpiry ?? ""}
-                  onChange={(e) => update("insuranceExpiry", e.target.value)}
-                  className="input font-mono"
-                />
-              </Field>
-              <Field label="Roadworthiness Expiry">
-                <input
-                  type="date"
-                  value={form.roadworthinessExpiry ?? ""}
-                  onChange={(e) => update("roadworthinessExpiry", e.target.value)}
-                  className="input font-mono"
-                />
-              </Field>
-            </div>
-          </fieldset>
-
-          <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest">
-              30-Day Rotation
-            </legend>
-
-            <label className="flex items-start gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={!!form.isMidMonthAddition}
-                onChange={(e) => update("isMidMonthAddition", e.target.checked)}
-                className="mt-0.5 w-4 h-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
+            {isEditing ? "Save Changes" : "Register Vehicle"}
+          </Button>
+        </>
+      }
+    >
+      <form id="vehicle-form" onSubmit={handleSubmit} className="space-y-5">
+        {/* Identification */}
+        <Section title="Identification">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Field label="Registration Number *" error={errors.registrationNumber?.[0]}>
+              <Input
+                required
+                value={form.registrationNumber}
+                onChange={(e) =>
+                  update("registrationNumber", e.target.value.toUpperCase())
+                }
+                disabled={isEditing}
+                placeholder="HSD 101 BM"
+                className="font-mono"
               />
-              <div className="text-xs">
-                <div className="font-bold text-zinc-900 dark:text-white">
-                  Added mid-month (tail-lock)
-                </div>
-                <div className="text-zinc-500 text-[11px] mt-0.5">
-                  Vehicle will be pinned to the tail of the queue for the remainder of this
-                  30-day cycle. It graduates to the regular rotation next month.
-                </div>
-              </div>
-            </label>
+            </Field>
 
-            {form.isMidMonthAddition && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Month Registered (YYYY-MM)">
-                  <input
-                    type="text"
-                    value={form.monthRegistered}
-                    onChange={(e) => update("monthRegistered", e.target.value)}
-                    placeholder="2026-09"
-                    className="input font-mono"
-                  />
-                </Field>
-                <Field label="Join Day (1–31)">
-                  <input
-                    type="number"
-                    min={1}
-                    max={31}
-                    value={form.midMonthJoinDay ?? ""}
-                    onChange={(e) =>
-                      update(
-                        "midMonthJoinDay",
-                        e.target.value ? Number(e.target.value) : undefined
-                      )
-                    }
-                    className="input font-mono"
-                  />
-                </Field>
-              </div>
-            )}
-          </fieldset>
+            <Field label="FLEET-VIC" error={errors.vic?.[0]}>
+              <Input
+                value={form.vic ?? ""}
+                onChange={(e) => update("vic", e.target.value.toUpperCase())}
+                placeholder="Auto-generated"
+                className="font-mono"
+              />
+            </Field>
 
-          {mode === "create" && (
-            <div className="flex items-start gap-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
-              <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
-              <div className="text-xs text-emerald-800 dark:text-emerald-300">
-                <strong>Virtual Transit Card</strong> will be issued automatically on
-                registration (registration fee recorded as paid for pilot).
-              </div>
+            <Field label="Classification *">
+              <Select
+                value={form.classification}
+                onChange={(e) => update("classification", e.target.value)}
+              >
+                <option value="kombi">Kombi</option>
+                <option value="midbus">Midibus</option>
+                <option value="bus">Bus</option>
+              </Select>
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <Field label="Make *" error={errors.make?.[0]}>
+              <Input
+                required
+                value={form.make}
+                onChange={(e) => update("make", e.target.value)}
+                placeholder="Toyota"
+              />
+            </Field>
+            <Field label="Model *" error={errors.model?.[0]}>
+              <Input
+                required
+                value={form.model}
+                onChange={(e) => update("model", e.target.value)}
+                placeholder="Quantum"
+              />
+            </Field>
+            <Field label="Seats *" error={errors.seatingCapacity?.[0]}>
+              <Input
+                type="number"
+                required
+                min={1}
+                max={120}
+                value={form.seatingCapacity}
+                onChange={(e) =>
+                  update("seatingCapacity", Number(e.target.value) || 0)
+                }
+                className="font-mono"
+              />
+            </Field>
+            <Field label="Loading Bay">
+              <Input
+                value={form.loadingBay}
+                onChange={(e) => update("loadingBay", e.target.value)}
+                placeholder="Bay 01"
+                className="font-mono"
+              />
+            </Field>
+          </div>
+        </Section>
+
+        {/* Assignment */}
+        <Section title="Assignment">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Route">
+              <Select
+                value={form.routeAssignmentId}
+                onChange={(e) => update("routeAssignmentId", e.target.value)}
+              >
+                <option value="">— Select route —</option>
+                {routes.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.origin} → {r.destination}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Assigned Driver">
+              <Select
+                value={form.driverId}
+                onChange={(e) => update("driverId", e.target.value)}
+              >
+                <option value="">— No driver —</option>
+                {drivers.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.fullName}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        </Section>
+
+        {/* Ownership */}
+        <Section title="Ownership">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Owner Name">
+              <Input
+                value={form.ownerName}
+                onChange={(e) => update("ownerName", e.target.value)}
+                placeholder="e.g. Cyril Kunene"
+              />
+            </Field>
+            <Field label="Owner Phone">
+              <Input
+                value={form.ownerPhone}
+                onChange={(e) => update("ownerPhone", e.target.value)}
+                placeholder="+268 7600 0000"
+                className="font-mono"
+              />
+            </Field>
+            <Field label="Association" className="sm:col-span-2">
+              <Input
+                value={form.association}
+                onChange={(e) => update("association", e.target.value)}
+                placeholder="Transport Association"
+              />
+            </Field>
+          </div>
+        </Section>
+
+        {/* Permit */}
+        <Section title="Permit & Compliance">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <Field label="Permit #">
+              <Input
+                value={form.permitNumber}
+                onChange={(e) => update("permitNumber", e.target.value)}
+                placeholder="G1090/2026"
+                className="font-mono"
+              />
+            </Field>
+            <Field label="Permit Status">
+              <Select
+                value={form.permitStatus}
+                onChange={(e) => update("permitStatus", e.target.value)}
+              >
+                <option value="Active">Active</option>
+                <option value="Expired">Expired</option>
+                <option value="Suspended">Suspended</option>
+              </Select>
+            </Field>
+            <Field label="Issue">
+              <Input
+                type="date"
+                value={form.permitIssueDate ?? ""}
+                onChange={(e) => update("permitIssueDate", e.target.value)}
+                className="font-mono"
+              />
+            </Field>
+            <Field label="Expiry">
+              <Input
+                type="date"
+                value={form.permitExpiryDate ?? ""}
+                onChange={(e) => update("permitExpiryDate", e.target.value)}
+                className="font-mono"
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <Field label="COF #">
+              <Input
+                value={form.cofNumber}
+                onChange={(e) => update("cofNumber", e.target.value)}
+                className="font-mono"
+              />
+            </Field>
+            <Field label="COF Expiry">
+              <Input
+                type="date"
+                value={form.cofExpiryDate ?? ""}
+                onChange={(e) => update("cofExpiryDate", e.target.value)}
+                className="font-mono"
+              />
+            </Field>
+            <Field label="Insurance Expiry">
+              <Input
+                type="date"
+                value={form.insuranceExpiry ?? ""}
+                onChange={(e) => update("insuranceExpiry", e.target.value)}
+                className="font-mono"
+              />
+            </Field>
+            <Field label="Roadworthy Expiry">
+              <Input
+                type="date"
+                value={form.roadworthinessExpiry ?? ""}
+                onChange={(e) => update("roadworthinessExpiry", e.target.value)}
+                className="font-mono"
+              />
+            </Field>
+          </div>
+        </Section>
+
+        {/* Mid-month */}
+        <Section title="Queue Rotation">
+          <Checkbox
+            checked={!!form.isMidMonthAddition}
+            onChange={(v) => update("isMidMonthAddition", v)}
+            label="Added mid-month (tail-lock)"
+            description="Vehicle will be pinned to the tail of the queue for the remainder of this 30-day cycle."
+          />
+
+          {form.isMidMonthAddition && (
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <Field label="Month Registered">
+                <Input
+                  value={form.monthRegistered}
+                  onChange={(e) => update("monthRegistered", e.target.value)}
+                  placeholder="2026-09"
+                  className="font-mono"
+                />
+              </Field>
+              <Field label="Join Day">
+                <Input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={form.midMonthJoinDay ?? ""}
+                  onChange={(e) =>
+                    update(
+                      "midMonthJoinDay",
+                      e.target.value ? Number(e.target.value) : undefined
+                    )
+                  }
+                  className="font-mono"
+                />
+              </Field>
             </div>
           )}
+        </Section>
+      </form>
+    </Modal>
+  );
+}
 
-          <div className="flex gap-2 pt-2 sticky bottom-0 bg-white dark:bg-zinc-900 pb-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm"
-            >
-              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {mode === "create" ? "Register Vehicle" : "Save Changes"}
-            </button>
-          </div>
-        </form>
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-emerald-500">
+        {title}
       </div>
-
-      <style jsx>{`
-        .input {
-          width: 100%;
-          background: rgb(250 250 250);
-          border: 1px solid rgb(228 228 231);
-          border-radius: 0.75rem;
-          padding: 0.5rem 0.75rem;
-          font-size: 0.8125rem;
-          color: rgb(24 24 27);
-          outline: none;
-        }
-        .input:focus {
-          border-color: rgb(16 185 129);
-          box-shadow: 0 0 0 2px rgb(16 185 129 / 0.2);
-        }
-        .dark .input {
-          background: rgb(9 9 11);
-          border-color: rgb(39 39 42);
-          color: white;
-        }
-        .input:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-      `}</style>
+      <div className="space-y-3">{children}</div>
     </div>
   );
 }
@@ -528,19 +385,21 @@ function Field({
   label,
   error,
   children,
+  className,
 }: {
   label: string;
   error?: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div>
-      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">
+    <div className={className}>
+      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">
         {label}
       </label>
       {children}
       {error && (
-        <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{error}</p>
+        <p className="mt-1 text-[10px] text-rose-400 font-medium">{error}</p>
       )}
     </div>
   );
