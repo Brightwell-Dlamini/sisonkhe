@@ -11,7 +11,7 @@ export default function PrintQueuePage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-xl font-black text-zinc-900 dark:text-white uppercase tracking-tight">
+        <h1 className="text-xl font-black text-white uppercase tracking-tight">
           Permit Print Queue
         </h1>
         <p className="text-xs text-zinc-500 mt-1">
