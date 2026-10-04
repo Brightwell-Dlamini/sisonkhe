@@ -8,7 +8,7 @@
 import type { ResolvedUser } from "@/lib/auth/roles";
 import {
   ADMIN_NAV,
-  SUPER_ADMIN_NAV,
+  PLATFORM_NAV,
   MARSHAL_NAV,
   DRIVER_NAV,
   OPERATOR_NAV,
@@ -25,7 +25,6 @@ import {
 export function homeRouteForRole(role: Role): string {
   switch (role) {
     case "super-admin":
-      return "/admin";
     case "admin":
     case "fleet-manager":
       return "/admin";
@@ -45,21 +44,16 @@ export function homeRouteForRole(role: Role): string {
 
 /**
  * Nav tree for a role, with role-gated items filtered out.
+ *
+ * Super-admin gets the same job-first admin tree as everyone else,
+ * plus a single Platform group at the bottom — not a second full catalogue.
  */
 export function navForRole(role: Role): NavGroup[] {
   let groups: NavGroup[] = [];
 
   switch (role) {
     case "super-admin":
-      // Super admin gets BOTH the admin nav AND the super admin nav.
-      // The super admin nav is a superset experience.
-      groups = [
-        ...ADMIN_NAV,
-        ...SUPER_ADMIN_NAV.map((g) => ({
-          ...g,
-          label: `Super · ${g.label}`,
-        })),
-      ];
+      groups = [...ADMIN_NAV, ...PLATFORM_NAV];
       break;
     case "admin":
     case "fleet-manager":
@@ -82,7 +76,6 @@ export function navForRole(role: Role): NavGroup[] {
       groups = PUBLIC_NAV;
   }
 
-  // Filter items by role if a roles array is present
   return groups
     .map((group) => ({
       ...group,
@@ -145,10 +138,6 @@ export function findActiveItem(
   return best;
 }
 
-/**
- * Breadcrumb trail for the current path. Built from the matched nav item
- * plus a manual override map for known deep pages.
- */
 export interface Crumb {
   label: string;
   href?: string;
@@ -160,7 +149,6 @@ export function breadcrumbsFor(
 ): Crumb[] {
   const crumbs: Crumb[] = [{ label: "Home", href: "/" }];
 
-  // Find the section this path belongs to by matching the top-level prefix
   for (const group of groups) {
     for (const item of group.items) {
       if (item.exact ? pathname === item.href : pathname.startsWith(item.href)) {
@@ -174,9 +162,6 @@ export function breadcrumbsFor(
   return crumbs;
 }
 
-/**
- * Convert ResolvedUser's role string to our Role type.
- */
 export function toRole(roleString: string): Role {
   if (roleString === "super-admin") return "super-admin";
   if (roleString === "admin") return "admin";
