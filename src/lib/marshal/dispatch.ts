@@ -10,6 +10,9 @@
  *
  * Trip row is written only when the rank fee transaction is successfully written,
  * so trips and fees stay in sync.
+ *
+ * Every successful vehicle mutation also appends a sync_events row for the
+ * event-log protocol (auditing + multi-client pull).
  */
 
 import "server-only";
@@ -47,13 +50,14 @@ async function authorizeVehicle(
   currentQueuePosition: number;
   seatingCapacity: number;
   driverId: string | null;
+  version: number;
 } | null> {
   const admin = createSupabaseAdminClient();
 
   let { data: vehicle, error } = await admin
     .from("vehicles")
     .select(
-      "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id"
+      "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id, version"
     )
     .eq("registration_number", registrationNumber)
     .maybeSingle();
@@ -62,7 +66,7 @@ async function authorizeVehicle(
     const { data: alt } = await admin
       .from("vehicles")
       .select(
-        "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id"
+        "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id, version"
       )
       .ilike("registration_number", registrationNumber)
       .limit(1)
@@ -93,6 +97,7 @@ async function authorizeVehicle(
     currentQueuePosition: (vehicle.current_queue_position as number) ?? 0,
     seatingCapacity: (vehicle.seating_capacity as number) ?? 15,
     driverId: (vehicle.driver_id as string | null) ?? null,
+    version: (vehicle.version as number) ?? 1,
   };
 }
 
@@ -123,8 +128,8 @@ async function writeRankFee(
   const admin = createSupabaseAdminClient();
   const now = new Date();
   const nowIso = now.toISOString();
-  const date = nowIso.slice(0, 10); // YYYY-MM-DD
-  const month = nowIso.slice(0, 7); // YYYY-MM
+  const date = nowIso.slice(0, 10);
+  const month = nowIso.slice(0, 7);
   const sinceIso = new Date(Date.now() - DOUBLE_CLICK_MS).toISOString();
 
   const { data: recent } = await admin
@@ -228,6 +233,36 @@ async function recordTrip(
   }
 }
 
+/** Append an event-log row so other clients can pull the change. */
+async function logSyncEvent(
+  entityId: string,
+  operation: "UPDATE",
+  payload: Record<string, unknown>,
+  baseVersion: number,
+  clientId: string
+): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  const id = `evt_${Date.now()}_${entityId.replace(/\s+/g, "")}`;
+  const idempotencyKey = `${id}_${operation}`;
+
+  const { error } = await admin.from("sync_events").insert({
+    id,
+    entity_type: "vehicle",
+    entity_id: entityId,
+    operation,
+    payload,
+    idempotency_key: idempotencyKey,
+    client_id: clientId,
+    occurred_at: new Date().toISOString(),
+    base_version: baseVersion,
+  });
+
+  if (error) {
+    // Non-fatal: mutation already applied
+    console.warn("[marshal/dispatch] sync_events insert failed:", error.message);
+  }
+}
+
 export async function applyDispatchAction(
   context: MarshalContext,
   registrationNumber: string,
@@ -245,6 +280,7 @@ export async function applyDispatchAction(
   const reg = vehicle.reg;
   const admin = createSupabaseAdminClient();
   const nowIso = new Date().toISOString();
+  const clientId = `marshal:${context.marshalId}`;
 
   switch (action) {
     case "load": {
@@ -254,15 +290,23 @@ export async function applyDispatchAction(
         newPosition = maxQueued + 1;
       }
 
+      const payload = {
+        status: "Loading",
+        current_queue_position: newPosition,
+      };
+
       const { error } = await admin
         .from("vehicles")
         .update({
-          status: "Loading",
-          current_queue_position: newPosition,
+          ...payload,
+          version: vehicle.version + 1,
+          updated_at: nowIso,
         })
         .eq("registration_number", reg);
 
       if (error) return { success: false, error: error.message };
+
+      await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
       return { success: true, newStatus: "Loading" };
     }
 
@@ -298,12 +342,17 @@ export async function applyDispatchAction(
       }
 
       const oldPos = vehicle.currentQueuePosition;
+      const payload = {
+        status: "Departed",
+        current_queue_position: 0,
+      };
 
       const { error } = await admin
         .from("vehicles")
         .update({
-          status: "Departed",
-          current_queue_position: 0,
+          ...payload,
+          version: vehicle.version + 1,
+          updated_at: nowIso,
         })
         .eq("registration_number", reg);
 
@@ -321,6 +370,7 @@ export async function applyDispatchAction(
       }
 
       await recordTrip({ ...vehicle, reg }, nowIso);
+      await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
 
       return {
         success: true,
@@ -330,9 +380,14 @@ export async function applyDispatchAction(
     }
 
     case "delay": {
+      const payload = { status: "Delayed" };
       const { error } = await admin
         .from("vehicles")
-        .update({ status: "Delayed" })
+        .update({
+          ...payload,
+          version: vehicle.version + 1,
+          updated_at: nowIso,
+        })
         .eq("registration_number", reg);
 
       if (error) return { success: false, error: error.message };
@@ -349,15 +404,21 @@ export async function applyDispatchAction(
         });
       }
 
+      await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
       return { success: true, newStatus: "Delayed" };
     }
 
     case "breakdown": {
+      const payload = {
+        status: "Breakdown",
+        current_queue_position: 0,
+      };
       const { error } = await admin
         .from("vehicles")
         .update({
-          status: "Breakdown",
-          current_queue_position: 0,
+          ...payload,
+          version: vehicle.version + 1,
+          updated_at: nowIso,
         })
         .eq("registration_number", reg);
 
@@ -375,19 +436,27 @@ export async function applyDispatchAction(
         });
       }
 
+      await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
       return { success: true, newStatus: "Breakdown" };
     }
 
     case "reset_to_waiting": {
+      const payload = {
+        status: "Waiting",
+        current_queue_position: 0,
+      };
       const { error } = await admin
         .from("vehicles")
         .update({
-          status: "Waiting",
-          current_queue_position: 0,
+          ...payload,
+          version: vehicle.version + 1,
+          updated_at: nowIso,
         })
         .eq("registration_number", reg);
 
       if (error) return { success: false, error: error.message };
+
+      await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
       return { success: true, newStatus: "Waiting" };
     }
 

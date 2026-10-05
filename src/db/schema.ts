@@ -23,9 +23,7 @@ import {
   jsonb,
   bigint,
   uuid,
-  uniqueIndex,
   index,
-  check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -75,7 +73,7 @@ export const staff = pgTable("staff", {
   fullName: text("full_name").notNull(),
   email: text("email").notNull().unique(),
   phone: text("phone"),
-  role: text("role").notNull(), // super-admin | admin | fleet-manager | inspector
+  role: text("role").notNull(),
   region: text("region"),
   terminalId: text("terminal_id"),
   isActive: boolean("is_active").notNull().default(true),
@@ -179,7 +177,7 @@ export const vehicles = pgTable(
     make: text("make").notNull(),
     model: text("model").notNull(),
     seatingCapacity: integer("seating_capacity").notNull(),
-    classification: text("classification").notNull(), // kombi | midbus | bus
+    classification: text("classification").notNull(),
     routeAssignmentId: text("route_assignment_id").references(() => routes.id),
     loadingBay: text("loading_bay"),
     ownerName: text("owner_name"),
@@ -263,7 +261,7 @@ export const syncEvents = pgTable(
     id: text("id").primaryKey(),
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id").notNull(),
-    operation: text("operation").notNull(), // INSERT | UPDATE | DELETE
+    operation: text("operation").notNull(),
     payload: jsonb("payload").notNull().default({}),
     idempotencyKey: text("idempotency_key").notNull().unique(),
     clientId: text("client_id").notNull(),
@@ -291,7 +289,6 @@ export const notifications = pgTable("notifications", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Adverts kept for kiosk completeness
 export const adverts = pgTable("adverts", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
