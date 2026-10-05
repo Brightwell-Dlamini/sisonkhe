@@ -3,12 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Builds the intelligence snapshot from live Supabase data.
- * This is the system's working memory for admin decision-making.
+ * Rank admin: filtered to their region. Super-admin: national.
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 import type { ResolvedUser } from "../auth/roles";
+import { isNationalScope } from "../auth/permissions";
+import { matchesRegion, normalizeRegion } from "../auth/region";
 import {
   daysUntil,
   expirySeverity,
@@ -48,7 +50,9 @@ function buildBriefing(kpis: IntelligenceKpis, queueLen: number): string {
       `${kpis.permitsExpired} expired permit${kpis.permitsExpired === 1 ? "" : "s"}`
     );
   if (kpis.cofExpired > 0)
-    crises.push(`${kpis.cofExpired} expired COF${kpis.cofExpired === 1 ? "" : "s"}`);
+    crises.push(
+      `${kpis.cofExpired} expired COF${kpis.cofExpired === 1 ? "" : "s"}`
+    );
   if (kpis.renewalsPending > 0)
     crises.push(
       `${kpis.renewalsPending} renewal${kpis.renewalsPending === 1 ? "" : "s"} waiting`
@@ -99,14 +103,17 @@ function pickPrimary(
   };
 }
 
-/**
- * Compute national (or best-effort scoped) intelligence snapshot.
- */
 export async function buildIntelligenceSnapshot(
   user: ResolvedUser
 ): Promise<IntelligenceSnapshot> {
   const admin = createSupabaseAdminClient();
   const now = new Date();
+  const national = isNationalScope(user);
+  const regionScope = national ? null : (user.region ?? null);
+
+  if (!national && !regionScope) {
+    throw new Error("REGION_REQUIRED");
+  }
 
   const kpis = emptyKpis();
   const queue: WorkItem[] = [];
@@ -118,23 +125,26 @@ export async function buildIntelligenceSnapshot(
     operatorsCountRes,
     renewalsRes,
     masterCardsRes,
+    routesRes,
   ] = await Promise.all([
     admin
       .from("vehicles")
       .select(
-        "registration_number, vic, make, model, owner_name, permit_number, permit_status, permit_expiry_date, cof_number, cof_expiry_date, driver_id, status, roadworthiness_expiry, insurance_expiry"
+        "registration_number, vic, make, model, owner_name, permit_number, permit_status, permit_expiry_date, cof_number, cof_expiry_date, driver_id, status, roadworthiness_expiry, insurance_expiry, route_assignment_id"
       )
       .limit(5000),
     admin
       .from("drivers")
       .select(
-        "id, full_name, status, assigned_vehicle_reg, pdp_expiry_date, pdp_status, license_number"
+        "id, full_name, status, assigned_vehicle_reg, pdp_expiry_date, pdp_status, license_number, region"
       )
       .limit(5000),
     admin.from("fleet_operators").select("*", { count: "exact", head: true }),
     admin
       .from("permit_renewal_requests")
-      .select("id, vehicle_reg, operator, status, request_date, current_expiry_date")
+      .select(
+        "id, vehicle_reg, operator, status, request_date, current_expiry_date, region"
+      )
       .eq("status", "Pending Admin Approval")
       .order("request_date", { ascending: true })
       .limit(200),
@@ -143,18 +153,45 @@ export async function buildIntelligenceSnapshot(
       .select("id, operator_id, status")
       .eq("status", "Frozen")
       .limit(200),
+    admin.from("routes").select("id, region_code").limit(2000),
   ]);
 
-  const vehicles = vehiclesRes.data ?? [];
-  const drivers = driversRes.data ?? [];
-  const renewals = renewalsRes.data ?? [];
+  const routeRegion = new Map<string, string>();
+  for (const r of routesRes.data ?? []) {
+    if (r.id && r.region_code) {
+      routeRegion.set(String(r.id), String(r.region_code));
+    }
+  }
+
+  let vehicles = vehiclesRes.data ?? [];
+  let drivers = driversRes.data ?? [];
+  let renewals = renewalsRes.data ?? [];
   const frozenCards = masterCardsRes.data ?? [];
+
+  if (regionScope) {
+    vehicles = vehicles.filter((v) => {
+      const rid = v.route_assignment_id
+        ? routeRegion.get(String(v.route_assignment_id))
+        : null;
+      return matchesRegion(regionScope, rid);
+    });
+    drivers = drivers.filter((d) =>
+      matchesRegion(regionScope, d.region as string | null)
+    );
+    renewals = renewals.filter(
+      (r) =>
+        matchesRegion(regionScope, r.region as string | null) ||
+        !r.region
+    );
+  }
 
   kpis.vehiclesTotal = vehicles.length;
   kpis.driversTotal = drivers.length;
-  kpis.operatorsTotal = operatorsCountRes.count ?? 0;
+  kpis.operatorsTotal = national
+    ? (operatorsCountRes.count ?? 0)
+    : operatorsCountRes.count ?? 0;
   kpis.renewalsPending = renewals.length;
-  kpis.masterCardsFrozen = frozenCards.length;
+  kpis.masterCardsFrozen = national ? frozenCards.length : 0;
 
   try {
     const { count: approvedReady } = await admin
@@ -333,16 +370,20 @@ export async function buildIntelligenceSnapshot(
   }
 
   const unassignedDrivers = drivers.filter(
-    (d) => !d.assigned_vehicle_reg || String(d.assigned_vehicle_reg).trim() === ""
+    (d) =>
+      !d.assigned_vehicle_reg || String(d.assigned_vehicle_reg).trim() === ""
   );
   if (unassignedDrivers.length > 5) {
     queue.push({
       id: "drivers-unassigned-summary",
       kind: "unassigned_driver",
       severity: "medium",
-      score: rankScore("unassigned_driver") + Math.min(unassignedDrivers.length, 40),
+      score:
+        rankScore("unassigned_driver") +
+        Math.min(unassignedDrivers.length, 40),
       title: `${unassignedDrivers.length} drivers without vehicles`,
-      detail: "Assignment gaps reduce rank throughput and break roster integrity",
+      detail:
+        "Assignment gaps reduce rank throughput and break roster integrity",
       entityType: "driver",
       entityId: "batch",
       entityLabel: "Unassigned drivers",
@@ -354,16 +395,22 @@ export async function buildIntelligenceSnapshot(
     const id = r.id as string;
     const reg = (r.vehicle_reg as string) || "—";
     const ageDays = daysUntil(r.request_date as string | null, now);
-    const waitingDays = ageDays === null ? null : ageDays > 0 ? 0 : Math.abs(ageDays);
+    const waitingDays =
+      ageDays === null ? null : ageDays > 0 ? 0 : Math.abs(ageDays);
 
     queue.push({
       id: `renewal-${id}`,
       kind: "renewal_pending",
       severity: waitingDays !== null && waitingDays >= 3 ? "high" : "medium",
-      score: rankScore("renewal_pending", waitingDays !== null ? -waitingDays : null),
+      score: rankScore(
+        "renewal_pending",
+        waitingDays !== null ? -waitingDays : null
+      ),
       title: `Renewal pending — ${reg}`,
       detail: `${r.operator ?? "Operator"} · requested ${r.request_date ?? "—"}${
-        waitingDays !== null && waitingDays > 0 ? ` · waiting ${waitingDays}d` : ""
+        waitingDays !== null && waitingDays > 0
+          ? ` · waiting ${waitingDays}d`
+          : ""
       }`,
       entityType: "renewal",
       entityId: id,
@@ -375,36 +422,38 @@ export async function buildIntelligenceSnapshot(
     });
   }
 
-  const frozenOpIds = frozenCards
-    .map((c) => c.operator_id as string | null)
-    .filter((id): id is string => !!id);
-  const opNameMap = new Map<string, string>();
-  if (frozenOpIds.length > 0) {
-    const { data: ops } = await admin
-      .from("fleet_operators")
-      .select("id, name, company_name")
-      .in("id", frozenOpIds);
-    for (const o of ops ?? []) {
-      const label =
-        (o.company_name as string) || (o.name as string) || "Operator";
-      opNameMap.set(o.id as string, label);
+  if (national) {
+    const frozenOpIds = frozenCards
+      .map((c) => c.operator_id as string | null)
+      .filter((id): id is string => !!id);
+    const opNameMap = new Map<string, string>();
+    if (frozenOpIds.length > 0) {
+      const { data: ops } = await admin
+        .from("fleet_operators")
+        .select("id, name, company_name")
+        .in("id", frozenOpIds);
+      for (const o of ops ?? []) {
+        const label =
+          (o.company_name as string) || (o.name as string) || "Operator";
+        opNameMap.set(o.id as string, label);
+      }
     }
-  }
-  for (const c of frozenCards.slice(0, 20)) {
-    const opId = String(c.operator_id ?? c.id);
-    const name = opNameMap.get(opId) || "Operator";
-    queue.push({
-      id: `mcard-frozen-${c.id}`,
-      kind: "frozen_master_card",
-      severity: "high",
-      score: rankScore("frozen_master_card"),
-      title: `Frozen Master Card — ${name}`,
-      detail: "Disbursements and renewal payments blocked",
-      entityType: "operator",
-      entityId: opId,
-      entityLabel: name,
-      href: "/admin/operators",
-    });
+    for (const c of frozenCards.slice(0, 20)) {
+      const opId = String(c.operator_id ?? c.id);
+      const name = opNameMap.get(opId) || "Operator";
+      queue.push({
+        id: `mcard-frozen-${c.id}`,
+        kind: "frozen_master_card",
+        severity: "high",
+        score: rankScore("frozen_master_card"),
+        title: `Frozen Master Card — ${name}`,
+        detail: "Disbursements and renewal payments blocked",
+        entityType: "operator",
+        entityId: opId,
+        entityLabel: name,
+        href: "/admin/operators",
+      });
+    }
   }
 
   if (kpis.printQueueOpen > 0) {
@@ -485,27 +534,28 @@ export async function buildIntelligenceSnapshot(
     "Active suspensions — confirm still intended",
     "/admin/drivers"
   );
-  pushRisk(
-    "risk-frozen-cards",
-    "Frozen Master Cards",
-    kpis.masterCardsFrozen,
-    "high",
-    "Operator money movement halted",
-    "/admin/operators"
-  );
+  if (national) {
+    pushRisk(
+      "risk-frozen-cards",
+      "Frozen Master Cards",
+      kpis.masterCardsFrozen,
+      "high",
+      "Operator money movement halted",
+      "/admin/operators"
+    );
+  }
 
   risks.sort((a, b) => {
     const order = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
     return order[a.severity] - order[b.severity] || b.value - a.value;
   });
 
-  const scope: IntelligenceSnapshot["scope"] =
-    user.role === "admin" && user.region ? "region" : "national";
+  const scope: IntelligenceSnapshot["scope"] = national ? "national" : "region";
 
   return {
     generatedAt: now.toISOString(),
     scope,
-    region: user.region ?? null,
+    region: regionScope,
     kpis,
     queue: trimmed,
     risks,
