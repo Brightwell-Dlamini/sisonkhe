@@ -108,6 +108,19 @@ export const marshals = pgTable("marshals", {
   notes: text("notes"),
   photoStoragePath: text("photo_storage_path"),
   signatureStoragePath: text("signature_storage_path"),
+  photoDataUrl: text("photo_data_url"),
+  signatureDataUrl: text("signature_data_url"),
+
+  // Offline-first: client-managed ms since epoch
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+  syncedAt: bigint("synced_at", { mode: "number" }),
+  syncStatus: text("sync_status"),
+
+  // Server-managed
+  serverCreatedAt: timestamp("server_created_at", { withTimezone: true }).notNull().defaultNow(),
+  serverUpdatedAt: timestamp("server_updated_at", { withTimezone: true }).notNull().defaultNow(),
+
   whatsappNo: text("whatsapp_no"),
   authUserId: uuid("auth_user_id"),
   isActive: boolean("is_active").default(true),
@@ -115,10 +128,7 @@ export const marshals = pgTable("marshals", {
   assignedRouteId: text("assigned_route_id"),
   terminalId: text("terminal_id"),
   version: integer("version").notNull().default(1),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
-
 export const drivers = pgTable("drivers", {
   id: text("id").primaryKey(),
   fullName: text("full_name").notNull(),
