@@ -1,3 +1,4 @@
+"use client";
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -5,7 +6,7 @@
  * Offline fallback page. Precache'd by the service worker and served
  * when a navigation request fails with no cache match.
  */
-"use client";
+
 
 export const metadata = {
   title: "Offline — Sisonkhe In Transit",
