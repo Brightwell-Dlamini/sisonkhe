@@ -6,7 +6,9 @@
  * when a navigation request fails with no cache match.
  */
 
-"use client";
+export const metadata = {
+  title: "Offline — Sisonkhe In Transit",
+};
 
 export default function OfflinePage() {
   return (

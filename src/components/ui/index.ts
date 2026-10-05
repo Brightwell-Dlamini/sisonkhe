@@ -7,8 +7,6 @@ export { Checkbox } from "./Checkbox";
 export { Switch } from "./Switch";
 export { Badge } from "./Badge";
 export { Table, TableHead, TableBody, Th, Tr, Td } from "./Table";
-export { TableActions } from "./TableActions";
-export type { TableAction } from "./TableActions";
 export { Modal } from "./Modal";
 export { ConfirmDialog } from "./ConfirmDialog";
 export { ToastProvider, useToast } from "./Toast";
