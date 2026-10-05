@@ -16,6 +16,8 @@ import {
   AlertTriangle,
   Wrench,
   RotateCcw,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import type { MarshalVehicle } from "@/lib/marshal/queries";
 import type { DispatchAction } from "@/lib/marshal/dispatch";
@@ -29,6 +31,10 @@ interface Props {
     action: DispatchAction,
     reason?: string
   ) => Promise<{ success: boolean; error?: string; rankFeeWritten?: boolean }>;
+  onReorder?: (
+    reg: string,
+    direction: "up" | "down"
+  ) => Promise<{ success: boolean; error?: string }>;
   showToast: (msg: string) => void;
   onSelectVehicle?: (reg: string) => void;
 }
@@ -47,10 +53,11 @@ const STATUS_STYLES: Record<string, string> = {
 export default function QueueRow({
   vehicle,
   onDispatch,
+  onReorder,
   showToast,
   onSelectVehicle,
 }: Props) {
-  const [pending, setPending] = useState<DispatchAction | null>(null);
+  const [pending, setPending] = useState<DispatchAction | "up" | "down" | null>(null);
   const [showDelay, setShowDelay] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
 
@@ -75,11 +82,25 @@ export default function QueueRow({
     } else if (action === "load") {
       showToast(`${vehicle.registrationNumber}: moved to Loading.`);
     } else if (action === "full_cabin") {
-      showToast(`${vehicle.registrationNumber}: full cabin \u2192 departed.`);
+      showToast(`${vehicle.registrationNumber}: full cabin → departed.`);
     } else if (action === "depart") {
       showToast(`${vehicle.registrationNumber}: departed.`);
     } else {
       showToast(`${vehicle.registrationNumber}: updated.`);
+    }
+  };
+
+  const handleReorder = async (direction: "up" | "down") => {
+    if (!onReorder) return;
+    setPending(direction);
+    const res = await onReorder(vehicle.registrationNumber, direction);
+    setPending(null);
+    if (res.success) {
+      showToast(
+        `${vehicle.registrationNumber}: moved ${direction === "up" ? "up" : "down"} in queue.`
+      );
+    } else {
+      showToast(res.error ?? "Reorder failed");
     }
   };
 
@@ -116,20 +137,54 @@ export default function QueueRow({
         }`}
       >
         <div className="flex items-start gap-3">
-          {/* Queue position */}
-          <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center font-mono font-black shrink-0 ${
-              isLead
-                ? "bg-emerald-600 text-white"
-                : isQueued
-                ? "bg-white/[0.06] text-zinc-300"
-                : "bg-[#0F0F10] text-zinc-400 border border-dashed border-white/[0.08]"
-            }`}
-          >
-            {isQueued ? `#${vehicle.currentQueuePosition}` : "\u2014"}
+          {/* Queue position + reorder */}
+          <div className="flex flex-col items-center gap-0.5 shrink-0">
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center font-mono font-black ${
+                isLead
+                  ? "bg-emerald-600 text-white"
+                  : isQueued
+                  ? "bg-white/[0.06] text-zinc-300"
+                  : "bg-[#0F0F10] text-zinc-400 border border-dashed border-white/[0.08]"
+              }`}
+            >
+              {isQueued ? `#${vehicle.currentQueuePosition}` : "—"}
+            </div>
+            {isQueued && onReorder && (
+              <div className="flex flex-col gap-0.5 mt-1">
+                <button
+                  type="button"
+                  disabled={isLead || pending === "up"}
+                  onClick={() => handleReorder("up")}
+                  className="p-0.5 rounded text-zinc-500 hover:text-white disabled:opacity-30"
+                  title="Move up"
+                  aria-label="Move up in queue"
+                >
+                  {pending === "up" ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={pending === "down"}
+                  onClick={() => handleReorder("down")}
+                  className="p-0.5 rounded text-zinc-500 hover:text-white disabled:opacity-30"
+                  title="Move down"
+                  aria-label="Move down in queue"
+                >
+                  {pending === "down" ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Identity (clickable for details) */}
+          {/* Identity */}
           <div
             className="flex-1 min-w-0 cursor-pointer group"
             onClick={() => onSelectVehicle?.(vehicle.registrationNumber)}
@@ -161,12 +216,12 @@ export default function QueueRow({
             <div className="flex items-center gap-3 mt-1 text-[11px] text-zinc-500 flex-wrap">
               <span className="flex items-center gap-1">
                 <Bus className="w-3 h-3" />
-                {vehicle.make} {vehicle.model} \u2022 {vehicle.seatingCapacity} seats
+                {vehicle.make} {vehicle.model} • {vehicle.seatingCapacity} seats
               </span>
               {vehicle.routeOrigin && vehicle.routeDestination && (
                 <span className="flex items-center gap-1">
                   <MapPin className="w-3 h-3" />
-                  {vehicle.routeOrigin} \u2192 {vehicle.routeDestination}
+                  {vehicle.routeOrigin} → {vehicle.routeDestination}
                 </span>
               )}
               {vehicle.driverName && (
@@ -178,7 +233,7 @@ export default function QueueRow({
             </div>
 
             <span className="text-[10px] text-zinc-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors inline-block mt-1 opacity-0 group-hover:opacity-100">
-              View details \u2192
+              View details →
             </span>
           </div>
         </div>
@@ -265,8 +320,6 @@ export default function QueueRow({
     </>
   );
 }
-
-// ---------------------------------------------------------------------------
 
 function ActionButton({
   onClick,

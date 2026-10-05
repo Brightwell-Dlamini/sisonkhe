@@ -9,6 +9,10 @@ interface UseMarshalVehiclesResult {
   error: string | null;
   refresh: () => Promise<void>;
   addToQueue: (reg: string) => Promise<{ success: boolean; position?: number; error?: string }>;
+  reorderQueue: (
+    reg: string,
+    direction: "up" | "down"
+  ) => Promise<{ success: boolean; newPosition?: number; error?: string }>;
 }
 
 export function useMarshalVehicles(): UseMarshalVehiclesResult {
@@ -57,5 +61,27 @@ export function useMarshalVehicles(): UseMarshalVehiclesResult {
     [refresh]
   );
 
-  return { vehicles, loading, error, refresh, addToQueue };
+  const reorderQueue = useCallback(
+    async (reg: string, direction: "up" | "down") => {
+      try {
+        const res = await fetch("/api/marshal/vehicles/queue/reorder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ registrationNumber: reg, direction }),
+        });
+        const data = await res.json();
+        if (!res.ok) return { success: false, error: data.error };
+        await refresh();
+        return { success: true, newPosition: data.newPosition as number };
+      } catch (err) {
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : "Network error",
+        };
+      }
+    },
+    [refresh]
+  );
+
+  return { vehicles, loading, error, refresh, addToQueue, reorderQueue };
 }
