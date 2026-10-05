@@ -9,7 +9,21 @@
 "use client";
 
 import Dexie, { type Table } from "dexie";
-import type { SyncEvent } from "@/lib/sync/protocol";
+
+export interface OutboxEntry {
+  id: string;
+  action: "INSERT" | "UPDATE" | "DELETE";
+  entityType: string;
+  entityId: string;
+  payload: Record<string, unknown>;
+  idempotencyKey: string;
+  clientId: string;
+  createdAt: string;
+  status: "pending" | "in_flight" | "success" | "failed";
+  lastError?: string;
+  attempts: number;
+  baseVersion?: number;
+}
 
 export interface LocalVehicle {
   registrationNumber: string;
@@ -44,54 +58,32 @@ export interface LocalDriver {
   [key: string]: unknown;
 }
 
-export interface LocalQueueEvent {
-  id: string;
-  vehicleReg: string;
-  action: string;
-  occurredAt: string;
-  marshalId?: string;
-  payload?: Record<string, unknown>;
-}
-
 export interface WatermarkRow {
   table: string;
   seq: number;
 }
 
 export class SisonkheDB extends Dexie {
+  outbox!: Table<OutboxEntry, string>;
   vehicles!: Table<LocalVehicle, string>;
   drivers!: Table<LocalDriver, string>;
-  queueEvents!: Table<LocalQueueEvent, string>;
-  outbox!: Table<SyncEvent, string>;
   watermarks!: Table<WatermarkRow, string>;
 
   constructor() {
     super("sisonkhe");
 
     this.version(1).stores({
+      outbox: "id, status, entityType, createdAt, idempotencyKey",
       vehicles: "registrationNumber, vic, status, updatedAt, routeAssignmentId",
       drivers: "id, assignedVehicleReg, status, updatedAt",
-      queueEvents: "id, vehicleReg, occurredAt",
-      outbox: "id, entityType, occurredAt, idempotencyKey",
       watermarks: "table",
     });
   }
 }
 
-let dbInstance: SisonkheDB | null = null;
+/** Singleton used by the existing offline engine */
+export const offlineDB = new SisonkheDB();
 
 export function getOfflineDb(): SisonkheDB {
-  if (typeof window === "undefined") {
-    throw new Error("getOfflineDb() is client-only");
-  }
-  if (!dbInstance) {
-    dbInstance = new SisonkheDB();
-  }
-  return dbInstance;
-}
-
-/** Safe accessor that returns null on the server */
-export function tryGetOfflineDb(): SisonkheDB | null {
-  if (typeof window === "undefined") return null;
-  return getOfflineDb();
+  return offlineDB;
 }

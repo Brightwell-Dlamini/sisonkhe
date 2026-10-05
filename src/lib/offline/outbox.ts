@@ -2,14 +2,13 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Offline outbox: queue SyncEvents locally and flush when online.
+ * Offline outbox operations.
+ * Compatible with SyncWorker + src/lib/offline/sync.ts
  */
 
 "use client";
 
-import { getOfflineDb } from "./db";
-import type { SyncEvent } from "@/lib/sync/protocol";
-import { pushEvents } from "@/lib/sync/client";
+import { offlineDB, type OutboxEntry } from "./db";
 
 const CLIENT_ID_KEY = "sisonkhe:clientId";
 
@@ -26,67 +25,61 @@ export function getClientId(): string {
   return id;
 }
 
-/** Enqueue an event for later delivery */
-export async function enqueueEvent(event: SyncEvent): Promise<void> {
-  const db = getOfflineDb();
-  await db.outbox.put(event);
-}
-
-/** Flush the outbox to the server. Returns number of events accepted. */
-export async function flushOutbox(): Promise<{ accepted: number; rejected: number }> {
-  const db = getOfflineDb();
-  const pending = await db.outbox.orderBy("occurredAt").toArray();
-
-  if (pending.length === 0) {
-    return { accepted: 0, rejected: 0 };
+export async function enqueue(
+  entry: Omit<OutboxEntry, "id" | "status" | "attempts" | "createdAt" | "clientId"> & {
+    id?: string;
+    clientId?: string;
   }
+): Promise<string> {
+  const id =
+    entry.id ??
+    (typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `out-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
 
-  const clientId = getClientId();
-  let totalAccepted = 0;
-  let totalRejected = 0;
-
-  // Send in batches of 50
-  for (let i = 0; i < pending.length; i += 50) {
-    const batch = pending.slice(i, i + 50);
-    try {
-      const result = await pushEvents(batch, clientId);
-      totalAccepted += result.accepted.length;
-      totalRejected += result.rejected.length;
-
-      // Remove accepted events from outbox
-      await db.outbox.bulkDelete(result.accepted);
-
-      // Leave rejected ones for inspection / retry with different baseVersion
-      if (result.rejected.length > 0) {
-        console.warn("[outbox] rejected events", result.rejected);
-      }
-    } catch (err) {
-      console.error("[outbox] flush failed", err);
-      break; // stop on network error; will retry later
-    }
-  }
-
-  return { accepted: totalAccepted, rejected: totalRejected };
-}
-
-/** Wire up automatic flush on online + interval */
-export function startOutboxWorker(intervalMs = 15_000): () => void {
-  if (typeof window === "undefined") return () => {};
-
-  const onOnline = () => {
-    void flushOutbox();
+  const full: OutboxEntry = {
+    id,
+    action: entry.action,
+    entityType: entry.entityType,
+    entityId: entry.entityId,
+    payload: entry.payload,
+    idempotencyKey: entry.idempotencyKey,
+    clientId: entry.clientId ?? getClientId(),
+    createdAt: new Date().toISOString(),
+    status: "pending",
+    attempts: 0,
+    baseVersion: entry.baseVersion,
   };
 
-  window.addEventListener("online", onOnline);
-  const timer = setInterval(() => {
-    if (navigator.onLine) void flushOutbox();
-  }, intervalMs);
+  await offlineDB.outbox.put(full);
+  return id;
+}
 
-  // Immediate attempt
-  if (navigator.onLine) void flushOutbox();
+export async function listPending(): Promise<OutboxEntry[]> {
+  return offlineDB.outbox
+    .where("status")
+    .anyOf(["pending", "in_flight"])
+    .sortBy("createdAt");
+}
 
-  return () => {
-    window.removeEventListener("online", onOnline);
-    clearInterval(timer);
-  };
+export async function markInFlight(id: string): Promise<void> {
+  await offlineDB.outbox.update(id, {
+    status: "in_flight",
+    attempts: (await offlineDB.outbox.get(id))?.attempts ?? 0 + 1,
+  });
+}
+
+export async function markSuccess(id: string): Promise<void> {
+  await offlineDB.outbox.delete(id);
+}
+
+export async function markFailure(id: string, reason: string): Promise<void> {
+  await offlineDB.outbox.update(id, {
+    status: "failed",
+    lastError: reason,
+  });
+}
+
+export async function pendingCount(): Promise<number> {
+  return offlineDB.outbox.where("status").equals("pending").count();
 }
