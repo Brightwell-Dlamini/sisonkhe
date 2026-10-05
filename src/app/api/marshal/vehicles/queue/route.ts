@@ -38,10 +38,11 @@ export async function POST(request: NextRequest) {
 
     const admin = createSupabaseAdminClient();
 
-    // Verify vehicle is in marshal's scope
     const { data: vehicle } = await admin
       .from("vehicles")
-      .select("registration_number, route_assignment_id, current_queue_position")
+      .select(
+        "registration_number, route_assignment_id, current_queue_position, version"
+      )
       .eq("registration_number", reg)
       .maybeSingle();
 
@@ -60,7 +61,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find next queue position on that route
     const { data: existing } = await admin
       .from("vehicles")
       .select("current_queue_position")
@@ -72,17 +72,40 @@ export async function POST(request: NextRequest) {
       0
     );
     const nextPos = maxPos + 1;
+    const nowIso = new Date().toISOString();
+    const baseVersion = (vehicle.version as number) ?? 1;
 
     const { error: updateErr } = await admin
       .from("vehicles")
       .update({
         current_queue_position: nextPos,
         status: "Waiting",
+        version: baseVersion + 1,
+        updated_at: nowIso,
       })
       .eq("registration_number", reg);
 
     if (updateErr) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    }
+
+    try {
+      await admin.from("sync_events").insert({
+        id: `evt_${Date.now()}_${reg.replace(/\s+/g, "")}`,
+        entity_type: "vehicle",
+        entity_id: reg,
+        operation: "UPDATE",
+        payload: {
+          current_queue_position: nextPos,
+          status: "Waiting",
+        },
+        idempotency_key: `queue_add_${reg}_${Date.now()}`,
+        client_id: `marshal:${ctx.marshalId}`,
+        occurred_at: nowIso,
+        base_version: baseVersion,
+      });
+    } catch {
+      /* non-fatal */
     }
 
     return NextResponse.json({ success: true, position: nextPos });
