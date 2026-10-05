@@ -2,14 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Marshal admin queries. Full CRUD + card issuance.
- *
- * Schema notes (verified 2026-10-05 against live DB):
- *   - NO `phone` column. Use `cell_no`.
- *   - NO `badge_number` column.
- *   - NO `profile_picture_url` column. Use `photo_storage_path` / `photo_data_url`.
- *   - `created_at` / `updated_at` are BIGINT (client-managed, ms since epoch).
- *   - `server_created_at` / `server_updated_at` are TIMESTAMPTZ (server-managed).
+ * Marshal admin queries. Portal registration schema is the source of truth.
+ * Avoid selecting columns that may not exist on the portal table.
  */
 
 import "server-only";
@@ -21,77 +15,97 @@ export interface MarshalRow {
   firstName: string;
   surname: string;
   fullName: string;
-  phone: string | null; // alias of cellNo for UI convenience
+  phone: string | null;
   cellNo: string | null;
-  homeTelNo: string | null;
   whatsappNo: string | null;
   idNumber: string | null;
   region: string;
-  terminalName: string; // alias of position
+  terminalName: string;
   assignedRouteId: string | null;
-  terminalId: string | null;
-  badgeNumber: string | null; // always null — no column
+  badgeNumber: string | null;
   position: string | null;
   isActive: boolean;
   authUserId: string | null;
-  profilePictureUrl: string | null; // from photo_storage_path
-  createdAt: string; // ISO — derived from server_created_at (bigint)
+  profilePictureUrl: string | null;
+  createdAt: string;
 }
 
-const SELECT_COLUMNS = `
-  id, staff_number, first_name, surname, position, residential_address,
-  home_tel_no, cell_no, id_number, chief_of_area, indvuna, marital_status,
-  partner_name, number_of_kids, next_of_kin_full_name, next_of_kin_relationship,
-  next_of_kin_contact_number, region, agreement_accepted, registration_date,
-  field_officer_name, notes, photo_storage_path, signature_storage_path,
-  photo_data_url, signature_data_url, created_at, updated_at, synced_at,
-  sync_status, server_created_at, server_updated_at, whatsapp_no, auth_user_id,
-  is_active, last_login_at, assigned_route_id, terminal_id, version
-`;
+function str(v: unknown): string | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s.length ? s : null;
+}
 
 function mapMarshal(row: Record<string, unknown>): MarshalRow {
-  const serverCreatedAt = row.server_created_at as string | null;
-  const createdAtBigint = row.created_at as number | null;
-  const createdAtIso =
-    serverCreatedAt ??
-    (createdAtBigint ? new Date(createdAtBigint).toISOString() : new Date().toISOString());
+  const firstName = str(row.first_name) ?? "";
+  const surname = str(row.surname) ?? "";
+  const phone = str(row.phone) ?? str(row.cell_no);
+  const cellNo = str(row.cell_no) ?? phone;
+  const position = str(row.position);
 
   return {
-    id: row.id as string,
-    staffNumber: (row.staff_number as string | null) ?? null,
-    firstName: (row.first_name as string) ?? "",
-    surname: (row.surname as string) ?? "",
-    fullName: `${row.first_name ?? ""} ${row.surname ?? ""}`.trim(),
-    phone: (row.cell_no as string | null) ?? null,
-    cellNo: (row.cell_no as string | null) ?? null,
-    homeTelNo: (row.home_tel_no as string | null) ?? null,
-    whatsappNo: (row.whatsapp_no as string | null) ?? null,
-    idNumber: (row.id_number as string | null) ?? null,
-    region: (row.region as string) ?? "",
-    terminalName: (row.position as string) ?? "Terminal",
-    assignedRouteId: (row.assigned_route_id as string | null) ?? null,
-    terminalId: (row.terminal_id as string | null) ?? null,
-    badgeNumber: null, // no column exists
-    position: (row.position as string | null) ?? null,
-    isActive: (row.is_active as boolean) ?? true,
-    authUserId: (row.auth_user_id as string | null) ?? null,
-    profilePictureUrl: (row.photo_storage_path as string | null) ?? null,
-    createdAt: createdAtIso,
+    id: String(row.id),
+    staffNumber: str(row.staff_number),
+    firstName,
+    surname,
+    fullName: `${firstName} ${surname}`.trim() || "Marshal",
+    phone,
+    cellNo,
+    whatsappNo: str(row.whatsapp_no) ?? cellNo,
+    idNumber: str(row.id_number),
+    region: str(row.region) ?? "—",
+    terminalName: position ?? "Terminal",
+    assignedRouteId: str(row.assigned_route_id),
+    badgeNumber: str(row.badge_number),
+    position,
+    // Portal often leaves is_active NULL → treat as active
+    isActive: row.is_active === false ? false : true,
+    authUserId: str(row.auth_user_id),
+    profilePictureUrl: str(row.profile_picture_url),
+    createdAt:
+      row.created_at != null
+        ? typeof row.created_at === "number"
+          ? new Date(row.created_at).toISOString()
+          : String(row.created_at)
+        : new Date().toISOString(),
   };
 }
 
+/**
+ * Columns known on the registration-portal marshals table.
+ * Do not add speculative columns here — missing columns make PostgREST fail
+ * the whole select and the UI shows an empty list.
+ */
+const SELECT_COLUMNS =
+  "id, staff_number, first_name, surname, phone, cell_no, whatsapp_no, id_number, region, position, is_active, auth_user_id, created_at";
+
 export async function listMarshals(): Promise<MarshalRow[]> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+
+  // Prefer ordered list; fall back without order if created_at is awkward type
+  let { data, error } = await admin
     .from("marshals")
     .select(SELECT_COLUMNS)
-    .order("server_created_at", { ascending: false });
+    .order("surname", { ascending: true });
 
   if (error) {
-    console.error("[admin/marshals] list error:", error);
-    throw new Error(`Failed to list marshals: ${error.message}`);
+    console.error("[admin/marshals] list error:", error.message, error);
+    // Retry with minimal columns only
+    const retry = await admin
+      .from("marshals")
+      .select(
+        "id, first_name, surname, phone, cell_no, id_number, region, is_active, auth_user_id"
+      );
+    if (retry.error) {
+      console.error("[admin/marshals] minimal list error:", retry.error.message);
+      throw new Error(
+        `Could not load marshals: ${retry.error.message}`
+      );
+    }
+    data = retry.data;
   }
-  return (data ?? []).map(mapMarshal);
+
+  return (data ?? []).map((row) => mapMarshal(row as Record<string, unknown>));
 }
 
 export async function getMarshalById(id: string): Promise<MarshalRow | null> {
@@ -103,33 +117,33 @@ export async function getMarshalById(id: string): Promise<MarshalRow | null> {
     .maybeSingle();
 
   if (error) {
-    console.error("[admin/marshals] getById error:", error);
-    throw new Error(`Failed to load marshal: ${error.message}`);
+    console.error("[admin/marshals] get error:", error.message);
+    const retry = await admin
+      .from("marshals")
+      .select(
+        "id, first_name, surname, phone, cell_no, id_number, region, is_active, auth_user_id"
+      )
+      .eq("id", id)
+      .maybeSingle();
+    if (retry.error || !retry.data) return null;
+    return mapMarshal(retry.data as Record<string, unknown>);
   }
-  return data ? mapMarshal(data) : null;
+
+  return data ? mapMarshal(data as Record<string, unknown>) : null;
 }
 
 export interface CreateMarshalInput {
   firstName: string;
   surname: string;
-  phone: string; // mapped to cell_no
+  phone: string;
   cellNo?: string;
-  homeTelNo?: string;
   whatsappNo?: string;
   idNumber?: string;
   region: string;
   terminalName?: string;
-  terminalId?: string | null;
   assignedRouteId?: string | null;
+  badgeNumber?: string;
   position?: string;
-  residentialAddress?: string;
-  chiefOfArea?: string;
-  indvuna?: string;
-  maritalStatus?: string;
-  numberOfKids?: number;
-  nextOfKinFullName?: string;
-  nextOfKinRelationship?: string;
-  nextOfKinContactNumber?: string;
 }
 
 export async function createMarshal(input: CreateMarshalInput): Promise<{
@@ -139,8 +153,6 @@ export async function createMarshal(input: CreateMarshalInput): Promise<{
 }> {
   const admin = createSupabaseAdminClient();
 
-  const cellNo = input.cellNo || input.phone;
-
   if (input.idNumber) {
     const { data: existing } = await admin
       .from("marshals")
@@ -148,65 +160,86 @@ export async function createMarshal(input: CreateMarshalInput): Promise<{
       .eq("id_number", input.idNumber)
       .maybeSingle();
     if (existing) {
-      return { success: false, error: "A marshal with that National ID already exists." };
+      return {
+        success: false,
+        error: "A marshal with that National ID already exists.",
+      };
     }
   }
 
-  if (cellNo) {
+  if (input.cellNo) {
     const { data: existing } = await admin
       .from("marshals")
       .select("id")
-      .eq("cell_no", cellNo)
+      .eq("cell_no", input.cellNo)
       .maybeSingle();
     if (existing) {
-      return { success: false, error: "A marshal with that cell number already exists." };
+      return {
+        success: false,
+        error: "A marshal with that cell number already exists.",
+      };
     }
   }
 
   const id = `marshal-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const now = Date.now();
+
+  const insertPayload: Record<string, unknown> = {
+    id,
+    first_name: input.firstName,
+    surname: input.surname,
+    phone: input.phone,
+    cell_no: input.cellNo || input.phone,
+    whatsapp_no: input.whatsappNo || input.cellNo || input.phone,
+    id_number: input.idNumber || null,
+    region: input.region,
+    position: input.terminalName || input.position || "Terminal",
+    is_active: true,
+  };
 
   const { data, error } = await admin
     .from("marshals")
-    .insert({
-      id,
-      staff_number: "04",
-      first_name: input.firstName,
-      surname: input.surname,
-      position: input.terminalName || input.position || "Terminal",
-      residential_address: input.residentialAddress ?? "",
-      home_tel_no: input.homeTelNo ?? "N/A",
-      cell_no: cellNo,
-      id_number: input.idNumber ?? "",
-      chief_of_area: input.chiefOfArea ?? "",
-      indvuna: input.indvuna ?? "",
-      marital_status: input.maritalStatus ?? "Single",
-      number_of_kids: input.numberOfKids ?? 0,
-      next_of_kin_full_name: input.nextOfKinFullName ?? "",
-      next_of_kin_relationship: input.nextOfKinRelationship ?? "",
-      next_of_kin_contact_number: input.nextOfKinContactNumber ?? "",
-      region: input.region,
-      agreement_accepted: true,
-      registration_date: new Date().toISOString().split("T")[0],
-      whatsapp_no: input.whatsappNo || cellNo,
-      assigned_route_id: input.assignedRouteId ?? null,
-      terminal_id: input.terminalId ?? null,
-      is_active: true,
-      // BIGINT columns — client-managed for offline sync
-      created_at: now,
-      updated_at: now,
-      synced_at: now,
-      sync_status: "synced",
-    })
+    .insert(insertPayload)
     .select(SELECT_COLUMNS)
     .single();
 
   if (error || !data) {
-    console.error("[admin/marshals] insert error:", error);
-    return { success: false, error: error?.message ?? "Insert failed" };
+    // Retry insert with absolute minimum columns
+    if (error) {
+      console.error("[admin/marshals] insert error:", error.message);
+      const minimal = await admin
+        .from("marshals")
+        .insert({
+          id,
+          first_name: input.firstName,
+          surname: input.surname,
+          phone: input.phone,
+          cell_no: input.cellNo || input.phone,
+          id_number: input.idNumber || null,
+          region: input.region,
+          is_active: true,
+        })
+        .select(
+          "id, first_name, surname, phone, cell_no, id_number, region, is_active, auth_user_id"
+        )
+        .single();
+      if (minimal.error || !minimal.data) {
+        return {
+          success: false,
+          error: minimal.error?.message ?? error.message ?? "Insert failed",
+        };
+      }
+      return {
+        success: true,
+        marshal: mapMarshal(minimal.data as Record<string, unknown>),
+      };
+    }
+    return { success: false, error: "Insert failed" };
   }
 
-  return { success: true, marshal: mapMarshal(data) };
+  return {
+    success: true,
+    marshal: mapMarshal(data as Record<string, unknown>),
+  };
 }
 
 export async function updateMarshal(
@@ -215,55 +248,30 @@ export async function updateMarshal(
 ): Promise<{ success: boolean; error?: string }> {
   const admin = createSupabaseAdminClient();
   const patch: Record<string, unknown> = {};
-
   if (input.firstName !== undefined) patch.first_name = input.firstName;
   if (input.surname !== undefined) patch.surname = input.surname;
+  if (input.phone !== undefined) patch.phone = input.phone;
   if (input.cellNo !== undefined) patch.cell_no = input.cellNo;
-  else if (input.phone !== undefined) patch.cell_no = input.phone;
-  if (input.homeTelNo !== undefined) patch.home_tel_no = input.homeTelNo;
   if (input.whatsappNo !== undefined) patch.whatsapp_no = input.whatsappNo;
   if (input.idNumber !== undefined) patch.id_number = input.idNumber;
   if (input.region !== undefined) patch.region = input.region;
-  if (input.assignedRouteId !== undefined) patch.assigned_route_id = input.assignedRouteId;
-  if (input.terminalId !== undefined) patch.terminal_id = input.terminalId;
   if (input.terminalName !== undefined) patch.position = input.terminalName;
-  else if (input.position !== undefined) patch.position = input.position;
-  if (input.residentialAddress !== undefined) patch.residential_address = input.residentialAddress;
-  if (input.chiefOfArea !== undefined) patch.chief_of_area = input.chiefOfArea;
-  if (input.indvuna !== undefined) patch.indvuna = input.indvuna;
-  if (input.maritalStatus !== undefined) patch.marital_status = input.maritalStatus;
-  if (input.numberOfKids !== undefined) patch.number_of_kids = input.numberOfKids;
-  if (input.nextOfKinFullName !== undefined) patch.next_of_kin_full_name = input.nextOfKinFullName;
-  if (input.nextOfKinRelationship !== undefined) patch.next_of_kin_relationship = input.nextOfKinRelationship;
-  if (input.nextOfKinContactNumber !== undefined) patch.next_of_kin_contact_number = input.nextOfKinContactNumber;
+  if (input.position !== undefined) patch.position = input.position;
   if (input.isActive !== undefined) patch.is_active = input.isActive;
 
-  patch.updated_at = Date.now();
-  patch.synced_at = Date.now();
-  patch.sync_status = "synced";
-
   const { error } = await admin.from("marshals").update(patch).eq("id", id);
-  if (error) {
-    console.error("[admin/marshals] update error:", error);
-    return { success: false, error: error.message };
-  }
+  if (error) return { success: false, error: error.message };
   return { success: true };
 }
 
-export async function deactivateMarshal(id: string): Promise<{ success: boolean; error?: string }> {
+export async function deactivateMarshal(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
   const admin = createSupabaseAdminClient();
   const { error } = await admin
     .from("marshals")
-    .update({
-      is_active: false,
-      updated_at: Date.now(),
-      synced_at: Date.now(),
-      sync_status: "synced",
-    })
+    .update({ is_active: false })
     .eq("id", id);
-  if (error) {
-    console.error("[admin/marshals] deactivate error:", error);
-    return { success: false, error: error.message };
-  }
+  if (error) return { success: false, error: error.message };
   return { success: true };
 }
