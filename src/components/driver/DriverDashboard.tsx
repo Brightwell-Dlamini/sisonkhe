@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Car, Calendar, CreditCard, RefreshCw } from "lucide-react";
 import { useDriverSummary } from "@/hooks/useDriverSummary";
 import { useDriverRoster } from "@/hooks/useDriverRoster";
@@ -21,12 +21,19 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "card", label: "Virtual Card", icon: CreditCard },
 ];
 
+function isAfter830PMLocal(): boolean {
+  const now = new Date();
+  return now.getHours() > 20 || (now.getHours() === 20 && now.getMinutes() >= 30);
+}
+
 export default function DriverDashboard() {
   const { context, summary, trips, loading, error, refresh } = useDriverSummary();
   const { roster } = useDriverRoster();
   const [tab, setTab] = useState<Tab>("vehicle");
   const [showMessage, setShowMessage] = useState(false);
   const toast = useToast();
+
+  const after830 = useMemo(() => isAfter830PMLocal(), []);
 
   const handleStatusUpdate = async (status: string) => {
     try {
@@ -100,9 +107,11 @@ export default function DriverDashboard() {
       {tab === "vehicle" && (
         <div className="space-y-4">
           <DriverVehicleCard
-            context={context}
+            vehicle={context.vehicle}
+            marshal={context.marshal}
             onStatusUpdate={handleStatusUpdate}
             onMessageMarshal={() => setShowMessage(true)}
+            isAfter830PM={after830}
           />
           <DriverTripsList trips={trips} />
         </div>

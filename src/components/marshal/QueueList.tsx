@@ -18,6 +18,10 @@ interface Props {
     action: DispatchAction,
     reason?: string
   ) => Promise<{ success: boolean; error?: string; rankFeeWritten?: boolean }>;
+  onReorder?: (
+    reg: string,
+    direction: "up" | "down"
+  ) => Promise<{ success: boolean; error?: string }>;
   showToast: (msg: string) => void;
   onSelectVehicle?: (reg: string) => void;
 }
@@ -25,6 +29,7 @@ interface Props {
 export default function QueueList({
   vehicles,
   onDispatch,
+  onReorder,
   showToast,
   onSelectVehicle,
 }: Props) {
@@ -88,6 +93,7 @@ export default function QueueList({
               key={v.registrationNumber}
               vehicle={v}
               onDispatch={onDispatch}
+              onReorder={onReorder}
               showToast={showToast}
               onSelectVehicle={onSelectVehicle}
             />

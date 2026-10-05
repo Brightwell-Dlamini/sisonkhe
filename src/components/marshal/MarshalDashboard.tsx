@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Loader2,
   AlertCircle,
@@ -12,7 +12,6 @@ import {
   Plus,
 } from "lucide-react";
 import { useMarshalTerminal } from "@/hooks/useMarshalTerminal";
-import { useMemo } from "react";
 import { useMarshalVehicles } from "@/hooks/useMarshalVehicles";
 import { useMarshalRoster } from "@/hooks/useMarshalRoster";
 import MarshalHeader from "./MarshalHeader";
@@ -48,7 +47,7 @@ export default function MarshalDashboard() {
     dispatch,
   } = useMarshalTerminal();
 
-  const { vehicles: allVehicles, addToQueue } = useMarshalVehicles();
+  const { vehicles: allVehicles, addToQueue, reorderQueue } = useMarshalVehicles();
   const { roster } = useMarshalRoster();
 
   const [tab, setTab] = useState<Tab>("queue");
@@ -74,6 +73,12 @@ export default function MarshalDashboard() {
     }
     return Array.from(map.values());
   }, [allVehicles]);
+
+  const handleReorder = async (reg: string, direction: "up" | "down") => {
+    const res = await reorderQueue(reg, direction);
+    if (res.success) await refresh();
+    return res;
+  };
 
   if (loading && !context) {
     return (
@@ -102,7 +107,9 @@ export default function MarshalDashboard() {
       {toast && (
         <div className="bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 rounded-xl px-4 py-3 text-xs font-bold flex items-center justify-between">
           <span>{toast}</span>
-          <button onClick={() => setToast(null)} className="text-emerald-400">✕</button>
+          <button onClick={() => setToast(null)} className="text-emerald-400">
+            ✕
+          </button>
         </div>
       )}
 
@@ -148,6 +155,7 @@ export default function MarshalDashboard() {
             <QueueList
               vehicles={vehicles}
               onDispatch={dispatch}
+              onReorder={handleReorder}
               showToast={showToast}
               onSelectVehicle={setDetailReg}
             />
