@@ -16,14 +16,11 @@ import {
   Loader2,
 } from "lucide-react";
 import { useOperatorMasterCard } from "@/hooks/useOperatorMasterCard";
-import { useOperatorFleetCards } from "@/hooks/useOperatorFleetCards";
 import MasterCardView from "@/components/operator/MasterCardView";
 import FleetCardsGrid from "@/components/operator/FleetCardsGrid";
 
 export default function OperatorHome() {
-  const { card, loading: cardLoading, refresh: refreshCard } =
-    useOperatorMasterCard();
-  const { cards: fleetCards, loading: fleetLoading } = useOperatorFleetCards();
+  const { card, loading: cardLoading } = useOperatorMasterCard();
 
   return (
     <div className="space-y-6">
@@ -61,7 +58,6 @@ export default function OperatorHome() {
         </div>
       </header>
 
-      {/* Master card */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-black uppercase tracking-wider text-white">
@@ -78,12 +74,15 @@ export default function OperatorHome() {
           <div className="flex justify-center py-10">
             <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
           </div>
+        ) : card ? (
+          <MasterCardView card={card} />
         ) : (
-          <MasterCardView card={card} onRefresh={refreshCard} />
+          <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-8 text-center text-xs text-zinc-500">
+            No master card on file. Contact administration.
+          </div>
         )}
       </section>
 
-      {/* Fleet snapshot */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-black uppercase tracking-wider text-white">
@@ -96,13 +95,7 @@ export default function OperatorHome() {
             Full fleet <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
-        {fleetLoading && fleetCards.length === 0 ? (
-          <div className="flex justify-center py-10">
-            <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
-          </div>
-        ) : (
-          <FleetCardsGrid cards={fleetCards.slice(0, 6)} />
-        )}
+        <FleetCardsGrid />
       </section>
     </div>
   );
