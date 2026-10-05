@@ -6,14 +6,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { InspectorTicket, InspectorVehicleView } from "../lib/inspector/queries";
+import type {
+  InspectorTicket,
+  InspectorVehicleView,
+} from "../lib/inspector/queries";
 
 interface UseInspectorTicketsResult {
   tickets: InspectorTicket[];
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  lookupVehicle: (reg: string) => Promise<InspectorVehicleView | null>;
+  /** Lookup by plate or VIC. */
+  lookupVehicle: (query: string) => Promise<InspectorVehicleView | null>;
   createTicket: (input: CreateTicketRequest) => Promise<{
     success: boolean;
     ticket?: InspectorTicket;
@@ -57,10 +61,10 @@ export function useInspectorTickets(): UseInspectorTicketsResult {
     void refresh();
   }, [refresh]);
 
-  const lookupVehicle = useCallback(async (reg: string) => {
+  const lookupVehicle = useCallback(async (query: string) => {
     try {
       const res = await fetch(
-        `/api/inspector/vehicle?reg=${encodeURIComponent(reg)}`,
+        `/api/inspector/vehicle?q=${encodeURIComponent(query.trim())}`,
         { cache: "no-store" }
       );
       if (!res.ok) return null;

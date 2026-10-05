@@ -1,6 +1,8 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Government / traffic roadside lookup — plate, VIC, or QR.
  */
 
 "use client";
@@ -18,7 +20,7 @@ export default function InspectorDashboard() {
   const scanner = useQrScanner(videoRef);
   const { lookupVehicle, createTicket } = useInspectorTickets();
 
-  const [manualReg, setManualReg] = useState("");
+  const [manualQ, setManualQ] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
   const [vehicle, setVehicle] = useState<InspectorVehicleView | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
@@ -30,16 +32,19 @@ export default function InspectorDashboard() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const handleLookup = async (reg: string) => {
+  const handleLookup = async (raw: string) => {
     setLookupError(null);
     setLookupLoading(true);
     setVehicle(null);
+    setShowTicketForm(false);
 
-    const result = await lookupVehicle(reg);
+    const result = await lookupVehicle(raw);
 
     setLookupLoading(false);
     if (!result) {
-      setLookupError(`No vehicle found with registration "${reg}".`);
+      setLookupError(
+        `No vehicle found for "${raw.trim()}". Try plate (e.g. HSD 101 BM) or VIC.`
+      );
       return;
     }
 
@@ -48,24 +53,17 @@ export default function InspectorDashboard() {
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualReg.trim()) return;
-    void handleLookup(manualReg.trim());
+    if (!manualQ.trim()) return;
+    void handleLookup(manualQ.trim());
   };
 
   const handleScanClick = async () => {
     scanner.onDetected((payload) => {
-      // Payload could be:
-      // 1. A full verify URL: https://.../verify?token=...
-      // 2. A raw QR token: v1.xxxxx.yyyyy
-      // 3. A registration number
-
       try {
-        // If it's a URL, extract the token and call our verify endpoint
         if (payload.startsWith("http")) {
           const url = new URL(payload);
           const token = url.searchParams.get("token");
           if (token) {
-            // Fetch verification result to get the vehicle reg
             fetch("/api/qr/verify", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -84,7 +82,6 @@ export default function InspectorDashboard() {
           }
         }
 
-        // If it's a raw token (starts with v1.), verify directly
         if (payload.startsWith("v1.")) {
           fetch("/api/qr/verify", {
             method: "POST",
@@ -103,7 +100,6 @@ export default function InspectorDashboard() {
           return;
         }
 
-        // Otherwise assume it's a plate
         void handleLookup(payload);
       } catch {
         setLookupError("Could not parse QR payload.");
@@ -114,59 +110,63 @@ export default function InspectorDashboard() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-2xl mx-auto">
       {toast && (
-        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 rounded-xl px-4 py-3 text-xs font-bold">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-200 rounded-xl px-4 py-3 text-xs font-bold">
           {toast}
         </div>
       )}
 
-      {/* Search inputs */}
       <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5 space-y-4">
         <div>
-          <h2 className="text-sm font-black uppercase tracking-wide text-white mb-3">
-            Scan or Search Vehicle
+          <h2 className="text-sm font-black uppercase tracking-wide text-white mb-1">
+            Roadside lookup
           </h2>
+          <p className="text-[11px] text-zinc-500 mb-3">
+            Enter number plate or VIC. Results show permit, COF, and driver
+            licence validity only — no admin tools.
+          </p>
 
           <form onSubmit={handleManualSubmit} className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
               <input
                 type="text"
-                placeholder="Enter registration (e.g. HSD 101 BM)"
-                value={manualReg}
-                onChange={(e) => setManualReg(e.target.value.toUpperCase())}
-                className="w-full bg-[#0F0F10] border border-white/[0.06] rounded-xl pl-10 pr-4 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-red-500"
+                placeholder="Plate or VIC (e.g. HSD 101 BM)"
+                value={manualQ}
+                onChange={(e) => setManualQ(e.target.value.toUpperCase())}
+                autoComplete="off"
+                className="w-full bg-[#0A0A0A] border border-white/[0.08] rounded-xl pl-10 pr-4 py-3 text-sm font-mono text-white focus:outline-none focus:border-red-500/60"
               />
             </div>
             <button
               type="submit"
-              disabled={lookupLoading || !manualReg.trim()}
-              className="px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5"
+              disabled={lookupLoading || !manualQ.trim()}
+              className="px-4 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0"
             >
               {lookupLoading ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <Search className="w-3.5 h-3.5" />
               )}
-              Look Up
+              Look up
             </button>
           </form>
 
           <div className="mt-3 flex items-center justify-between">
-            <span className="text-[10px] text-zinc-400">or</span>
+            <span className="text-[10px] text-zinc-500">or</span>
             <button
+              type="button"
               onClick={handleScanClick}
               disabled={scanner.scanning}
-              className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1.5"
+              className="text-xs font-bold text-red-500 hover:text-red-400 flex items-center gap-1.5"
             >
               <QrCode className="w-3.5 h-3.5" />
-              {scanner.scanning ? "Scanning\u2026" : "Scan QR Code"}
+              {scanner.scanning ? "Scanning…" : "Scan permit QR"}
             </button>
           </div>
         </div>
 
-        {/* Video preview */}
         {scanner.scanning && (
           <div className="relative aspect-square max-h-72 rounded-xl overflow-hidden bg-black mx-auto">
             <video
@@ -177,16 +177,17 @@ export default function InspectorDashboard() {
               className="w-full h-full object-cover"
             />
             <button
+              type="button"
               onClick={scanner.stop}
               className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-black/70 text-white rounded-lg text-xs font-bold"
             >
-              Stop Scanning
+              Stop scanning
             </button>
           </div>
         )}
 
         {scanner.error && (
-          <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 rounded-xl p-3 text-xs flex items-start gap-2">
+          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-200 rounded-xl p-3 text-xs flex items-start gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <span>{scanner.error}</span>
           </div>
@@ -194,20 +195,18 @@ export default function InspectorDashboard() {
 
         {!scanner.supported && !scanner.scanning && (
           <div className="text-[11px] text-zinc-500 text-center">
-            Camera scanning requires Chrome or Edge. Use manual entry on this
+            Camera scanning needs Chrome or Edge. Use plate / VIC entry on this
             device.
           </div>
         )}
       </div>
 
-      {/* Lookup error */}
       {lookupError && (
-        <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl px-4 py-3 text-xs">
+        <div className="bg-red-500/10 border border-red-500/30 text-red-300 rounded-xl px-4 py-3 text-xs">
           {lookupError}
         </div>
       )}
 
-      {/* Vehicle compliance panel */}
       {vehicle && (
         <>
           <VehicleCompliancePanel
