@@ -14,11 +14,12 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
+    // AuthRole: super-admin | admin | fleet-manager | inspector | marshal | driver | operator
+    // Rank admin in the product is the "admin" staff role (not a separate AuthRole).
     const user = await requireServerRole([
       "super-admin",
       "admin",
       "fleet-manager",
-      "rank-admin",
     ]);
     const snapshot = await buildIntelligenceSnapshot(user);
     return NextResponse.json(snapshot, {
@@ -26,7 +27,8 @@ export async function GET() {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error";
-    const status = msg === "UNAUTHENTICATED" ? 401 : msg === "FORBIDDEN" ? 403 : 500;
+    const status =
+      msg === "UNAUTHENTICATED" ? 401 : msg === "FORBIDDEN" ? 403 : 500;
     return NextResponse.json({ error: msg }, { status });
   }
 }
