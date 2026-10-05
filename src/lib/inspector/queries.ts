@@ -1,11 +1,12 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Roadside enforcement queries — plate or VIC → compliance view.
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
-import type { ResolvedUser } from "../auth/roles";
 
 export interface InspectorVehicleView {
   registrationNumber: string;
@@ -30,13 +31,15 @@ export interface InspectorVehicleView {
   routeDestination: string | null;
   region: string | null;
   driverName: string | null;
+  driverLicenseNumber: string | null;
   driverPdpStatus: string | null;
   driverPdpExpiry: string | null;
+  driverStatus: string | null;
 
-  // Computed compliance flags
   permitValid: boolean;
   cofValid: boolean;
   insuranceValid: boolean;
+  driverPdpValid: boolean;
   overallValid: boolean;
 }
 
@@ -54,33 +57,74 @@ export interface InspectorTicket {
   notes: string | null;
 }
 
+function normalizeQuery(raw: string): string {
+  return raw.trim().toUpperCase().replace(/\s+/g, " ");
+}
+
+function isExpired(dateStr: string | null | undefined, now: number): boolean {
+  if (!dateStr) return false;
+  return new Date(dateStr).getTime() <= now;
+}
+
 // ---------------------------------------------------------------------------
-// Vehicle lookup
+// Vehicle lookup by plate OR VIC
 // ---------------------------------------------------------------------------
 
 export async function lookupVehicleForInspector(
-  registrationNumber: string
+  query: string
 ): Promise<InspectorVehicleView | null> {
   const admin = createSupabaseAdminClient();
-  const reg = registrationNumber.trim().toUpperCase();
+  const q = normalizeQuery(query);
+  if (!q) return null;
 
-  const { data: v, error } = await admin
-    .from("vehicles")
-    .select(
-      `
+  const selectCols = `
       registration_number, vic, make, model, classification, seating_capacity, status,
       permit_number, permit_status, permit_expiry_date,
       cof_number, cof_expiry_date, insurance_expiry, roadworthiness_expiry, last_inspection_date,
       owner_name, owner_phone, association,
       route_assignment_id, driver_id
-    `
-    )
-    .eq("registration_number", reg)
+    `;
+
+  // 1) Exact plate
+  let { data: v } = await admin
+    .from("vehicles")
+    .select(selectCols)
+    .eq("registration_number", q)
     .maybeSingle();
 
-  if (error || !v) return null;
+  // 2) VIC exact
+  if (!v) {
+    const byVic = await admin
+      .from("vehicles")
+      .select(selectCols)
+      .eq("vic", q)
+      .maybeSingle();
+    v = byVic.data;
+  }
 
-  // Route
+  // 3) Plate without spaces (e.g. HSD101BM)
+  if (!v) {
+    const compact = q.replace(/\s+/g, "");
+    if (compact !== q) {
+      const { data: all } = await admin
+        .from("vehicles")
+        .select(selectCols)
+        .limit(5000);
+      v =
+        (all ?? []).find(
+          (row) =>
+            String(row.registration_number ?? "")
+              .replace(/\s+/g, "")
+              .toUpperCase() === compact ||
+            String(row.vic ?? "")
+              .replace(/\s+/g, "")
+              .toUpperCase() === compact
+        ) ?? null;
+    }
+  }
+
+  if (!v) return null;
+
   let routeOrigin: string | null = null;
   let routeDestination: string | null = null;
   let region: string | null = null;
@@ -92,49 +136,60 @@ export async function lookupVehicleForInspector(
       .eq("id", v.route_assignment_id as string)
       .maybeSingle();
     if (route) {
-      routeOrigin = route.origin as string;
-      routeDestination = route.destination as string;
-      region = route.region_code as string;
+      routeOrigin = (route.origin as string) ?? null;
+      routeDestination = (route.destination as string) ?? null;
+      region = (route.region_code as string) ?? null;
     }
   }
 
-  // Driver
   let driverName: string | null = null;
+  let driverLicenseNumber: string | null = null;
   let driverPdpStatus: string | null = null;
   let driverPdpExpiry: string | null = null;
+  let driverStatus: string | null = null;
+
   if (v.driver_id) {
     const { data: driver } = await admin
       .from("drivers")
-      .select("full_name, pdp_status, pdp_expiry_date")
+      .select(
+        "full_name, pdp_status, pdp_expiry_date, license_number, status"
+      )
       .eq("id", v.driver_id as string)
       .maybeSingle();
     if (driver) {
-      driverName = driver.full_name as string;
+      driverName = (driver.full_name as string) ?? null;
+      driverLicenseNumber = (driver.license_number as string | null) ?? null;
       driverPdpStatus = (driver.pdp_status as string | null) ?? null;
       driverPdpExpiry = (driver.pdp_expiry_date as string | null) ?? null;
+      driverStatus = (driver.status as string | null) ?? null;
     }
   }
 
   const now = Date.now();
   const permitValid =
-    v.permit_status === "Active" &&
-    (!v.permit_expiry_date ||
-      new Date(v.permit_expiry_date as string).getTime() > now);
-  const cofValid =
-    !v.cof_expiry_date ||
-    new Date(v.cof_expiry_date as string).getTime() > now;
-  const insuranceValid =
-    !v.insurance_expiry ||
-    new Date(v.insurance_expiry as string).getTime() > now;
+    (v.permit_status === "Active" || v.permit_status === "Valid") &&
+    !isExpired(v.permit_expiry_date as string | null, now);
+  const cofValid = !isExpired(v.cof_expiry_date as string | null, now);
+  const insuranceValid = !isExpired(
+    v.insurance_expiry as string | null,
+    now
+  );
+  const driverPdpValid =
+    !driverName ||
+    ((driverPdpStatus === "Valid" ||
+      driverPdpStatus === "Active" ||
+      !driverPdpStatus) &&
+      !isExpired(driverPdpExpiry, now) &&
+      driverStatus !== "Suspended");
 
   return {
     registrationNumber: v.registration_number as string,
     vic: (v.vic as string | null) ?? null,
-    make: v.make as string,
-    model: v.model as string,
-    classification: v.classification as string,
-    seatingCapacity: v.seating_capacity as number,
-    status: v.status as string,
+    make: (v.make as string) ?? "",
+    model: (v.model as string) ?? "",
+    classification: (v.classification as string) ?? "",
+    seatingCapacity: Number(v.seating_capacity) || 0,
+    status: (v.status as string) ?? "",
     permitNumber: (v.permit_number as string | null) ?? null,
     permitStatus: (v.permit_status as string | null) ?? null,
     permitExpiryDate: (v.permit_expiry_date as string | null) ?? null,
@@ -150,12 +205,15 @@ export async function lookupVehicleForInspector(
     routeDestination,
     region,
     driverName,
+    driverLicenseNumber,
     driverPdpStatus,
     driverPdpExpiry,
+    driverStatus,
     permitValid,
     cofValid,
     insuranceValid,
-    overallValid: permitValid && cofValid && insuranceValid,
+    driverPdpValid,
+    overallValid: permitValid && cofValid && insuranceValid && driverPdpValid,
   };
 }
 
@@ -222,12 +280,12 @@ export async function createTicket(
 
 export async function listTicketsForOfficer(
   officerName: string,
-  region: string | null,
+  _region: string | null,
   limit: number = 50
 ): Promise<InspectorTicket[]> {
   const admin = createSupabaseAdminClient();
 
-  let q = admin
+  const { data, error } = await admin
     .from("traffic_tickets")
     .select(
       "id, ticket_number, timestamp, vehicle_reg, officer_name, officer_badge, offense_type, amount_szl, location, status, notes"
@@ -236,7 +294,6 @@ export async function listTicketsForOfficer(
     .order("timestamp", { ascending: false })
     .limit(limit);
 
-  const { data, error } = await q;
   if (error || !data) return [];
 
   return data.map((t) => ({

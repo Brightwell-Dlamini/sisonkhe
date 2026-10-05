@@ -56,18 +56,11 @@ export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  /** Optional badge style — evaluated at render time. */
   badge?: "live" | "count";
-  /** Exact match only (index pages like /admin). */
   exact?: boolean;
   /** Roles that can see this item. Undefined = all roles for this shell. */
   roles?: Role[];
-  /**
-   * Visual emphasis for high-frequency daily work.
-   * Primary items sit at the top of their group and render slightly stronger.
-   */
   emphasis?: "primary";
-  /** Short hint shown as title attribute (collapsed sidebar / mobile). */
   hint?: string;
 }
 
@@ -77,7 +70,8 @@ export interface NavGroup {
 }
 
 // ---------------------------------------------------------------------------
-// Admin / fleet-manager — ordered by daily job, not entity type
+// Admin / fleet-manager — rank ops (region-scoped for admin)
+// Staff + Platform are super-admin only via roles[] and PLATFORM_NAV merge
 // ---------------------------------------------------------------------------
 
 export const ADMIN_NAV: NavGroup[] = [
@@ -203,7 +197,7 @@ export const ADMIN_NAV: NavGroup[] = [
   },
 ];
 
-/** Platform tools — only merged for super-admin as a single door. */
+/** Platform tools — only merged for super-admin. */
 export const PLATFORM_NAV: NavGroup[] = [
   {
     label: "Platform",
@@ -213,69 +207,75 @@ export const PLATFORM_NAV: NavGroup[] = [
         label: "Control Centre",
         icon: Sparkles,
         exact: true,
+        roles: ["super-admin"],
         hint: "Elevated system overview",
       },
       {
         href: "/admin/super/analytics",
         label: "Live Analytics",
         icon: Activity,
+        roles: ["super-admin"],
       },
       {
         href: "/admin/super/security",
         label: "Security",
         icon: Shield,
+        roles: ["super-admin"],
       },
       {
         href: "/admin/super/telemetry",
         label: "Telemetry",
         icon: Cpu,
+        roles: ["super-admin"],
       },
       {
         href: "/admin/super/errors",
         label: "Error Hub",
         icon: AlertOctagon,
+        roles: ["super-admin"],
       },
       {
         href: "/admin/super/storage",
         label: "Storage",
         icon: HardDrive,
+        roles: ["super-admin"],
       },
       {
         href: "/admin/super/config",
         label: "System Config",
         icon: Settings,
+        roles: ["super-admin"],
       },
       {
         href: "/admin/config",
         label: "Rank Config",
         icon: Settings,
+        roles: ["super-admin"],
         hint: "Rank fee and operational settings",
       },
       {
         href: "/admin/super/adverts",
         label: "Adverts",
         icon: Megaphone,
+        roles: ["super-admin"],
       },
       {
         href: "/admin/super/recovery",
         label: "Snapshots",
         icon: Database,
+        roles: ["super-admin"],
       },
       {
         href: "/admin/super/assistant",
         label: "Assistant",
         icon: Sparkles,
+        roles: ["super-admin"],
       },
     ],
   },
 ];
 
-/** @deprecated Use PLATFORM_NAV — kept for any stray imports. */
 export const SUPER_ADMIN_NAV = PLATFORM_NAV;
-
-// ---------------------------------------------------------------------------
-// Marshal — rank floor, keep lean
-// ---------------------------------------------------------------------------
 
 export const MARSHAL_NAV: NavGroup[] = [
   {
@@ -314,10 +314,6 @@ export const MARSHAL_NAV: NavGroup[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Driver — cab-first
-// ---------------------------------------------------------------------------
-
 export const DRIVER_NAV: NavGroup[] = [
   {
     label: "Cab",
@@ -347,10 +343,6 @@ export const DRIVER_NAV: NavGroup[] = [
     ],
   },
 ];
-
-// ---------------------------------------------------------------------------
-// Operator — renewals first (legal continuity)
-// ---------------------------------------------------------------------------
 
 export const OPERATOR_NAV: NavGroup[] = [
   {
@@ -389,32 +381,27 @@ export const OPERATOR_NAV: NavGroup[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Inspector — field phone
-// ---------------------------------------------------------------------------
-
+/** Government / traffic enforcement — field phone. */
 export const INSPECTOR_NAV: NavGroup[] = [
   {
-    label: "Field",
+    label: "Enforcement",
     items: [
       {
         href: "/inspector/scan",
-        label: "Scan Vehicle",
+        label: "Roadside Lookup",
         icon: ScanLine,
         emphasis: "primary",
+        hint: "Plate, VIC, or QR — permit & licence check",
       },
       {
         href: "/inspector/tickets",
         label: "My Tickets",
         icon: FileWarning,
+        hint: "Tickets you issued",
       },
     ],
   },
 ];
-
-// ---------------------------------------------------------------------------
-// Public
-// ---------------------------------------------------------------------------
 
 export const PUBLIC_NAV: NavGroup[] = [
   {
