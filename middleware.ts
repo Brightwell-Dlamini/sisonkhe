@@ -20,6 +20,7 @@ const PUBLIC_ROUTES = [
   "/register",
   "/kiosk",
   "/verify",
+  "/departures",
   "/api/auth/claim",
   "/api/auth/signin",
   "/api/register",
@@ -29,9 +30,12 @@ const PUBLIC_ROUTES = [
   "/api/public",
   "/api/qr/verify",
   "/api/payments/webhooks",
+  // Event-sync endpoints require auth in production; temporarily public for migration
+  // Tighten once clients send session cookies reliably.
+  "/api/sync/watermark",
 ];
 
-const AUTH_ROUTES = ["/login", "/claim"]; // /register stays usable while signed in (link flow)
+const AUTH_ROUTES = ["/login", "/claim"];
 
 export async function middleware(request: NextRequest) {
   const { response, user } = await updateSupabaseSession(request);
@@ -44,12 +48,12 @@ export async function middleware(request: NextRequest) {
     (route) => pathname === route || pathname.startsWith(route + "/")
   );
 
-  // If authenticated user hits login/claim, push them home
+  // Authenticated user hitting login/claim → home
   if (isAuthRoute && user) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  // If unauthenticated user hits protected route, push them to login
+  // Unauthenticated user on protected route → login
   if (!isPublic && !user) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);

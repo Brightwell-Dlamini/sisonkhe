@@ -1,13 +1,17 @@
 /**
- * Fleet state store for Sisonkhe API.
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
  *
- * Selects storage backend automatically:
- * - Vercel KV when KV_REST_API_URL + KV_REST_API_TOKEN are set
- * - In-memory fallback otherwise (per serverless instance)
+ * LEGACY fleet state store.
  *
- * To enable durable multi-instance sync:
- * 1. Vercel Dashboard → Storage → Create KV Database → Connect to this project
- * 2. Redeploy (env vars are injected automatically)
+ * DEPRECATED: This blob-based store is being replaced by the event-log
+ * sync protocol (src/lib/sync/*) + relational tables (src/db/schema.ts).
+ *
+ * It remains for backward compatibility with existing clients that still
+ * POST whole state to /api/fleet/sync. New code must use /api/sync/push
+ * and the offline outbox.
+ *
+ * Removal target: once all clients are on the event protocol.
  */
 
 const MAX_STATE_BYTES = 4 * 1024 * 1024; // 4 MB safety limit
@@ -86,14 +90,13 @@ function createAdapter(): StorageAdapter {
   return new MemoryAdapter();
 }
 
-// Lazy singleton — avoids importing @vercel/kv when unused
 let adapter: StorageAdapter | null = null;
 
 function getAdapter(): StorageAdapter {
   if (!adapter) {
     adapter = createAdapter();
     if (process.env.FLEET_API_DEBUG === "true") {
-      console.log(`[fleetStore] using adapter: ${adapter.name}`);
+      console.log(`[fleetStore] LEGACY adapter: ${adapter.name}`);
     }
   }
   return adapter;
@@ -116,10 +119,12 @@ function assertSize(state: FleetState): void {
   }
 }
 
+/** @deprecated Use event-log sync instead */
 export async function getFleetState(): Promise<FleetState> {
   return getAdapter().get();
 }
 
+/** @deprecated Use event-log sync instead */
 export async function updateFleetState(
   updates: Record<string, unknown>
 ): Promise<FleetState> {
@@ -141,6 +146,7 @@ export async function updateFleetState(
   return next;
 }
 
+/** @deprecated */
 export async function getLastUpdated(): Promise<number> {
   const state = await getAdapter().get();
   return typeof state.lastUpdated === "number" ? state.lastUpdated : 0;
