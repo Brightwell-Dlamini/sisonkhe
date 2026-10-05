@@ -13,3 +13,4 @@ export { ToastProvider, useToast } from "./Toast";
 export { PageHeader } from "./PageHeader";
 export { EmptyState } from "./EmptyState";
 export { Skeleton, TableSkeleton } from "./Skeleton";
+export { ActionsMenu, type ActionsMenuItem } from "./ActionsMenu";
