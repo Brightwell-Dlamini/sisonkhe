@@ -2,185 +2,96 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Dexie/IndexedDB schema for offline caching and outbox queue.
+ * Client-side IndexedDB schema via Dexie.
+ * Primary local store for offline-first operation.
  */
 
 "use client";
 
 import Dexie, { type Table } from "dexie";
-import type {
-  Vehicle,
-  Driver,
-  Route,
-  Trip,
-  RankNotification,
-  IncidentReport,
-  RankFeePayment,
-  RegionConfig,
-  TrafficTicket,
-  MarshalAccount,
-  MarshalTransaction,
-  Advert,
-} from "../../types";
+import type { SyncEvent } from "@/lib/sync/protocol";
 
-// ---------------------------------------------------------------------------
-// Outbox entry
-// ---------------------------------------------------------------------------
-
-export interface OutboxEntry {
-  id: string; // UUID
-  action: string; // "dispatch" | "rank_fee" | "incident" | ...
-  entityType: string; // "vehicle" | "rank_fee" | ...
-  entityId: string; // registration, id, etc.
-  payload: Record<string, unknown>;
-  idempotencyKey: string; // server dedupes on this
-  clientId: string; // device id
-  createdAt: number; // ms epoch
-  attempts: number;
-  lastError: string | null;
-  status: "pending" | "in_flight" | "failed_permanent";
+export interface LocalVehicle {
+  registrationNumber: string;
+  vic?: string;
+  make: string;
+  model: string;
+  seatingCapacity: number;
+  classification: string;
+  routeAssignmentId?: string;
+  loadingBay?: string;
+  status: string;
+  currentQueuePosition: number;
+  permitNumber?: string;
+  permitStatus?: string;
+  permitExpiryDate?: string;
+  driverId?: string;
+  version: number;
+  updatedAt: string;
+  [key: string]: unknown;
 }
 
-// ---------------------------------------------------------------------------
-// Cache meta
-// ---------------------------------------------------------------------------
-
-export interface CacheMeta {
-  key: string; // e.g. "vehicles", "queue_HSD 101 BM"
-  value: unknown;
-  cachedAt: number; // ms epoch
-  ttlMs: number;
+export interface LocalDriver {
+  id: string;
+  fullName: string;
+  phone: string;
+  nationalId?: string;
+  licenseNumber?: string;
+  status: string;
+  assignedVehicleReg?: string;
+  version: number;
+  updatedAt: string;
+  [key: string]: unknown;
 }
 
-// ---------------------------------------------------------------------------
-// Device identity
-// ---------------------------------------------------------------------------
-
-export interface DeviceInfo {
-  key: "self";
-  clientId: string;
-  createdAt: number;
+export interface LocalQueueEvent {
+  id: string;
+  vehicleReg: string;
+  action: string;
+  occurredAt: string;
+  marshalId?: string;
+  payload?: Record<string, unknown>;
 }
 
-// ---------------------------------------------------------------------------
-// Database
-// ---------------------------------------------------------------------------
+export interface WatermarkRow {
+  table: string;
+  seq: number;
+}
 
-class SisonkheOfflineDB extends Dexie {
-  vehicles!: Table<Vehicle, string>;
-  drivers!: Table<Driver, string>;
-  routes!: Table<Route, string>;
-  trips!: Table<Trip, string>;
-  notifications!: Table<RankNotification, string>;
-  incidents!: Table<IncidentReport, string>;
-  payments!: Table<RankFeePayment, string>;
-  regionConfigs!: Table<RegionConfig, string>;
-  trafficTickets!: Table<TrafficTicket, string>;
-  marshals!: Table<MarshalAccount, string>;
-  marshalTransactions!: Table<MarshalTransaction, string>;
-  adverts!: Table<Advert, string>;
-
-  outbox!: Table<OutboxEntry, string>;
-  cacheMeta!: Table<CacheMeta, string>;
-  deviceInfo!: Table<DeviceInfo, string>;
+export class SisonkheDB extends Dexie {
+  vehicles!: Table<LocalVehicle, string>;
+  drivers!: Table<LocalDriver, string>;
+  queueEvents!: Table<LocalQueueEvent, string>;
+  outbox!: Table<SyncEvent, string>;
+  watermarks!: Table<WatermarkRow, string>;
 
   constructor() {
-    super("sisonkhe-offline");
-    this.version(1).stores({
-      vehicles: "registrationNumber, routeAssignmentId, status, currentQueuePosition",
-      drivers: "id, assignedVehicleReg",
-      routes: "id, region",
-      trips: "id, date, routeId, vehicleReg, driverId",
-      notifications: "id, timestamp",
-      incidents: "id, status, vehicleReg",
-      payments: "id, vehicleReg, timestamp",
-      regionConfigs: "region",
-      trafficTickets: "id, vehicleReg, timestamp",
-      marshals: "id, region, terminalName",
-      marshalTransactions: "id, marshalId, date, month",
-      adverts: "id, isActive",
+    super("sisonkhe");
 
-      outbox: "id, status, createdAt, idempotencyKey",
-      cacheMeta: "key",
-      deviceInfo: "key",
+    this.version(1).stores({
+      vehicles: "registrationNumber, vic, status, updatedAt, routeAssignmentId",
+      drivers: "id, assignedVehicleReg, status, updatedAt",
+      queueEvents: "id, vehicleReg, occurredAt",
+      outbox: "id, entityType, occurredAt, idempotencyKey",
+      watermarks: "table",
     });
   }
 }
 
-export const offlineDB = new SisonkheOfflineDB();
+let dbInstance: SisonkheDB | null = null;
 
-// ---------------------------------------------------------------------------
-// Device identity
-// ---------------------------------------------------------------------------
-
-const CLIENT_ID_KEY = "sisonkhe_client_id";
-
-export async function getClientId(): Promise<string> {
-  // Try Dexie first
-  const existing = await offlineDB.deviceInfo.get("self");
-  if (existing) return existing.clientId;
-
-  // Try localStorage (survives DB wipes)
-  if (typeof window !== "undefined") {
-    const stored = window.localStorage.getItem(CLIENT_ID_KEY);
-    if (stored) {
-      await offlineDB.deviceInfo.put({
-        key: "self",
-        clientId: stored,
-        createdAt: Date.now(),
-      });
-      return stored;
-    }
+export function getOfflineDb(): SisonkheDB {
+  if (typeof window === "undefined") {
+    throw new Error("getOfflineDb() is client-only");
   }
-
-  // Generate a new one
-  const newId =
-    "dev-" +
-    Date.now().toString(36) +
-    "-" +
-    Math.random().toString(36).slice(2, 10);
-
-  await offlineDB.deviceInfo.put({
-    key: "self",
-    clientId: newId,
-    createdAt: Date.now(),
-  });
-
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(CLIENT_ID_KEY, newId);
+  if (!dbInstance) {
+    dbInstance = new SisonkheDB();
   }
-
-  return newId;
+  return dbInstance;
 }
 
-// ---------------------------------------------------------------------------
-// Cache meta helpers
-// ---------------------------------------------------------------------------
-
-export async function setCacheMeta(
-  key: string,
-  value: unknown,
-  ttlMs: number
-): Promise<void> {
-  await offlineDB.cacheMeta.put({
-    key,
-    value,
-    cachedAt: Date.now(),
-    ttlMs,
-  });
-}
-
-export async function getCacheMeta<T>(key: string): Promise<{
-  value: T;
-  ageMs: number;
-  isFresh: boolean;
-} | null> {
-  const entry = await offlineDB.cacheMeta.get(key);
-  if (!entry) return null;
-  const ageMs = Date.now() - entry.cachedAt;
-  return {
-    value: entry.value as T,
-    ageMs,
-    isFresh: ageMs < entry.ttlMs,
-  };
+/** Safe accessor that returns null on the server */
+export function tryGetOfflineDb(): SisonkheDB | null {
+  if (typeof window === "undefined") return null;
+  return getOfflineDb();
 }
