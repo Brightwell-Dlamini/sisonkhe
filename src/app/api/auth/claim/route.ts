@@ -24,20 +24,34 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Generated Database types may not list portal RPCs yet.
- * Call rpc with a loose signature so typecheck does not require them in the schema.
+ * Generated Database types may not list portal RPCs / columns yet.
  */
-type LooseRpc = {
+type LooseAdmin = {
   rpc: (
     fn: string,
     args?: Record<string, unknown>
   ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  from: (table: string) => {
+    update: (values: Record<string, unknown>) => {
+      eq: (col: string, val: string) => {
+        is: (
+          col: string,
+          val: null
+        ) => {
+          select: (cols: string) => Promise<{
+            data: { id: string }[] | null;
+            error: { message: string } | null;
+          }>;
+        };
+      };
+    };
+  };
 };
 
-function looseRpc(
+function looseAdmin(
   admin: ReturnType<typeof createSupabaseAdminClient>
-): LooseRpc {
-  return admin as unknown as LooseRpc;
+): LooseAdmin {
+  return admin as unknown as LooseAdmin;
 }
 
 async function tryLinkMarshal(
@@ -50,11 +64,11 @@ async function tryLinkMarshal(
   }
 ): Promise<{ ok: boolean; method?: string; error?: string }> {
   const { marshalId, idNumber, phone, authUserId } = opts;
-  const rpc = looseRpc(admin);
+  const loose = looseAdmin(admin);
 
   // 1) Identity-based RPC
   {
-    const { data, error } = await rpc.rpc("link_marshal_auth", {
+    const { data, error } = await loose.rpc("link_marshal_auth", {
       p_id_number: idNumber,
       p_phone: phone,
       p_auth_user_id: authUserId,
@@ -74,7 +88,7 @@ async function tryLinkMarshal(
 
   // 2) ID-based RPC
   {
-    const { data, error } = await rpc.rpc("link_marshal_auth", {
+    const { data, error } = await loose.rpc("link_marshal_auth", {
       p_marshal_id: marshalId,
       p_auth_user_id: authUserId,
     });
@@ -91,9 +105,9 @@ async function tryLinkMarshal(
     }
   }
 
-  // 3) Direct UPDATE — only auth_user_id
+  // 3) Direct UPDATE — only auth_user_id (portal column may be missing from generated types)
   {
-    const { data: rows, error } = await admin
+    const { data: rows, error } = await loose
       .from("marshals")
       .update({ auth_user_id: authUserId })
       .eq("id", marshalId)
@@ -105,7 +119,7 @@ async function tryLinkMarshal(
     }
     if (error) {
       console.error("[claim] UPDATE by id failed:", error);
-      const { data: rows2, error: err2 } = await admin
+      const { data: rows2, error: err2 } = await loose
         .from("marshals")
         .update({ auth_user_id: authUserId })
         .eq("id_number", idNumber)
@@ -142,10 +156,13 @@ export async function PUT(request: NextRequest) {
     }
 
     const admin = createSupabaseAdminClient();
-    const { data, error } = await looseRpc(admin).rpc("verify_marshal_identity", {
-      p_id_number: idNumber,
-      p_phone: phone,
-    });
+    const { data, error } = await looseAdmin(admin).rpc(
+      "verify_marshal_identity",
+      {
+        p_id_number: idNumber,
+        p_phone: phone,
+      }
+    );
 
     if (error) {
       console.error("[api/auth/claim] verify rpc error:", error);
@@ -234,9 +251,9 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = createSupabaseAdminClient();
-    const rpc = looseRpc(admin);
+    const loose = looseAdmin(admin);
 
-    const { data: verifyData, error: verifyErr } = await rpc.rpc(
+    const { data: verifyData, error: verifyErr } = await loose.rpc(
       "verify_marshal_identity",
       { p_id_number: idNumber, p_phone: phone }
     );
