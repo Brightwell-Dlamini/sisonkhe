@@ -38,6 +38,20 @@ export interface ResolvedUser {
 }
 
 /**
+ * Return the primary entity id for the user (whichever role they are).
+ * Used to scope storage paths and self-service updates.
+ */
+export function primaryEntityId(user: ResolvedUser): string {
+  return (
+    user.staffId ??
+    user.marshalId ??
+    user.driverId ??
+    user.operatorId ??
+    user.authUserId
+  );
+}
+
+/**
  * Resolve a Supabase auth user to their domain role.
  * Tries staff → marshal → driver → operator in that order.
  */
@@ -52,7 +66,7 @@ export async function resolveUserRole(
   {
     const { data: staff, error: staffErr } = await admin
       .from("staff")
-      .select("id, full_name, role, region, terminal_id, is_active")
+      .select("id, full_name, role, region, terminal_id, is_active, avatar_url")
       .eq("auth_user_id", authUserId)
       .maybeSingle();
 
@@ -67,6 +81,7 @@ export async function resolveUserRole(
         roleDisplay: staffRoleDisplay(staff.role),
         staffId: staff.id,
         fullName: staff.full_name,
+        avatarUrl: (staff.avatar_url as string | null) ?? undefined,
         region: staff.region ?? undefined,
         terminalId: staff.terminal_id ?? undefined,
       };
@@ -74,22 +89,26 @@ export async function resolveUserRole(
   }
 
   // 2. Marshal
-  // Portal schema may not have assigned_route_id / terminal_id / profile_picture_url.
-  // Select only columns known to exist on the registration portal table.
   {
     const { data: marshal, error: marshalErr } = await admin
       .from("marshals")
-      .select("id, first_name, surname, region, is_active, auth_user_id")
+      .select(
+        "id, first_name, surname, region, is_active, auth_user_id, avatar_url, photo_storage_path"
+      )
       .eq("auth_user_id", authUserId)
       .maybeSingle();
 
     if (marshalErr) {
       console.error("[resolveUserRole] marshal query error:", marshalErr.message);
     } else if (marshal) {
-      // Portal often leaves is_active NULL; treat NULL as active (same as claim verify RPC)
       if (marshal.is_active === false) {
         console.warn("[resolveUserRole] marshal found but is_active=false", marshal.id);
       } else {
+        const avatarUrl =
+          (marshal.avatar_url as string | null) ??
+          (marshal.photo_storage_path as string | null) ??
+          undefined;
+
         return {
           authUserId,
           email,
@@ -97,12 +116,13 @@ export async function resolveUserRole(
           role: "marshal",
           roleDisplay: "Rank Marshal",
           marshalId: marshal.id,
-          fullName: `${marshal.first_name ?? ""} ${marshal.surname ?? ""}`.trim() || "Marshal",
+          fullName:
+            `${marshal.first_name ?? ""} ${marshal.surname ?? ""}`.trim() || "Marshal",
+          avatarUrl,
           region: marshal.region ?? undefined,
         };
       }
     } else {
-      // Diagnostic: is auth_user_id stored under a different type/format?
       const { data: byText } = await admin
         .from("marshals")
         .select("id, auth_user_id, is_active, first_name, surname")

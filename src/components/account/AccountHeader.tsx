@@ -8,19 +8,11 @@
 import { Mail, ShieldCheck, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader, Badge } from "@/components/ui";
+import AvatarUploader from "./AvatarUploader";
 
 export default function AccountHeader() {
   const { user } = useAuth();
   if (!user) return null;
-
-  const initials = user.fullName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
-  const avatarUrl = (user as any).avatarUrl as string | undefined;
 
   return (
     <div className="space-y-5">
@@ -40,22 +32,10 @@ export default function AccountHeader() {
           className="pointer-events-none absolute -bottom-32 -left-16 h-64 w-64 rounded-full bg-sky-500/10 blur-3xl"
         />
 
-        <div className="relative flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:p-7">
-          {/* Avatar */}
-          <div className="relative shrink-0">
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 blur-md opacity-40" />
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt={user.fullName}
-                className="relative h-20 w-20 rounded-2xl object-cover ring-2 ring-white/10"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-700 text-2xl font-black text-black ring-2 ring-white/10">
-                {initials}
-              </div>
-            )}
+        <div className="relative flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:p-7">
+          {/* Avatar + uploader */}
+          <div className="relative shrink-0 self-center sm:self-auto">
+            <AvatarUploader size={96} />
             <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#0F0F10] bg-emerald-500">
               <ShieldCheck className="h-3.5 w-3.5 text-black" />
             </span>
@@ -75,7 +55,7 @@ export default function AccountHeader() {
 
             <p className="mt-1 flex items-center gap-1.5 truncate text-sm text-zinc-400">
               <Mail className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
-              {user.email ?? (user as any).username}
+              {user.email ?? user.phone ?? ""}
             </p>
 
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
