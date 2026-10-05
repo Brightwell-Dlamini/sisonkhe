@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Staff management — super-admin only.
+ * Platform tools — super-admin only.
  */
 
 "use client";
@@ -11,9 +11,12 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import StaffList from "@/components/staff/StaffList";
 
-export default function Page() {
+export default function SuperAdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
@@ -31,7 +34,9 @@ export default function Page() {
     );
   }
 
-  if (user.role !== "super-admin") return null;
+  if (user.role !== "super-admin") {
+    return null;
+  }
 
-  return <StaffList />;
+  return <>{children}</>;
 }
