@@ -10,21 +10,26 @@
  *   - API POST/PATCH/DELETE: network-only (never cached — mutations must be
  *     handled by the client outbox, not the SW)
  *   - Public routes (/kiosk, /verify): network-first, cache fallback
+ *   - Offline fallback: /offline page for HTML navigation requests
  *
  * Version bumping: change SW_VERSION to invalidate all caches on deploy.
  */
 
-const SW_VERSION = "v1";
+const SW_VERSION = "v2";
 const STATIC_CACHE = `sisonkhe-static-${SW_VERSION}`;
 const RUNTIME_CACHE = `sisonkhe-runtime-${SW_VERSION}`;
 
 // Core assets to precache on install
 const PRECACHE_URLS = [
   "/",
+  "/offline",
   "/kiosk",
   "/login",
   "/claim",
   "/manifest.webmanifest",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/maskable-512.png",
 ];
 
 self.addEventListener("install", (event) => {
@@ -132,9 +137,9 @@ async function networkFirstWithCache(request, cacheName, maxAgeSeconds) {
       }
       return cached;
     }
-    // Offline fallback page
+    // Offline fallback page for navigation requests
     if (request.headers.get("accept")?.includes("text/html")) {
-      const offline = await cache.match("/kiosk");
+      const offline = await cache.match("/offline");
       if (offline) return offline;
     }
     return new Response("Offline and no cache available", { status: 503 });

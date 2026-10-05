@@ -1,0 +1,690 @@
+.
+├── drizzle.config.ts
+├── middleware.ts
+├── next.config.ts
+├── package.json
+├── postcss.config.mjs
+├── public
+│   ├── logo.jpg
+│   ├── manifest.webmanifest
+│   └── sw.js
+├── schema.sql
+├── src
+│   ├── app
+│   │   ├── account
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx
+│   │   ├── admin
+│   │   │   ├── audits
+│   │   │   │   └── page.tsx
+│   │   │   ├── config
+│   │   │   │   └── page.tsx
+│   │   │   ├── drivers
+│   │   │   │   └── page.tsx
+│   │   │   ├── layout.tsx
+│   │   │   ├── ledger
+│   │   │   │   └── page.tsx
+│   │   │   ├── marshals
+│   │   │   │   └── page.tsx
+│   │   │   ├── operators
+│   │   │   │   └── page.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── permits
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── print
+│   │   │   │       └── page.tsx
+│   │   │   ├── queue
+│   │   │   │   └── page.tsx
+│   │   │   ├── reports
+│   │   │   │   └── page.tsx
+│   │   │   ├── routes
+│   │   │   │   └── page.tsx
+│   │   │   ├── staff
+│   │   │   │   └── page.tsx
+│   │   │   ├── super
+│   │   │   │   ├── adverts
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── analytics
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── assistant
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── config
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── errors
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── layout.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── recovery
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── security
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── storage
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── telemetry
+│   │   │   │       └── page.tsx
+│   │   │   ├── terminals
+│   │   │   │   └── page.tsx
+│   │   │   ├── vehicles
+│   │   │   │   └── page.tsx
+│   │   │   └── yoy
+│   │   │       └── page.tsx
+│   │   ├── api
+│   │   │   ├── admin
+│   │   │   │   ├── audits
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── config
+│   │   │   │   │   └── rank-fee
+│   │   │   │   │       └── route.ts
+│   │   │   │   ├── intelligence
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── marshals
+│   │   │   │   │   ├── [id]
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── reports
+│   │   │   │   │   └── compliance
+│   │   │   │   │       └── route.ts
+│   │   │   │   ├── rotation
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── routes
+│   │   │   │   │   ├── [id]
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── terminals
+│   │   │   │   │   ├── [region]
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── yoy
+│   │   │   │       └── route.ts
+│   │   │   ├── assignments
+│   │   │   │   ├── resolve
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── auth
+│   │   │   │   ├── change-password
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── claim
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── me
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── signin
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── signout
+│   │   │   │       └── route.ts
+│   │   │   ├── driver
+│   │   │   │   ├── card
+│   │   │   │   │   ├── route.ts
+│   │   │   │   │   └── topup
+│   │   │   │   │       └── route.ts
+│   │   │   │   ├── photo
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── roster
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── status
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── summary
+│   │   │   │       └── route.ts
+│   │   │   ├── drivers
+│   │   │   │   ├── [id]
+│   │   │   │   │   ├── reset-password
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── fleet
+│   │   │   │   ├── status
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── sync
+│   │   │   │       └── route.ts
+│   │   │   ├── health
+│   │   │   │   └── route.ts
+│   │   │   ├── inspector
+│   │   │   │   ├── ticket
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── vehicle
+│   │   │   │       └── route.ts
+│   │   │   ├── ledger
+│   │   │   │   ├── export
+│   │   │   │   │   ├── settlement
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── trips
+│   │   │   │   │       └── route.ts
+│   │   │   │   ├── settlement
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── trips
+│   │   │   │       └── route.ts
+│   │   │   ├── marshal
+│   │   │   │   ├── activity
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── messages
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── queue
+│   │   │   │   │   ├── advance
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── settings
+│   │   │   │   │       └── route.ts
+│   │   │   │   ├── roster
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── terminal
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── vehicles
+│   │   │   │       ├── queue
+│   │   │   │       │   ├── reorder
+│   │   │   │       │   │   └── route.ts
+│   │   │   │       │   └── route.ts
+│   │   │   │       ├── [reg]
+│   │   │   │       │   └── dispatch
+│   │   │   │       │       └── route.ts
+│   │   │   │       └── route.ts
+│   │   │   ├── notifications
+│   │   │   │   └── route.ts
+│   │   │   ├── operator
+│   │   │   │   ├── master-card
+│   │   │   │   │   ├── freeze
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   ├── route.ts
+│   │   │   │   │   └── transactions
+│   │   │   │   │       └── route.ts
+│   │   │   │   ├── transfer
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── vehicles
+│   │   │   │       ├── [reg]
+│   │   │   │       │   └── route.ts
+│   │   │   │       └── route.ts
+│   │   │   ├── operators
+│   │   │   │   ├── [id]
+│   │   │   │   │   ├── reset-password
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── payments
+│   │   │   │   ├── intent
+│   │   │   │   │   ├── [id]
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── webhooks
+│   │   │   │       ├── emlangeni
+│   │   │   │       │   └── route.ts
+│   │   │   │       └── momo
+│   │   │   │           └── route.ts
+│   │   │   ├── print
+│   │   │   │   └── permit
+│   │   │   │       └── [registrationNumber]
+│   │   │   │           └── route.ts
+│   │   │   ├── public
+│   │   │   │   ├── adverts
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── incidents
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── kiosk
+│   │   │   │       └── route.ts
+│   │   │   ├── qr
+│   │   │   │   ├── issue
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── verify
+│   │   │   │       └── route.ts
+│   │   │   ├── register
+│   │   │   │   ├── driver
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── vehicle
+│   │   │   │       └── route.ts
+│   │   │   ├── renewals
+│   │   │   │   ├── [id]
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── staff
+│   │   │   │   ├── [id]
+│   │   │   │   │   ├── reset-password
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── super
+│   │   │   │   ├── adverts
+│   │   │   │   │   ├── [id]
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── analytics
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── assistant
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── config
+│   │   │   │   │   ├── [key]
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── errors
+│   │   │   │   │   ├── [id]
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── security
+│   │   │   │   │   ├── ip-lists
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── threats
+│   │   │   │   │       └── route.ts
+│   │   │   │   ├── snapshots
+│   │   │   │   │   ├── [id]
+│   │   │   │   │   │   └── restore
+│   │   │   │   │   │       └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── storage
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── telemetry
+│   │   │   │       └── route.ts
+│   │   │   ├── sync
+│   │   │   │   ├── pull
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── push
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── replay
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── status
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── watermark
+│   │   │   │       └── route.ts
+│   │   │   ├── upload
+│   │   │   │   └── route.ts
+│   │   │   └── vehicles
+│   │   │       ├── [reg]
+│   │   │       │   └── route.ts
+│   │   │       └── route.ts
+│   │   ├── (auth)
+│   │   │   ├── claim
+│   │   │   │   └── page.tsx
+│   │   │   ├── layout.tsx
+│   │   │   └── login
+│   │   │       └── page.tsx
+│   │   ├── driver
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx
+│   │   ├── globals.css
+│   │   ├── inspector
+│   │   │   ├── layout.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── scan
+│   │   │   │   └── page.tsx
+│   │   │   └── tickets
+│   │   │       └── page.tsx
+│   │   ├── kiosk
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx
+│   │   ├── layout.tsx
+│   │   ├── marshal
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx
+│   │   ├── operator
+│   │   │   ├── fleet
+│   │   │   │   └── page.tsx
+│   │   │   ├── layout.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── renewals
+│   │   │   │   └── page.tsx
+│   │   │   └── wallet
+│   │   │       └── page.tsx
+│   │   ├── page.tsx
+│   │   ├── print
+│   │   │   ├── batch
+│   │   │   │   └── route.ts
+│   │   │   ├── layout.tsx
+│   │   │   └── [registrationNumber]
+│   │   │       ├── layout.tsx
+│   │   │       └── route.ts
+│   │   ├── register
+│   │   │   ├── driver
+│   │   │   │   └── page.tsx
+│   │   │   ├── layout.tsx
+│   │   │   ├── link
+│   │   │   │   └── page.tsx
+│   │   │   └── vehicle
+│   │   │       └── page.tsx
+│   │   ├── staff
+│   │   │   └── page.tsx
+│   │   └── verify
+│   │       ├── layout.tsx
+│   │       └── page.tsx
+│   ├── components
+│   │   ├── account
+│   │   │   ├── AccountHeader.tsx
+│   │   │   ├── ChangePasswordForm.tsx
+│   │   │   └── SessionCard.tsx
+│   │   ├── admin
+│   │   │   ├── AuditTrailView.tsx
+│   │   │   ├── CommandCentre.tsx
+│   │   │   ├── ledger
+│   │   │   │   ├── FilterBar.tsx
+│   │   │   │   ├── LedgerPage.tsx
+│   │   │   │   ├── MarshalBreakdownTable.tsx
+│   │   │   │   ├── SettlementCards.tsx
+│   │   │   │   ├── SettlementTab.tsx
+│   │   │   │   ├── TripsTable.tsx
+│   │   │   │   ├── TripsTab.tsx
+│   │   │   │   └── VehicleBreakdownTable.tsx
+│   │   │   ├── MarshalCardModal.tsx
+│   │   │   ├── MarshalFormModal.tsx
+│   │   │   ├── MarshalsList.tsx
+│   │   │   ├── permits
+│   │   │   │   ├── AdminPermitsPage.tsx
+│   │   │   │   ├── PendingRenewalsTable.tsx
+│   │   │   │   ├── PrintQueuePage.tsx
+│   │   │   │   ├── PrintQueueTable.tsx
+│   │   │   │   └── RenewalApprovalModal.tsx
+│   │   │   ├── QueueRosterView.tsx
+│   │   │   ├── RankFeeConfig.tsx
+│   │   │   ├── ReportsView.tsx
+│   │   │   ├── RouteFormModal.tsx
+│   │   │   ├── RoutesList.tsx
+│   │   │   ├── TerminalsConfig.tsx
+│   │   │   └── YoYComparisonView.tsx
+│   │   ├── assignments
+│   │   │   └── LinkAssignmentPanel.tsx
+│   │   ├── common
+│   │   │   ├── BrandMark.tsx
+│   │   │   ├── ImageUploadField.tsx
+│   │   │   ├── NavAuthActions.tsx
+│   │   │   └── QRCodeView.tsx
+│   │   ├── driver
+│   │   │   ├── CabStatusButtons.tsx
+│   │   │   ├── CardTopUpModal.tsx
+│   │   │   ├── DriverCardView.tsx
+│   │   │   ├── DriverDashboard.tsx
+│   │   │   ├── DriverHeader.tsx
+│   │   │   ├── DriverRosterView.tsx
+│   │   │   ├── DriverSummaryCards.tsx
+│   │   │   ├── DriverTripsList.tsx
+│   │   │   ├── DriverVehicleCard.tsx
+│   │   │   └── MessageMarshalModal.tsx
+│   │   ├── drivers
+│   │   │   ├── DriverActionsMenu.tsx
+│   │   │   ├── DriverCredentialsDialog.tsx
+│   │   │   ├── DriverFormModal.tsx
+│   │   │   └── DriversList.tsx
+│   │   ├── fleet
+│   │   │   ├── A4PermitPrintModal.tsx
+│   │   │   ├── OfficialPlaqueQRModal.tsx
+│   │   │   └── QRValidityCertificateModal.tsx
+│   │   ├── inspector
+│   │   │   ├── InspectorDashboard.tsx
+│   │   │   ├── TicketForm.tsx
+│   │   │   ├── TicketList.tsx
+│   │   │   └── VehicleCompliancePanel.tsx
+│   │   ├── intelligence
+│   │   │   ├── ConsequencePreviewDialog.tsx
+│   │   │   └── HealthChips.tsx
+│   │   ├── kiosk
+│   │   │   ├── DepartureCard.tsx
+│   │   │   ├── DestinationHero.tsx
+│   │   │   ├── EmptyRegion.tsx
+│   │   │   ├── HeadingTodayHub.tsx
+│   │   │   ├── KioskAdvertBanner.tsx
+│   │   │   ├── KioskFareCalculator.tsx
+│   │   │   ├── KioskHeader.tsx
+│   │   │   ├── KioskLostProperty.tsx
+│   │   │   ├── KioskModeRadar.tsx
+│   │   │   ├── KioskModeTabs.tsx
+│   │   │   ├── KioskModeTransit.tsx
+│   │   │   ├── KioskModeTV.tsx
+│   │   │   ├── KioskShell.tsx
+│   │   │   ├── LiveClock.tsx
+│   │   │   ├── LoadingKiosk.tsx
+│   │   │   ├── NextBoardingCard.tsx
+│   │   │   ├── OccupancyBar.tsx
+│   │   │   ├── RoutePill.tsx
+│   │   │   └── StatusIndicator.tsx
+│   │   ├── marshal
+│   │   │   ├── AddVehicleModal.tsx
+│   │   │   ├── BreakdownModal.tsx
+│   │   │   ├── DelayReasonModal.tsx
+│   │   │   ├── DriverCommsPanel.tsx
+│   │   │   ├── MarshalDashboard.tsx
+│   │   │   ├── MarshalHeader.tsx
+│   │   │   ├── QueueList.tsx
+│   │   │   ├── QueueRow.tsx
+│   │   │   ├── RecentActivityFeed.tsx
+│   │   │   ├── RosterView.tsx
+│   │   │   ├── SettingsPanel.tsx
+│   │   │   ├── SummaryCards.tsx
+│   │   │   ├── VehicleDetailsModal.tsx
+│   │   │   └── YoYComparisonView.tsx
+│   │   ├── offline
+│   │   │   ├── OfflineBanner.tsx
+│   │   │   ├── OfflineProvider.tsx
+│   │   │   ├── SyncStatusPill.tsx
+│   │   │   └── SyncWorker.tsx
+│   │   ├── operator
+│   │   │   ├── CardInspectionModal.tsx
+│   │   │   ├── FleetCardsGrid.tsx
+│   │   │   ├── MasterCardActions.tsx
+│   │   │   ├── MasterCardView.tsx
+│   │   │   ├── renewals
+│   │   │   │   ├── OperatorRenewalsPage.tsx
+│   │   │   │   ├── RenewalRequestModal.tsx
+│   │   │   │   ├── RenewalsList.tsx
+│   │   │   │   └── RenewalStatusBadge.tsx
+│   │   │   ├── SendMoneyModal.tsx
+│   │   │   └── VehicleCardMini.tsx
+│   │   ├── operators
+│   │   │   ├── OperatorActionsMenu.tsx
+│   │   │   ├── OperatorCredentialsDialog.tsx
+│   │   │   ├── OperatorFormModal.tsx
+│   │   │   └── OperatorsList.tsx
+│   │   ├── payments
+│   │   │   └── TopUpModal.tsx
+│   │   ├── qr
+│   │   │   └── SignedQRCode.tsx
+│   │   ├── shell
+│   │   │   ├── AppShell.tsx
+│   │   │   ├── MobileDrawer.tsx
+│   │   │   ├── NotificationsMenu.tsx
+│   │   │   ├── PublicShell.tsx
+│   │   │   ├── RoleBadge.tsx
+│   │   │   ├── SidebarGroup.tsx
+│   │   │   ├── SidebarItem.tsx
+│   │   │   ├── Sidebar.tsx
+│   │   │   ├── Topbar.tsx
+│   │   │   └── UserMenu.tsx
+│   │   ├── staff
+│   │   │   ├── ResetPasswordDialog.tsx
+│   │   │   ├── StaffActionsMenu.tsx
+│   │   │   ├── StaffCredentialsDialog.tsx
+│   │   │   ├── StaffFormModal.tsx
+│   │   │   └── StaffList.tsx
+│   │   ├── super
+│   │   │   ├── AdvertFormModal.tsx
+│   │   │   ├── AdvertsManager.tsx
+│   │   │   ├── AnalyticsPanel.tsx
+│   │   │   ├── AssistantPanel.tsx
+│   │   │   ├── ErrorHub.tsx
+│   │   │   ├── RecoveryPanel.tsx
+│   │   │   ├── SecurityCentre.tsx
+│   │   │   ├── StoragePanel.tsx
+│   │   │   ├── SuperLanding.tsx
+│   │   │   ├── SystemConfigPanel.tsx
+│   │   │   └── TelemetryPanel.tsx
+│   │   ├── ui
+│   │   │   ├── Badge.tsx
+│   │   │   ├── Button.tsx
+│   │   │   ├── Checkbox.tsx
+│   │   │   ├── ConfirmDialog.tsx
+│   │   │   ├── EmptyState.tsx
+│   │   │   ├── IconButton.tsx
+│   │   │   ├── index.ts
+│   │   │   ├── Input.tsx
+│   │   │   ├── Modal.tsx
+│   │   │   ├── PageHeader.tsx
+│   │   │   ├── Select.tsx
+│   │   │   ├── Skeleton.tsx
+│   │   │   ├── Switch.tsx
+│   │   │   ├── Table.tsx
+│   │   │   ├── Textarea.tsx
+│   │   │   └── Toast.tsx
+│   │   └── vehicles
+│   │       ├── VehicleActionsMenu.tsx
+│   │       ├── VehicleFormModal.tsx
+│   │       └── VehiclesList.tsx
+│   ├── config
+│   │   └── navigation.ts
+│   ├── db
+│   │   └── schema.ts
+│   ├── hooks
+│   │   ├── useAuth.ts
+│   │   ├── useAutoCycle.ts
+│   │   ├── useDriverCard.ts
+│   │   ├── useDriverMessages.ts
+│   │   ├── useDriverRoster.ts
+│   │   ├── useDrivers.ts
+│   │   ├── useDriverSummary.ts
+│   │   ├── useInspectorTickets.ts
+│   │   ├── useKioskData.ts
+│   │   ├── useLedger.ts
+│   │   ├── useMarshalRoster.ts
+│   │   ├── useMarshalTerminal.ts
+│   │   ├── useMarshalVehicles.ts
+│   │   ├── useOnlineStatus.ts
+│   │   ├── useOperatorFleetCards.ts
+│   │   ├── useOperatorMasterCard.ts
+│   │   ├── useOperators.ts
+│   │   ├── useOutbox.ts
+│   │   ├── usePaymentIntent.ts
+│   │   ├── useQrScanner.ts
+│   │   ├── useRenewals.ts
+│   │   ├── useRequireAuth.ts
+│   │   ├── useStaff.ts
+│   │   ├── useVehicleQR.ts
+│   │   ├── useVehicleRegistry.ts
+│   │   └── useVoiceAnnouncements.ts
+│   ├── lib
+│   │   ├── admin
+│   │   │   ├── audits.ts
+│   │   │   ├── marshals.ts
+│   │   │   ├── reports.ts
+│   │   │   ├── rotation.ts
+│   │   │   ├── routes.ts
+│   │   │   ├── terminals.ts
+│   │   │   └── yoy.ts
+│   │   ├── assignments
+│   │   │   └── service.ts
+│   │   ├── auth
+│   │   │   ├── client.ts
+│   │   │   ├── permissions.ts
+│   │   │   ├── region.ts
+│   │   │   ├── roles.ts
+│   │   │   └── session.ts
+│   │   ├── driver
+│   │   │   ├── notifications.ts
+│   │   │   ├── queries.ts
+│   │   │   └── roster.ts
+│   │   ├── drivers
+│   │   │   ├── generators.ts
+│   │   │   ├── queries.ts
+│   │   │   ├── selfRegister.ts
+│   │   │   └── validation.ts
+│   │   ├── fleetStore.ts
+│   │   ├── inspector
+│   │   │   ├── queries.ts
+│   │   │   └── validation.ts
+│   │   ├── intelligence
+│   │   │   ├── consequences.ts
+│   │   │   ├── entityHealth.ts
+│   │   │   ├── index.ts
+│   │   │   ├── rules.ts
+│   │   │   ├── snapshot.ts
+│   │   │   └── types.ts
+│   │   ├── ledger
+│   │   │   ├── csv.ts
+│   │   │   └── queries.ts
+│   │   ├── marshal
+│   │   │   ├── dispatch.ts
+│   │   │   ├── messages.ts
+│   │   │   ├── queries.ts
+│   │   │   └── roster.ts
+│   │   ├── navigation
+│   │   │   └── resolve.ts
+│   │   ├── offline
+│   │   │   ├── db.ts
+│   │   │   ├── network.ts
+│   │   │   ├── outbox.ts
+│   │   │   └── sync.ts
+│   │   ├── operator
+│   │   │   ├── queries.ts
+│   │   │   └── transfers.ts
+│   │   ├── operators
+│   │   │   ├── generators.ts
+│   │   │   ├── queries.ts
+│   │   │   └── validation.ts
+│   │   ├── payments
+│   │   │   ├── intent.ts
+│   │   │   ├── providers
+│   │   │   │   ├── emlangeni.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── manual.ts
+│   │   │   │   └── momo.ts
+│   │   │   └── types.ts
+│   │   ├── printing
+│   │   │   ├── batch.ts
+│   │   │   ├── permit.ts
+│   │   │   └── render.ts
+│   │   ├── public
+│   │   │   └── kiosk.ts
+│   │   ├── qr
+│   │   │   ├── payload.ts
+│   │   │   ├── sign.ts
+│   │   │   └── verify.ts
+│   │   ├── renewals
+│   │   │   ├── queries.ts
+│   │   │   └── validation.ts
+│   │   ├── staff
+│   │   │   ├── queries.ts
+│   │   │   └── validation.ts
+│   │   ├── supabase
+│   │   │   ├── client.ts
+│   │   │   ├── middleware.ts
+│   │   │   ├── rpc.ts
+│   │   │   └── server.ts
+│   │   ├── super
+│   │   │   ├── adverts.ts
+│   │   │   ├── analytics.ts
+│   │   │   ├── assistant.ts
+│   │   │   ├── config.ts
+│   │   │   ├── errors.ts
+│   │   │   ├── security.ts
+│   │   │   ├── snapshots.ts
+│   │   │   ├── storage.ts
+│   │   │   └── telemetry.ts
+│   │   ├── sync
+│   │   │   ├── client.ts
+│   │   │   ├── protocol.ts
+│   │   │   └── server.ts
+│   │   ├── utils.ts
+│   │   └── vehicles
+│   │       ├── queries.ts
+│   │       ├── selfRegister.ts
+│   │       └── validation.ts
+│   ├── store
+│   │   └── useAuthStore.ts
+│   ├── test
+│   │   └── setup.ts
+│   ├── types
+│   │   └── database.ts
+│   ├── types.ts
+│   └── utils
+│       └── qrSecurity.ts
+├── supabase
+│   └── migrations
+│       ├── 0000_initial.sql
+│       ├── 0001_add_marshals_version.sql
+│       ├── 0002_rls_policies.sql
+│       ├── 0003_seed_reference_data.sql
+│       ├── 0004_auth_helpers.sql
+│       ├── 0005_fix_rls_bypass.sql
+│       ├── 0006_auth_lookup_helpers.sql
+│       ├── 0007_link_marshal_auth.sql
+│       ├── 0008_ensure_marshal_auth_link.sql
+│       ├── 0009_fix_link_marshal_bigint_timestamps.sql
+│       ├── 0009_payment_intents.sql
+│       ├── 0010_fix_set_updated_at_bigint.sql
+│       ├── 0010_super_admin.sql
+│       ├── 0011_queue_shift.sql
+│       └── 20261005_event_sync_and_queue.sql
+├── tree.txt
+├── tsconfig.json
+├── vercel.json
+└── vitest.config.ts
+
+233 directories, 455 files

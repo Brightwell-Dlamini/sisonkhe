@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   description:
     "National Taxi Rank, Route Queuing, and Fleet Dispatch Management System for Eswatini corridors.",
   manifest: "/manifest.webmanifest",
+  applicationName: "Sisonkhe",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -16,9 +17,15 @@ export const metadata: Metadata = {
     telephone: false,
   },
   icons: {
-    icon: [{ url: "/logo.jpg", type: "image/jpeg" }],
-    apple: [{ url: "/logo.jpg", type: "image/jpeg" }],
-    shortcut: "/logo.jpg",
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/logo.jpg", type: "image/jpeg" },
+    ],
+    apple: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    shortcut: "/icons/icon-192.png",
   },
   openGraph: {
     title: "Sisonkhe In Transit",
@@ -34,6 +41,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
