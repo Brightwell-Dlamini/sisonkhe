@@ -1,18 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireServerRole } from "@/lib/auth/session";
-import { getMarshalById, updateMarshal, deactivateMarshal } from "@/lib/admin/marshals";
+import type { AuthRole } from "@/lib/auth/roles";
+import {
+  getMarshalById,
+  updateMarshal,
+  deactivateMarshal,
+} from "@/lib/admin/marshals";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const ALLOWED = ["super-admin", "admin", "fleet-manager"];
+const ALLOWED: AuthRole[] = ["super-admin", "admin", "fleet-manager"];
 
-export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  _: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     await requireServerRole(ALLOWED);
     const { id } = await params;
     const marshal = await getMarshalById(id);
-    if (!marshal) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!marshal)
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json({ marshal });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error";
@@ -20,13 +29,17 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     await requireServerRole(ALLOWED);
     const { id } = await params;
     const body = await request.json();
     const result = await updateMarshal(id, body);
-    if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
+    if (!result.success)
+      return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ success: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error";
@@ -34,12 +47,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 }
 
-export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     await requireServerRole(ALLOWED);
     const { id } = await params;
     const result = await deactivateMarshal(id);
-    if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
+    if (!result.success)
+      return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ success: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error";
