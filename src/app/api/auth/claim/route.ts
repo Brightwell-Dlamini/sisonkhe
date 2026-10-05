@@ -6,11 +6,6 @@
  *
  * Step 1 (PUT): Verify identity by national ID + phone.
  * Step 2 (POST): Set username + password, create auth user, link to marshal.
- *
- * Linking strategy (in order):
- *  1. link_marshal_auth(id_number, phone, auth_user_id)  — 0004 signature
- *  2. link_marshal_auth(marshal_id, auth_user_id)        — 0007 signature
- *  3. Direct UPDATE of auth_user_id only via service role
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -18,41 +13,11 @@ import {
   createSupabaseAdminClient,
   createSupabaseServerClient,
 } from "@/lib/supabase/server";
+import { looseAdmin, rpcRow } from "@/lib/supabase/rpc";
 import { resolveUserRole } from "@/lib/auth/roles";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-/**
- * Generated Database types may not list portal RPCs / columns yet.
- */
-type LooseAdmin = {
-  rpc: (
-    fn: string,
-    args?: Record<string, unknown>
-  ) => Promise<{ data: unknown; error: { message: string } | null }>;
-  from: (table: string) => {
-    update: (values: Record<string, unknown>) => {
-      eq: (col: string, val: string) => {
-        is: (
-          col: string,
-          val: null
-        ) => {
-          select: (cols: string) => Promise<{
-            data: { id: string }[] | null;
-            error: { message: string } | null;
-          }>;
-        };
-      };
-    };
-  };
-};
-
-function looseAdmin(
-  admin: ReturnType<typeof createSupabaseAdminClient>
-): LooseAdmin {
-  return admin as unknown as LooseAdmin;
-}
 
 async function tryLinkMarshal(
   admin: ReturnType<typeof createSupabaseAdminClient>,
@@ -66,46 +31,35 @@ async function tryLinkMarshal(
   const { marshalId, idNumber, phone, authUserId } = opts;
   const loose = looseAdmin(admin);
 
-  // 1) Identity-based RPC
   {
     const { data, error } = await loose.rpc("link_marshal_auth", {
       p_id_number: idNumber,
       p_phone: phone,
       p_auth_user_id: authUserId,
     });
-    if (!error && data === true) {
-      return { ok: true, method: "rpc:id+phone" };
-    }
+    if (!error && data === true) return { ok: true, method: "rpc:id+phone" };
     if (error) {
       console.warn(
         "[claim] link_marshal_auth(id,phone,uid) failed:",
         error.message
       );
-    } else if (data === false) {
-      console.warn("[claim] link_marshal_auth(id,phone,uid) returned false");
     }
   }
 
-  // 2) ID-based RPC
   {
     const { data, error } = await loose.rpc("link_marshal_auth", {
       p_marshal_id: marshalId,
       p_auth_user_id: authUserId,
     });
-    if (!error && data === true) {
-      return { ok: true, method: "rpc:marshal_id" };
-    }
+    if (!error && data === true) return { ok: true, method: "rpc:marshal_id" };
     if (error) {
       console.warn(
         "[claim] link_marshal_auth(marshal_id,uid) failed:",
         error.message
       );
-    } else if (data === false) {
-      console.warn("[claim] link_marshal_auth(marshal_id,uid) returned false");
     }
   }
 
-  // 3) Direct UPDATE — only auth_user_id (portal column may be missing from generated types)
   {
     const { data: rows, error } = await loose
       .from("marshals")
@@ -158,10 +112,7 @@ export async function PUT(request: NextRequest) {
     const admin = createSupabaseAdminClient();
     const { data, error } = await looseAdmin(admin).rpc(
       "verify_marshal_identity",
-      {
-        p_id_number: idNumber,
-        p_phone: phone,
-      }
+      { p_id_number: idNumber, p_phone: phone }
     );
 
     if (error) {
@@ -175,8 +126,13 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const match = Array.isArray(data) ? data[0] : data;
-    if (!match || typeof match !== "object") {
+    const row = rpcRow<{
+      already_claimed?: boolean;
+      full_name?: string;
+      marshal_id?: string;
+    }>(data);
+
+    if (!row) {
       return NextResponse.json(
         {
           error:
@@ -185,12 +141,6 @@ export async function PUT(request: NextRequest) {
         { status: 404 }
       );
     }
-
-    const row = match as {
-      already_claimed?: boolean;
-      full_name?: string;
-      marshal_id?: string;
-    };
 
     if (row.already_claimed) {
       return NextResponse.json(
@@ -269,19 +219,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rawMatch = Array.isArray(verifyData) ? verifyData[0] : verifyData;
-    if (!rawMatch || typeof rawMatch !== "object") {
+    const match = rpcRow<{
+      already_claimed?: boolean;
+      full_name?: string;
+      marshal_id: string;
+    }>(verifyData);
+
+    if (!match) {
       return NextResponse.json(
         { error: "Identity verification failed." },
         { status: 404 }
       );
     }
-
-    const match = rawMatch as {
-      already_claimed?: boolean;
-      full_name?: string;
-      marshal_id: string;
-    };
 
     if (match.already_claimed) {
       return NextResponse.json(

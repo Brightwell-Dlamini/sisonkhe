@@ -13,6 +13,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSupabaseSession } from "./src/lib/supabase/middleware";
 
+/** Routes reachable without a session. Everything else requires auth. */
 const PUBLIC_ROUTES = [
   "/",
   "/login",
@@ -29,10 +30,8 @@ const PUBLIC_ROUTES = [
   "/api/fleet/status",
   "/api/public",
   "/api/qr/verify",
+  // Webhooks must remain public (provider signatures verify authenticity)
   "/api/payments/webhooks",
-  // Event-sync endpoints require auth in production; temporarily public for migration
-  // Tighten once clients send session cookies reliably.
-  "/api/sync/watermark",
 ];
 
 const AUTH_ROUTES = ["/login", "/claim"];
@@ -48,13 +47,18 @@ export async function middleware(request: NextRequest) {
     (route) => pathname === route || pathname.startsWith(route + "/")
   );
 
-  // Authenticated user hitting login/claim → home
   if (isAuthRoute && user) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  // Unauthenticated user on protected route → login
   if (!isPublic && !user) {
+    // API routes: return 401 JSON instead of HTML login redirect
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "UNAUTHENTICATED" },
+        { status: 401 }
+      );
+    }
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
