@@ -12,11 +12,12 @@ export async function GET() {
   try {
     await requireServerRole(ALLOWED);
     const marshals = await listMarshals();
-    return NextResponse.json({ marshals });
+    return NextResponse.json({ marshals, count: marshals.length });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error";
+    console.error("[api/admin/marshals] GET:", msg);
     return NextResponse.json(
-      { error: msg },
+      { error: msg, marshals: [] },
       {
         status:
           msg === "UNAUTHENTICATED"

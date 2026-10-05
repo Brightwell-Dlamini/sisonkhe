@@ -43,12 +43,17 @@ export default function MarshalsList() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/marshals", { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setMarshals(data.marshals ?? []);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          (data as { error?: string }).error ?? `HTTP ${res.status}`
+        );
+      }
+      setMarshals((data as { marshals?: MarshalRow[] }).marshals ?? []);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
+      setMarshals([]);
     } finally {
       setLoading(false);
     }
@@ -67,7 +72,7 @@ export default function MarshalsList() {
         (m.phone ?? "").toLowerCase().includes(q) ||
         (m.cellNo ?? "").toLowerCase().includes(q) ||
         (m.idNumber ?? "").toLowerCase().includes(q) ||
-        m.region.toLowerCase().includes(q) ||
+        (m.region ?? "").toLowerCase().includes(q) ||
         (m.terminalName ?? "").toLowerCase().includes(q) ||
         (m.badgeNumber ?? "").toLowerCase().includes(q)
     );
@@ -96,7 +101,7 @@ export default function MarshalsList() {
           <div className="flex-1 min-w-0">
             <Input
               leadingIcon={Search}
-              placeholder="Search by name, phone, ID, region, terminal, badge\u2026"
+              placeholder="Search by name, phone, ID, region…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -122,12 +127,16 @@ export default function MarshalsList() {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={Radio}
-          title={search ? "No matches" : "No marshals yet"}
+          title={error ? "Could not load marshals" : search ? "No matches" : "No marshals yet"}
           description={
-            search ? "Try a different search." : "Add the first rank marshal."
+            error
+              ? "Check the error above or try Refresh."
+              : search
+                ? "Try a different search."
+                : "Add the first rank marshal."
           }
           action={
-            !search ? (
+            !search && !error ? (
               <Button
                 onClick={() => {
                   setEditing(null);
@@ -149,7 +158,7 @@ export default function MarshalsList() {
                 <Th>Marshal</Th>
                 <Th>Contact</Th>
                 <Th>Region / Terminal</Th>
-                <Th>Badge</Th>
+                <Th>Claimed</Th>
                 <Th>Status</Th>
                 <Th className="text-right">Actions</Th>
               </Tr>
@@ -167,7 +176,7 @@ export default function MarshalsList() {
                   </Td>
                   <Td>
                     <div className="font-mono text-[11px] text-zinc-300">
-                      {m.cellNo ?? m.phone ?? "\u2014"}
+                      {m.cellNo ?? m.phone ?? "—"}
                     </div>
                     {m.idNumber && (
                       <div className="font-mono text-[10px] text-zinc-500">
@@ -182,12 +191,19 @@ export default function MarshalsList() {
                     </div>
                   </Td>
                   <Td>
-                    <span className="font-mono text-[11px] text-zinc-400">
-                      {m.badgeNumber ?? "\u2014"}
-                    </span>
+                    <Badge
+                      variant={m.authUserId ? "success" : "default"}
+                      size="sm"
+                    >
+                      {m.authUserId ? "Yes" : "No"}
+                    </Badge>
                   </Td>
                   <Td>
-                    <Badge variant={m.isActive ? "success" : "default"} size="sm" dot>
+                    <Badge
+                      variant={m.isActive ? "success" : "default"}
+                      size="sm"
+                      dot
+                    >
                       {m.isActive ? "Active" : "Inactive"}
                     </Badge>
                   </Td>
