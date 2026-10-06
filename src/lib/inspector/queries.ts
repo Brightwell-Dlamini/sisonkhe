@@ -8,6 +8,7 @@ import { createSupabaseAdminClient } from "../supabase/server";
 import { normalizePlate, plateKey } from "../domain/identity";
 import { nextTicketNumber } from "../domain/serials";
 import { writeAudit } from "../domain/audit";
+import { evaluateCompliance } from "../domain/compliance";
 
 export interface InspectorVehicleView {
   registrationNumber: string;
@@ -43,6 +44,8 @@ export interface InspectorVehicleView {
   driverPdpValid: boolean;
   vehicleOperational: boolean;
   overallValid: boolean;
+  blocksRankLoad: boolean;
+  complianceReasons: string[];
 }
 
 export interface InspectorTicket {
@@ -59,11 +62,6 @@ export interface InspectorTicket {
   status: string;
   notes: string | null;
   complianceSnapshot: Record<string, unknown> | null;
-}
-
-function isExpired(dateStr: string | null | undefined, now: number): boolean {
-  if (!dateStr) return false;
-  return new Date(dateStr).getTime() <= now;
 }
 
 const SELECT_COLS = `
@@ -97,7 +95,6 @@ export async function lookupVehicleForInspector(
     v = byVic.data;
   }
 
-  // Indexed compact match via filter (not full table scan in app)
   if (!v && compact) {
     const { data: byCompact } = await admin
       .from("vehicles")
@@ -152,27 +149,35 @@ export async function lookupVehicleForInspector(
     }
   }
 
-  const now = Date.now();
-  const status = (v.status as string) ?? "";
-  const vehicleOperational =
-    status !== "Offline" && status !== "Breakdown" && status !== "Decommissioned";
+  let renewalStatus: string | null = null;
+  try {
+    const { data: ren } = await admin
+      .from("permit_renewal_requests")
+      .select("status")
+      .eq("vehicle_reg", v.registration_number as string)
+      .in("status", ["Pending Admin Approval", "Approved"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    renewalStatus = (ren?.status as string | null) ?? null;
+  } catch {
+    renewalStatus = null;
+  }
 
-  const permitValid =
-    (v.permit_status === "Active" || v.permit_status === "Valid") &&
-    !isExpired(v.permit_expiry_date as string | null, now);
-  const cofValid = !isExpired(v.cof_expiry_date as string | null, now);
-  const insuranceValid = !isExpired(v.insurance_expiry as string | null, now);
-  const roadworthyValid = !isExpired(
-    v.roadworthiness_expiry as string | null,
-    now
-  );
-  const driverPdpValid =
-    !driverName ||
-    ((driverPdpStatus === "Valid" ||
-      driverPdpStatus === "Active" ||
-      !driverPdpStatus) &&
-      !isExpired(driverPdpExpiry, now) &&
-      driverStatus !== "Suspended");
+  const status = (v.status as string) ?? "";
+  const report = evaluateCompliance({
+    permitStatus: v.permit_status as string | null,
+    permitExpiryDate: v.permit_expiry_date as string | null,
+    cofExpiryDate: v.cof_expiry_date as string | null,
+    insuranceExpiry: v.insurance_expiry as string | null,
+    roadworthinessExpiry: v.roadworthiness_expiry as string | null,
+    vehicleStatus: status,
+    renewalStatus,
+    hasDriver: !!v.driver_id,
+    driverStatus,
+    driverPdpStatus,
+    driverPdpExpiry,
+  });
 
   return {
     registrationNumber: v.registration_number as string,
@@ -201,19 +206,15 @@ export async function lookupVehicleForInspector(
     driverPdpStatus,
     driverPdpExpiry,
     driverStatus,
-    permitValid,
-    cofValid,
-    insuranceValid,
-    roadworthyValid,
-    driverPdpValid,
-    vehicleOperational,
-    overallValid:
-      permitValid &&
-      cofValid &&
-      insuranceValid &&
-      roadworthyValid &&
-      driverPdpValid &&
-      vehicleOperational,
+    permitValid: report.permitValid,
+    cofValid: report.cofValid,
+    insuranceValid: report.insuranceValid,
+    roadworthyValid: report.roadworthyValid,
+    driverPdpValid: report.driverPdpValid,
+    vehicleOperational: report.vehicleOperational,
+    overallValid: report.overallValid,
+    blocksRankLoad: report.blocksRankLoad,
+    complianceReasons: report.reasons,
   };
 }
 
@@ -247,6 +248,8 @@ export async function createTicket(
         roadworthyValid: compliance.roadworthyValid,
         driverPdpValid: compliance.driverPdpValid,
         overallValid: compliance.overallValid,
+        blocksRankLoad: compliance.blocksRankLoad,
+        reasons: compliance.complianceReasons,
         permitStatus: compliance.permitStatus,
         permitExpiryDate: compliance.permitExpiryDate,
         driverName: compliance.driverName,
@@ -278,7 +281,6 @@ export async function createTicket(
     .single();
 
   if (error || !data) {
-    // Fallback without new columns
     const { data: data2, error: err2 } = await admin
       .from("traffic_tickets")
       .insert({
@@ -299,7 +301,9 @@ export async function createTicket(
       )
       .single();
     if (err2 || !data2) {
-      throw new Error(`Failed to create ticket: ${error?.message ?? err2?.message}`);
+      throw new Error(
+        `Failed to create ticket: ${error?.message ?? err2?.message}`
+      );
     }
     await writeAudit(admin, {
       action: "ticket.issue",
@@ -378,7 +382,6 @@ export async function listTicketsForOfficer(
 
   const { data, error } = await query;
   if (error || !data) {
-    // Fallback without officer_user_id column
     const { data: data2 } = await admin
       .from("traffic_tickets")
       .select(
