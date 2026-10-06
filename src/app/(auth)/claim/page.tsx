@@ -6,7 +6,10 @@
  * Three steps:
  *   1. Verify identity (national ID + phone)
  *   2. Set username + password
- *   3. Success
+ *   3. Success — server has signed the user in
+ *
+ * On success, redirect to the resolved home route. The server returns the
+ * resolved user; we map it to a home path. No blind redirect to `/`.
  */
 
 "use client";
@@ -25,8 +28,20 @@ import {
   ArrowLeft,
   User,
 } from "lucide-react";
+import { homeRouteForRole, toNavRole } from "@/lib/navigation/resolve";
 
 type Step = "verify" | "credentials" | "success";
+
+interface ClaimResponse {
+  success?: boolean;
+  signedIn?: boolean;
+  user?: { role?: string } | null;
+  error?: string;
+  fullName?: string;
+  message?: string;
+}
+
+const REDIRECT_DELAY_MS = 1500;
 
 export default function ClaimPage() {
   const router = useRouter();
@@ -53,7 +68,7 @@ export default function ClaimPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idNumber, phone }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as ClaimResponse;
 
       if (!res.ok) {
         setError(data.error ?? "Verification failed");
@@ -61,7 +76,7 @@ export default function ClaimPage() {
         return;
       }
 
-      setFullName(data.fullName);
+      setFullName(data.fullName ?? "");
       setStep("credentials");
     } catch {
       setError("Network error. Please try again.");
@@ -90,7 +105,7 @@ export default function ClaimPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idNumber, phone, username, password }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as ClaimResponse;
 
       if (!res.ok) {
         setError(data.error ?? "Account creation failed");
@@ -100,10 +115,16 @@ export default function ClaimPage() {
 
       setStep("success");
 
-      setTimeout(() => {
-        router.push("/");
+      // Role-aware destination. The server resolved the user on creation.
+      // If for any reason the role is missing, fall back to /marshal — the
+      // only role this flow can create — never to the public kiosk.
+      const role = data.user?.role ? toNavRole(data.user.role) : "marshal";
+      const destination = homeRouteForRole(role ?? "marshal");
+
+      window.setTimeout(() => {
+        router.replace(destination);
         router.refresh();
-      }, 2500);
+      }, REDIRECT_DELAY_MS);
     } catch {
       setError("Network error. Please try again.");
       setLoading(false);
@@ -264,6 +285,7 @@ export default function ClaimPage() {
                 onClick={() => setShowPassword((v) => !v)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200"
                 tabIndex={-1}
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? (
                   <EyeOff className="w-4 h-4" />

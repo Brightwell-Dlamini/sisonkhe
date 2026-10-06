@@ -144,22 +144,19 @@ export async function POST(request: NextRequest) {
       signIn.user.user_metadata?.must_change_password
     );
 
-    try {
-      if (resolved.role === "marshal" && resolved.marshalId) {
-        await looseAdmin(admin)
-          .from("marshals")
-          .update({ last_login_at: new Date().toISOString() })
-          .eq("id", resolved.marshalId)
-          .select("id");
-      } else if (resolved.staffId) {
+        // last_login_at is a vanity field. staff uses timestamptz; marshals uses
+    // bigint epoch-ms (see 0009_fix_link_marshal_bigint_timestamps.sql).
+    // Do not touch marshals here — the portal owns that column.
+    if (resolved.staffId) {
+      try {
         await looseAdmin(admin)
           .from("staff")
           .update({ last_login_at: new Date().toISOString() })
           .eq("id", resolved.staffId)
           .select("id");
+      } catch (updateErr) {
+        console.warn("[signin] staff last_login update failed:", updateErr);
       }
-    } catch (updateErr) {
-      console.warn("[signin] last_login update failed:", updateErr);
     }
 
     return NextResponse.json({

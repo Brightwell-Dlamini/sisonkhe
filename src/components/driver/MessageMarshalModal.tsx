@@ -1,6 +1,9 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Messages go through the server, never directly to Supabase from the browser.
+ * The server owns notification shape + idempotency + audit.
  */
 
 "use client";
@@ -8,7 +11,6 @@
 import { useState } from "react";
 import { Send, X, Loader2, AlertCircle } from "lucide-react";
 import type { DriverContext } from "@/lib/driver/queries";
-import { getSupabaseBrowser } from "@/lib/supabase/client";
 
 interface Props {
   marshal: NonNullable<DriverContext["marshal"]>;
@@ -39,24 +41,17 @@ export default function MessageMarshalModal({
     if (!text.trim()) return;
     setLoading(true);
     setError(null);
-
     try {
-      const supabase = getSupabaseBrowser();
-      const { error: insertErr } = await supabase.from("notifications").insert({
-        id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        timestamp: new Date().toISOString(),
-        type: "Push",
-        recipient_name: marshal.fullName,
-        recipient_phone: marshal.phone ?? null,
-        message: `[${driverName}]: ${text.trim()}`,
-        status: "Sent",
+      const res = await fetch("/api/driver/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text.trim() }),
       });
-
-      if (insertErr) {
-        setError(insertErr.message);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(body.error ?? `HTTP ${res.status}`);
         return;
       }
-
       onSent();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send");

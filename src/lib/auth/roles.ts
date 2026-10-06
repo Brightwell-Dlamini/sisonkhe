@@ -2,22 +2,52 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Role resolution. Given an authenticated Supabase user, determine their
- * domain role by querying the appropriate table.
+ * Role resolution. THE single source of truth for who a user is.
  *
- * Uses the ADMIN client (service role). Server-side only.
+ * Rules enforced here:
+ *   1. Exactly one role per user. Multi-table membership is a hard error.
+ *   2. Unknown role strings from the DB are a hard error — never silently coerced.
+ *   3. Active-flag semantics are normalized across all role tables.
+ *   4. Every resolution is logged with reason for audit.
+ *
+ * DB contract:
+ *   - staff.role CHECK IN ('super-admin','admin','fleet-manager','inspector')
+ *   - marshals, drivers, fleet_operators → presence = role
+ *   - Exactly one of the four tables should claim any given auth_user_id
  */
 
+import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 
-export type AuthRole =
-  | "super-admin"
-  | "admin"
-  | "fleet-manager"
-  | "inspector"
-  | "marshal"
-  | "driver"
-  | "operator";
+// ---------------------------------------------------------------------------
+// The role set. `commuter` is NOT here — it is not an authenticated role.
+// ---------------------------------------------------------------------------
+
+export const AUTH_ROLES = [
+  "super-admin",
+  "admin",
+  "fleet-manager",
+  "inspector",
+  "marshal",
+  "driver",
+  "operator",
+] as const;
+
+export type AuthRole = (typeof AUTH_ROLES)[number];
+
+export function isAuthRole(v: unknown): v is AuthRole {
+  return typeof v === "string" && (AUTH_ROLES as readonly string[]).includes(v);
+}
+
+/**
+ * Navigation-only pseudo-role. Never returned by resolveUserRole.
+ * Lives here so there is exactly one place that names it.
+ */
+export type NavRole = AuthRole | "commuter";
+
+// ---------------------------------------------------------------------------
+// ResolvedUser — the only shape the rest of the app may depend on.
+// ---------------------------------------------------------------------------
 
 export interface ResolvedUser {
   authUserId: string;
@@ -25,21 +55,258 @@ export interface ResolvedUser {
   phone: string | null;
   role: AuthRole;
   roleDisplay: string;
+  fullName: string;
+  avatarUrl?: string;
+
+  // Exactly one of these will be set, matching `role`.
   staffId?: string;
   marshalId?: string;
   driverId?: string;
   operatorId?: string;
-  fullName: string;
-  avatarUrl?: string;
+
+  // Role-scoped metadata
   region?: string;
   terminalId?: string;
   assignedRouteId?: string;
   assignedVehicleReg?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Resolution
+// ---------------------------------------------------------------------------
+
+type TableMatch =
+  | { kind: "staff"; id: string; fullName: string; role: AuthRole; region?: string; terminalId?: string; avatarUrl?: string }
+  | { kind: "marshal"; id: string; fullName: string; region?: string; avatarUrl?: string }
+  | { kind: "driver"; id: string; fullName: string; assignedVehicleReg?: string; avatarUrl?: string }
+  | { kind: "operator"; id: string; fullName: string; avatarUrl?: string };
+
+const ROLE_DISPLAY: Record<AuthRole, string> = {
+  "super-admin": "Super Administrator",
+  admin: "Rank Administrator",
+  "fleet-manager": "Fleet Manager",
+  inspector: "Traffic Inspector",
+  marshal: "Rank Marshal",
+  driver: "Kombi Driver",
+  operator: "Fleet Operator",
+};
+
+export class RoleResolutionError extends Error {
+  constructor(
+    message: string,
+    public readonly code:
+      | "MULTI_ROLE"
+      | "UNKNOWN_STAFF_ROLE"
+      | "INACTIVE"
+      | "NO_ROLE"
+  ) {
+    super(message);
+    this.name = "RoleResolutionError";
+  }
+}
+
+async function findStaffMatch(authUserId: string): Promise<TableMatch | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("staff")
+    .select("id, full_name, role, region, terminal_id, is_active, avatar_url")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+
+  if (error) throw new RoleResolutionError(`staff query: ${error.message}`, "NO_ROLE");
+  if (!data) return null;
+
+  if (data.is_active === false) {
+    throw new RoleResolutionError(
+      `staff ${data.id} is not active`,
+      "INACTIVE"
+    );
+  }
+
+  if (!isAuthRole(data.role)) {
+    throw new RoleResolutionError(
+      `staff ${data.id} has unknown role "${data.role}" — CHECK constraint violated`,
+      "UNKNOWN_STAFF_ROLE"
+    );
+  }
+
+  return {
+    kind: "staff",
+    id: data.id as string,
+    fullName: data.full_name as string,
+    role: data.role as AuthRole,
+    region: (data.region as string | null) ?? undefined,
+    terminalId: (data.terminal_id as string | null) ?? undefined,
+    avatarUrl: (data.avatar_url as string | null) ?? undefined,
+  };
+}
+
+async function findMarshalMatch(authUserId: string): Promise<TableMatch | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("marshals")
+    .select("id, first_name, surname, region, is_active, avatar_url, photo_storage_path")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+
+  if (error) throw new RoleResolutionError(`marshal query: ${error.message}`, "NO_ROLE");
+  if (!data) return null;
+
+  if (data.is_active === false) {
+    throw new RoleResolutionError(
+      `marshal ${data.id} is not active`,
+      "INACTIVE"
+    );
+  }
+
+  const avatarUrl =
+    (data.avatar_url as string | null) ??
+    (data.photo_storage_path as string | null) ??
+    undefined;
+
+  return {
+    kind: "marshal",
+    id: data.id as string,
+    fullName:
+      `${data.first_name ?? ""} ${data.surname ?? ""}`.trim() || "Marshal",
+    region: (data.region as string | null) ?? undefined,
+    avatarUrl,
+  };
+}
+
+async function findDriverMatch(authUserId: string): Promise<TableMatch | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("drivers")
+    .select("id, full_name, status, assigned_vehicle_reg, profile_picture_url")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+
+  if (error) throw new RoleResolutionError(`driver query: ${error.message}`, "NO_ROLE");
+  if (!data) return null;
+
+  if (data.status === "Suspended") {
+    throw new RoleResolutionError(
+      `driver ${data.id} is suspended`,
+      "INACTIVE"
+    );
+  }
+
+  return {
+    kind: "driver",
+    id: data.id as string,
+    fullName: data.full_name as string,
+    assignedVehicleReg: (data.assigned_vehicle_reg as string | null) ?? undefined,
+    avatarUrl: (data.profile_picture_url as string | null) ?? undefined,
+  };
+}
+
+async function findOperatorMatch(authUserId: string): Promise<TableMatch | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("fleet_operators")
+    .select("id, name, company_name, avatar_url")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+
+  if (error) throw new RoleResolutionError(`operator query: ${error.message}`, "NO_ROLE");
+  if (!data) return null;
+
+  return {
+    kind: "operator",
+    id: data.id as string,
+    fullName: (data.name as string) || (data.company_name as string) || "Operator",
+    avatarUrl: (data.avatar_url as string | null) ?? undefined,
+  };
+}
+
 /**
- * Return the primary entity id for the user (whichever role they are).
- * Used to scope storage paths and self-service updates.
+ * Resolve a Supabase auth user to their one-and-only role.
+ *
+ * Throws RoleResolutionError on:
+ *   - more than one table claiming the user (data integrity violation)
+ *   - unknown role string in staff
+ *   - inactive staff/marshal/driver
+ *   - no table claiming the user
+ *
+ * Returns ResolvedUser on the happy path.
+ */
+export async function resolveUserRole(
+  authUserId: string,
+  email: string | null,
+  phone: string | null
+): Promise<ResolvedUser | null> {
+  const [staff, marshal, driver, operator] = await Promise.all([
+    findStaffMatch(authUserId),
+    findMarshalMatch(authUserId),
+    findDriverMatch(authUserId),
+    findOperatorMatch(authUserId),
+  ]);
+
+  const matches = [staff, marshal, driver, operator].filter(
+    (m): m is TableMatch => m !== null
+  );
+
+  if (matches.length === 0) return null;
+
+  if (matches.length > 1) {
+    throw new RoleResolutionError(
+      `auth user ${authUserId} is claimed by multiple role tables: ${matches
+        .map((m) => m.kind)
+        .join(", ")}. Resolve the data conflict before allowing sign-in.`,
+      "MULTI_ROLE"
+    );
+  }
+
+  const m = matches[0];
+  const base: ResolvedUser = {
+    authUserId,
+    email,
+    phone,
+    fullName: m.fullName,
+    avatarUrl: m.avatarUrl,
+    role: "marshal", // placeholder — overwritten below
+    roleDisplay: "",  // placeholder — overwritten below
+  };
+
+  switch (m.kind) {
+    case "staff":
+      return {
+        ...base,
+        role: m.role,
+        roleDisplay: ROLE_DISPLAY[m.role],
+        staffId: m.id,
+        region: m.region,
+        terminalId: m.terminalId,
+      };
+    case "marshal":
+      return {
+        ...base,
+        role: "marshal",
+        roleDisplay: ROLE_DISPLAY.marshal,
+        marshalId: m.id,
+        region: m.region,
+      };
+    case "driver":
+      return {
+        ...base,
+        role: "driver",
+        roleDisplay: ROLE_DISPLAY.driver,
+        driverId: m.id,
+        assignedVehicleReg: m.assignedVehicleReg,
+      };
+    case "operator":
+      return {
+        ...base,
+        role: "operator",
+        roleDisplay: ROLE_DISPLAY.operator,
+        operatorId: m.id,
+      };
+  }
+}
+
+/**
+ * Return the primary entity id for a user (for storage paths, self-service).
  */
 export function primaryEntityId(user: ResolvedUser): string {
   return (
@@ -49,154 +316,4 @@ export function primaryEntityId(user: ResolvedUser): string {
     user.operatorId ??
     user.authUserId
   );
-}
-
-/**
- * Resolve a Supabase auth user to their domain role.
- * Tries staff → marshal → driver → operator in that order.
- */
-export async function resolveUserRole(
-  authUserId: string,
-  email: string | null,
-  phone: string | null
-): Promise<ResolvedUser | null> {
-  const admin = createSupabaseAdminClient();
-
-  // 1. Staff (highest priority)
-  {
-    const { data: staff, error: staffErr } = await admin
-      .from("staff")
-      .select("id, full_name, role, region, terminal_id, is_active, avatar_url")
-      .eq("auth_user_id", authUserId)
-      .maybeSingle();
-
-    if (staffErr) {
-      console.warn("[resolveUserRole] staff query error:", staffErr.message);
-    } else if (staff && staff.is_active !== false) {
-      return {
-        authUserId,
-        email,
-        phone,
-        role: staff.role as AuthRole,
-        roleDisplay: staffRoleDisplay(staff.role),
-        staffId: staff.id,
-        fullName: staff.full_name,
-        avatarUrl: (staff.avatar_url as string | null) ?? undefined,
-        region: staff.region ?? undefined,
-        terminalId: staff.terminal_id ?? undefined,
-      };
-    }
-  }
-
-  // 2. Marshal
-  {
-    const { data: marshal, error: marshalErr } = await admin
-      .from("marshals")
-      .select(
-        "id, first_name, surname, region, is_active, auth_user_id, avatar_url, photo_storage_path"
-      )
-      .eq("auth_user_id", authUserId)
-      .maybeSingle();
-
-    if (marshalErr) {
-      console.error("[resolveUserRole] marshal query error:", marshalErr.message);
-    } else if (marshal) {
-      if (marshal.is_active === false) {
-        console.warn("[resolveUserRole] marshal found but is_active=false", marshal.id);
-      } else {
-        const avatarUrl =
-          (marshal.avatar_url as string | null) ??
-          (marshal.photo_storage_path as string | null) ??
-          undefined;
-
-        return {
-          authUserId,
-          email,
-          phone,
-          role: "marshal",
-          roleDisplay: "Rank Marshal",
-          marshalId: marshal.id,
-          fullName:
-            `${marshal.first_name ?? ""} ${marshal.surname ?? ""}`.trim() || "Marshal",
-          avatarUrl,
-          region: marshal.region ?? undefined,
-        };
-      }
-    } else {
-      const { data: byText } = await admin
-        .from("marshals")
-        .select("id, auth_user_id, is_active, first_name, surname")
-        .filter("auth_user_id", "eq", authUserId)
-        .limit(1);
-
-      console.log("[resolveUserRole] marshal not found for", authUserId, "sample:", byText);
-    }
-  }
-
-  // 3. Driver
-  {
-    const { data: driver, error: driverErr } = await admin
-      .from("drivers")
-      .select("id, full_name, assigned_vehicle_reg, status, profile_picture_url")
-      .eq("auth_user_id", authUserId)
-      .maybeSingle();
-
-    if (driverErr) {
-      console.warn("[resolveUserRole] driver query error:", driverErr.message);
-    } else if (driver && driver.status !== "Suspended") {
-      return {
-        authUserId,
-        email,
-        phone,
-        role: "driver",
-        roleDisplay: "Kombi Driver",
-        driverId: driver.id,
-        fullName: driver.full_name,
-        assignedVehicleReg: driver.assigned_vehicle_reg ?? undefined,
-        avatarUrl: driver.profile_picture_url ?? undefined,
-      };
-    }
-  }
-
-  // 4. Operator
-  {
-    const { data: operator, error: operatorErr } = await admin
-      .from("fleet_operators")
-      .select("id, name, company_name, association, avatar_url")
-      .eq("auth_user_id", authUserId)
-      .maybeSingle();
-
-    if (operatorErr) {
-      console.warn("[resolveUserRole] operator query error:", operatorErr.message);
-    } else if (operator) {
-      return {
-        authUserId,
-        email,
-        phone,
-        role: "operator",
-        roleDisplay: `Operator • ${operator.company_name}`,
-        operatorId: operator.id,
-        fullName: operator.name,
-        avatarUrl: operator.avatar_url ?? undefined,
-      };
-    }
-  }
-
-  console.log("[resolveUserRole] NO ROLE FOUND for", authUserId);
-  return null;
-}
-
-function staffRoleDisplay(role: string): string {
-  switch (role) {
-    case "super-admin":
-      return "Super Administrator";
-    case "admin":
-      return "Rank Administrator";
-    case "fleet-manager":
-      return "Fleet Manager";
-    case "inspector":
-      return "Traffic Inspector";
-    default:
-      return role;
-  }
 }

@@ -8,39 +8,46 @@ import {
   Moon,
 } from "lucide-react";
 import type { DriverContext } from "@/lib/driver/queries";
-import CabStatusButtons from "./CabStatusButtons";
+import type { DriverSignalKind } from "@/hooks/useDriverSignal";
+import DriverSignalPanel from "./DriverSignalPanel";
 
 interface Props {
   vehicle: DriverContext["vehicle"];
   marshal: DriverContext["marshal"];
   onMessageMarshal: () => void;
-  onStatusUpdate: (status: string) => Promise<{ success: boolean; error?: string }>;
+  onEmitSignal: (kind: DriverSignalKind, note?: string) => Promise<{
+    ok: boolean;
+    queued?: boolean;
+    error?: string;
+  }>;
+  online: boolean;
+  pendingSignalCount: number;
   isAfter830PM?: boolean;
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  Waiting: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300",
-  Loading: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
-  Full: "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300",
-  Departed: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-  Delayed: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
+  Waiting:   "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300",
+  Loading:   "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+  Departed:  "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+  Delayed:   "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
   Breakdown: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300",
+  Offline:   "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
 };
 
 export default function DriverVehicleCard({
   vehicle,
   marshal,
   onMessageMarshal,
-  onStatusUpdate,
+  onEmitSignal,
+  online,
+  pendingSignalCount,
   isAfter830PM,
 }: Props) {
   if (!vehicle) {
     return (
       <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-6 text-center">
         <Car className="w-8 h-8 mx-auto text-zinc-600 mb-2" />
-        <div className="text-sm font-bold text-zinc-300">
-          No vehicle assigned
-        </div>
+        <div className="text-sm font-bold text-zinc-300">No vehicle assigned</div>
         <div className="text-xs text-zinc-500 mt-1">
           Contact your fleet manager to be assigned a vehicle.
         </div>
@@ -52,7 +59,6 @@ export default function DriverVehicleCard({
 
   return (
     <div className="space-y-4">
-      {/* 8:30 PM indicator */}
       {isAfter830PM && (
         <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl p-3 flex items-center gap-2 text-xs">
           <Moon className="w-4 h-4 text-purple-400" />
@@ -62,7 +68,6 @@ export default function DriverVehicleCard({
         </div>
       )}
 
-      {/* Main card */}
       <div
         className={`bg-[#0F0F10] border rounded-2xl p-5 ${
           isLead
@@ -97,7 +102,9 @@ export default function DriverVehicleCard({
 
           <div className="text-right shrink-0">
             <span
-              className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${STATUS_STYLES[vehicle.status] ?? ""}`}
+              className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                STATUS_STYLES[vehicle.status] ?? ""
+              }`}
             >
               {vehicle.status}
             </span>
@@ -121,9 +128,7 @@ export default function DriverVehicleCard({
           {vehicle.loadingBay && (
             <div className="text-right">
               <span className="text-zinc-500">Bay: </span>
-              <strong className="font-mono text-white">
-                {vehicle.loadingBay}
-              </strong>
+              <strong className="font-mono text-white">{vehicle.loadingBay}</strong>
             </div>
           )}
         </div>
@@ -198,9 +203,11 @@ export default function DriverVehicleCard({
         )}
 
         <div className="mt-4 pt-4 border-t border-white/[0.06]">
-          <CabStatusButtons
-            currentStatus={vehicle.status}
-            onUpdate={onStatusUpdate}
+          <DriverSignalPanel
+            onEmit={onEmitSignal}
+            online={online}
+            pendingCount={pendingSignalCount}
+            currentVehicleStatus={vehicle.status}
           />
         </div>
       </div>

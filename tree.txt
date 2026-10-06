@@ -3,11 +3,17 @@
 ├── middleware.ts
 ├── next.config.ts
 ├── package.json
+├── package-lock.json
 ├── postcss.config.mjs
 ├── public
+│   ├── icons
+│   │   ├── icon-192.png
+│   │   ├── icon-512.png
+│   │   └── maskable-512.png
 │   ├── logo.jpg
 │   ├── manifest.webmanifest
 │   └── sw.js
+├── repomix-output.xml
 ├── schema.sql
 ├── src
 │   ├── app
@@ -69,6 +75,11 @@
 │   │   │   └── yoy
 │   │   │       └── page.tsx
 │   │   ├── api
+│   │   │   ├── account
+│   │   │   │   ├── avatar
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── password
+│   │   │   │       └── route.ts
 │   │   │   ├── admin
 │   │   │   │   ├── audits
 │   │   │   │   │   └── route.ts
@@ -213,6 +224,8 @@
 │   │   │   ├── public
 │   │   │   │   ├── adverts
 │   │   │   │   │   └── route.ts
+│   │   │   │   ├── assignments
+│   │   │   │   │   └── route.ts
 │   │   │   │   ├── incidents
 │   │   │   │   │   └── route.ts
 │   │   │   │   └── kiosk
@@ -309,6 +322,8 @@
 │   │   ├── marshal
 │   │   │   ├── layout.tsx
 │   │   │   └── page.tsx
+│   │   ├── offline
+│   │   │   └── page.tsx
 │   │   ├── operator
 │   │   │   ├── fleet
 │   │   │   │   └── page.tsx
@@ -342,6 +357,7 @@
 │   ├── components
 │   │   ├── account
 │   │   │   ├── AccountHeader.tsx
+│   │   │   ├── AvatarUploader.tsx
 │   │   │   ├── ChangePasswordForm.tsx
 │   │   │   └── SessionCard.tsx
 │   │   ├── admin
@@ -498,6 +514,7 @@
 │   │   │   ├── SystemConfigPanel.tsx
 │   │   │   └── TelemetryPanel.tsx
 │   │   ├── ui
+│   │   │   ├── ActionsMenu.tsx
 │   │   │   ├── Badge.tsx
 │   │   │   ├── Button.tsx
 │   │   │   ├── Checkbox.tsx
@@ -525,6 +542,7 @@
 │   ├── hooks
 │   │   ├── useAuth.ts
 │   │   ├── useAutoCycle.ts
+│   │   ├── useDeepLinkFilter.ts
 │   │   ├── useDriverCard.ts
 │   │   ├── useDriverMessages.ts
 │   │   ├── useDriverRoster.ts
@@ -550,6 +568,8 @@
 │   │   ├── useVehicleRegistry.ts
 │   │   └── useVoiceAnnouncements.ts
 │   ├── lib
+│   │   ├── account
+│   │   │   └── avatar.ts
 │   │   ├── admin
 │   │   │   ├── audits.ts
 │   │   │   ├── marshals.ts
@@ -566,6 +586,21 @@
 │   │   │   ├── region.ts
 │   │   │   ├── roles.ts
 │   │   │   └── session.ts
+│   │   ├── domain
+│   │   │   ├── audit.ts
+│   │   │   ├── compliance.ts
+│   │   │   ├── eligibility.ts
+│   │   │   ├── identity.ts
+│   │   │   ├── ids.ts
+│   │   │   ├── operatorRules.ts
+│   │   │   ├── permitLifecycle.ts
+│   │   │   ├── rankFee.ts
+│   │   │   ├── rateLimit.ts
+│   │   │   ├── serials.ts
+│   │   │   ├── __tests__
+│   │   │   │   └── rankMachine.test.ts
+│   │   │   ├── usernames.ts
+│   │   │   └── vehicleCard.ts
 │   │   ├── driver
 │   │   │   ├── notifications.ts
 │   │   │   ├── queries.ts
@@ -581,6 +616,7 @@
 │   │   │   └── validation.ts
 │   │   ├── intelligence
 │   │   │   ├── consequences.ts
+│   │   │   ├── deepLinks.ts
 │   │   │   ├── entityHealth.ts
 │   │   │   ├── index.ts
 │   │   │   ├── rules.ts
@@ -590,6 +626,7 @@
 │   │   │   ├── csv.ts
 │   │   │   └── queries.ts
 │   │   ├── marshal
+│   │   │   ├── autoReset.ts
 │   │   │   ├── dispatch.ts
 │   │   │   ├── messages.ts
 │   │   │   ├── queries.ts
@@ -681,10 +718,14 @@
 │       ├── 0010_fix_set_updated_at_bigint.sql
 │       ├── 0010_super_admin.sql
 │       ├── 0011_queue_shift.sql
-│       └── 20261005_event_sync_and_queue.sql
+│       ├── 20261005_event_sync_and_queue.sql
+│       ├── 20261006_intelligence_infra.sql
+│       ├── 20261006_operator_region.sql
+│       ├── 20261006_plate_key.sql
+│       └── 20261006_usernames.sql
 ├── tree.txt
 ├── tsconfig.json
 ├── vercel.json
 └── vitest.config.ts
 
-233 directories, 455 files
+242 directories, 487 files

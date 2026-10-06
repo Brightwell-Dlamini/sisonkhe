@@ -1,6 +1,8 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Marshal claim flow. One link path. One audit trail. No archaeology.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -12,6 +14,7 @@ import { looseAdmin, rpcRow } from "@/lib/supabase/rpc";
 import { resolveUserRole } from "@/lib/auth/roles";
 import { rateLimit } from "@/lib/domain/rateLimit";
 import { isUsernameTaken, claimUsername } from "@/lib/domain/usernames";
+import { writeAudit } from "@/lib/domain/audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,68 +27,28 @@ function clientIp(request: NextRequest): string {
   );
 }
 
-async function tryLinkMarshal(
+/**
+ * Link a marshal row to an auth user. Exactly one strategy:
+ * the current link_marshal_auth(text, text, uuid) signature.
+ *
+ * Returns true only when the row is linked to THIS auth user.
+ * Idempotent: a second call for the same (idNumber, phone, authUserId) returns true.
+ */
+async function linkMarshal(
   admin: ReturnType<typeof createSupabaseAdminClient>,
-  opts: {
-    marshalId: string;
-    idNumber: string;
-    phone: string;
-    authUserId: string;
-  }
-): Promise<{ ok: boolean; method?: string; error?: string }> {
-  const { marshalId, idNumber, phone, authUserId } = opts;
+  opts: { idNumber: string; phone: string; authUserId: string }
+): Promise<boolean> {
   const loose = looseAdmin(admin);
-
-  {
-    const { data, error } = await loose.rpc("link_marshal_auth", {
-      p_id_number: idNumber,
-      p_phone: phone,
-      p_auth_user_id: authUserId,
-    });
-    if (!error && data === true) return { ok: true, method: "rpc:id+phone" };
+  const { data, error } = await loose.rpc("link_marshal_auth", {
+    p_id_number: opts.idNumber,
+    p_phone: opts.phone,
+    p_auth_user_id: opts.authUserId,
+  });
+  if (error) {
+    console.error("[claim] link_marshal_auth RPC error:", error);
+    return false;
   }
-
-  {
-    const { data, error } = await loose.rpc("link_marshal_auth", {
-      p_marshal_id: marshalId,
-      p_auth_user_id: authUserId,
-    });
-    if (!error && data === true) return { ok: true, method: "rpc:marshal_id" };
-  }
-
-  {
-    const { data: rows, error } = await loose
-      .from("marshals")
-      .update({ auth_user_id: authUserId })
-      .eq("id", marshalId)
-      .is("auth_user_id", null)
-      .select("id");
-
-    if (!error && rows && rows.length > 0) {
-      return { ok: true, method: "update:id" };
-    }
-    if (error) {
-      const { data: rows2, error: err2 } = await loose
-        .from("marshals")
-        .update({ auth_user_id: authUserId })
-        .eq("id_number", idNumber)
-        .is("auth_user_id", null)
-        .select("id");
-
-      if (!err2 && rows2 && rows2.length > 0) {
-        return { ok: true, method: "update:id_number" };
-      }
-      return {
-        ok: false,
-        error: error.message || err2?.message || "UPDATE failed",
-      };
-    }
-    return {
-      ok: false,
-      error:
-        "No unclaimed marshal row matched. It may already be linked or the ID does not match.",
-    };
-  }
+  return data === true;
 }
 
 export async function PUT(request: NextRequest) {
@@ -116,6 +79,7 @@ export async function PUT(request: NextRequest) {
     );
 
     if (error) {
+      console.error("[claim] verify_marshal_identity error:", error);
       return NextResponse.json(
         { error: "Verification service unavailable." },
         { status: 500 }
@@ -231,7 +195,6 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
-
     if (match.already_claimed) {
       return NextResponse.json(
         { error: "This account has already been claimed." },
@@ -260,6 +223,9 @@ export async function POST(request: NextRequest) {
           marshal_id: match.marshal_id,
           must_change_password: false,
         },
+        app_metadata: {
+          role: "marshal", // read by edge middleware
+        },
       });
 
     if (createErr || !created.user) {
@@ -284,20 +250,29 @@ export async function POST(request: NextRequest) {
 
     createdAuthUserId = created.user.id;
 
-    const linkResult = await tryLinkMarshal(admin, {
-      marshalId: match.marshal_id,
+    const linked = await linkMarshal(admin, {
       idNumber,
       phone,
       authUserId: createdAuthUserId,
     });
 
-    if (!linkResult.ok) {
+    if (!linked) {
       try {
         await admin.auth.admin.deleteUser(createdAuthUserId);
       } catch {
-        /* */
+        /* best effort */
       }
       createdAuthUserId = null;
+
+      await writeAudit(admin, {
+        action: "claim.link_failed",
+        actorId: created.user.id,
+        actorRole: "marshal",
+        entityType: "marshals",
+        entityId: match.marshal_id,
+        summary: `Claim link failed for marshal ${match.marshal_id}`,
+      });
+
       return NextResponse.json(
         {
           error:
@@ -308,6 +283,15 @@ export async function POST(request: NextRequest) {
     }
 
     await claimUsername(admin, username, created.user.id, "marshal");
+
+    await writeAudit(admin, {
+      action: "claim.success",
+      actorId: created.user.id,
+      actorRole: "marshal",
+      entityType: "marshals",
+      entityId: match.marshal_id,
+      summary: `Marshal ${match.marshal_id} claimed account`,
+    });
 
     const supabase = await createSupabaseServerClient();
     const { data: signIn, error: signInErr } =
@@ -343,7 +327,7 @@ export async function POST(request: NextRequest) {
         const admin = createSupabaseAdminClient();
         await admin.auth.admin.deleteUser(createdAuthUserId);
       } catch {
-        /* */
+        /* best effort */
       }
     }
     return NextResponse.json(

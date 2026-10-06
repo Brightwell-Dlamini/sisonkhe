@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Car, Calendar, CreditCard, RefreshCw } from "lucide-react";
 import { useDriverSummary } from "@/hooks/useDriverSummary";
 import { useDriverRoster } from "@/hooks/useDriverRoster";
+import { useDriverSignal } from "@/hooks/useDriverSignal";
 import DriverHeader from "./DriverHeader";
 import DriverVehicleCard from "./DriverVehicleCard";
 import DriverSummaryCards from "./DriverSummaryCards";
@@ -35,25 +36,14 @@ export default function DriverDashboard() {
 
   const after830 = useMemo(() => isAfter830PMLocal(), []);
 
-  const handleStatusUpdate = async (status: string) => {
-    try {
-      const res = await fetch("/api/driver/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      const data = await res.json();
-      if (!res.ok) return { success: false, error: data.error };
-      await refresh();
-      toast.success("Status updated", "Marshal notified");
-      return { success: true };
-    } catch (err) {
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : "Network error",
-      };
-    }
-  };
+  const vehicleReg = context?.vehicle?.registrationNumber ?? null;
+  const routeId = context?.vehicle?.routeId ?? null;
+  const {
+    emit: emitSignal,
+    pending: pendingSignals,
+    flush: flushSignals,
+    online,
+  } = useDriverSignal(vehicleReg, routeId);
 
   if (loading && !context) return <TableSkeleton rows={6} />;
 
@@ -67,6 +57,11 @@ export default function DriverDashboard() {
 
   if (!context) return null;
 
+  const handleRefresh = async () => {
+    await flushSignals();
+    await refresh();
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
@@ -76,7 +71,7 @@ export default function DriverDashboard() {
         <IconButton
           icon={RefreshCw}
           label="Refresh"
-          onClick={refresh}
+          onClick={handleRefresh}
           disabled={loading}
           className={loading ? "[&_svg]:animate-spin" : ""}
         />
@@ -109,8 +104,14 @@ export default function DriverDashboard() {
           <DriverVehicleCard
             vehicle={context.vehicle}
             marshal={context.marshal}
-            onStatusUpdate={handleStatusUpdate}
             onMessageMarshal={() => setShowMessage(true)}
+            onEmitSignal={async (kind, note) => {
+              const res = await emitSignal(kind, note);
+              if (res.ok && !res.queued) await refresh();
+              return res;
+            }}
+            online={online}
+            pendingSignalCount={pendingSignals.length}
             isAfter830PM={after830}
           />
           <DriverTripsList trips={trips} />
@@ -119,8 +120,10 @@ export default function DriverDashboard() {
       {tab === "roster" && <DriverRosterView roster={roster} />}
       {tab === "card" && <DriverCardView context={context} />}
 
-      {showMessage && (
+      {showMessage && context.marshal && (
         <MessageMarshalModal
+          marshal={context.marshal}
+          driverName={context.fullName}
           onClose={() => setShowMessage(false)}
           onSent={() => {
             setShowMessage(false);

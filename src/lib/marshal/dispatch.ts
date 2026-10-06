@@ -1,37 +1,34 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Marshal dispatch. The ONLY writer of `vehicles.status` for the rank.
+ * Uses the canonical VehicleStatus vocabulary from lib/domain/vehicleStatus.
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 import type { MarshalContext } from "./queries";
 import {
-  canDispatchLoad,
-  canDispatchDepart,
-  canRankTransition,
-  type RankAction,
-} from "@/lib/domain/eligibility";
+  canMarshalTransition,
+  type MarshalAction,
+  type VehicleStatus,
+} from "@/lib/domain/vehicleStatus";
+import { canDispatchLoad, canDispatchDepart } from "@/lib/domain/eligibility";
 import { normalizePlate } from "@/lib/domain/identity";
 import { getRankFeeConfig } from "@/lib/domain/rankFee";
 import { nextMarshalTxId } from "@/lib/domain/serials";
 import { writeAudit } from "@/lib/domain/audit";
 
-const IDEMPOTENCY_MS = 60_000; // 1 minute same vehicle+marshal
+const IDEMPOTENCY_MS = 60_000;
 
-export type DispatchAction =
-  | "load"
-  | "full_cabin"
-  | "depart"
-  | "delay"
-  | "breakdown"
-  | "reset_to_waiting";
+export type DispatchAction = MarshalAction;
 
 export interface DispatchResult {
   success: boolean;
   error?: string;
   rankFeeWritten?: boolean;
-  newStatus?: string;
+  newStatus?: VehicleStatus;
   warning?: string;
   revenueEstimated?: boolean;
 }
@@ -39,7 +36,7 @@ export interface DispatchResult {
 type AuthVehicle = {
   reg: string;
   routeId: string | null;
-  status: string;
+  status: VehicleStatus;
   currentQueuePosition: number;
   seatingCapacity: number;
   driverId: string | null;
@@ -137,7 +134,7 @@ async function authorizeVehicle(
   return {
     reg: vehicle.registration_number as string,
     routeId,
-    status: vehicle.status as string,
+    status: (vehicle.status as VehicleStatus) ?? "Waiting",
     currentQueuePosition: (vehicle.current_queue_position as number) ?? 0,
     seatingCapacity: (vehicle.seating_capacity as number) ?? 15,
     driverId,
@@ -146,8 +143,7 @@ async function authorizeVehicle(
     permitExpiryDate: (vehicle.permit_expiry_date as string | null) ?? null,
     cofExpiryDate: (vehicle.cof_expiry_date as string | null) ?? null,
     insuranceExpiry: (vehicle.insurance_expiry as string | null) ?? null,
-    roadworthinessExpiry:
-      (vehicle.roadworthiness_expiry as string | null) ?? null,
+    roadworthinessExpiry: (vehicle.roadworthiness_expiry as string | null) ?? null,
     driverStatus,
     driverPdpStatus,
     driverPdpExpiry,
@@ -155,19 +151,19 @@ async function authorizeVehicle(
   };
 }
 
-function gatePayload(vehicle: AuthVehicle) {
+function gatePayload(v: AuthVehicle) {
   return {
-    hasDriver: !!vehicle.driverId,
-    driverStatus: vehicle.driverStatus,
-    driverPdpStatus: vehicle.driverPdpStatus,
-    driverPdpExpiry: vehicle.driverPdpExpiry,
-    permitStatus: vehicle.permitStatus,
-    permitExpiryDate: vehicle.permitExpiryDate,
-    cofExpiryDate: vehicle.cofExpiryDate,
-    insuranceExpiry: vehicle.insuranceExpiry,
-    roadworthinessExpiry: vehicle.roadworthinessExpiry,
-    vehicleStatus: vehicle.status,
-    printPending: vehicle.printPending,
+    hasDriver: !!v.driverId,
+    driverStatus: v.driverStatus,
+    driverPdpStatus: v.driverPdpStatus,
+    driverPdpExpiry: v.driverPdpExpiry,
+    permitStatus: v.permitStatus,
+    permitExpiryDate: v.permitExpiryDate,
+    cofExpiryDate: v.cofExpiryDate,
+    insuranceExpiry: v.insuranceExpiry,
+    roadworthinessExpiry: v.roadworthinessExpiry,
+    vehicleStatus: v.status,
+    printPending: v.printPending,
   };
 }
 
@@ -198,7 +194,6 @@ async function writeRankFee(
   const month = nowIso.slice(0, 7);
   const sinceIso = new Date(Date.now() - IDEMPOTENCY_MS).toISOString();
 
-  // Any successful fee for this vehicle in window (any marshal) blocks double-charge
   const { data: recent } = await admin
     .from("marshal_transactions")
     .select("id")
@@ -298,6 +293,16 @@ async function logSyncEvent(
   });
 }
 
+/** Mark any pending driver signals for this vehicle as consumed. */
+async function consumeDriverSignals(reg: string): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  await admin
+    .from("driver_signals")
+    .update({ status: "consumed", consumed_at: new Date().toISOString() })
+    .eq("vehicle_reg", reg)
+    .eq("status", "pending");
+}
+
 export async function applyDispatchAction(
   context: MarshalContext,
   registrationNumber: string,
@@ -307,14 +312,11 @@ export async function applyDispatchAction(
 ): Promise<DispatchResult> {
   const vehicle = await authorizeVehicle(context, registrationNumber);
   if (!vehicle) {
-    return {
-      success: false,
-      error: "Vehicle not found or not under your authority.",
-    };
+    return { success: false, error: "Vehicle not found or not under your authority." };
   }
 
-  const transition = canRankTransition(vehicle.status, action as RankAction);
-  if (!transition.eligible) {
+  const transition = canMarshalTransition(vehicle.status, action);
+  if (!transition.ok) {
     return { success: false, error: transition.reason };
   }
 
@@ -335,15 +337,13 @@ export async function applyDispatchAction(
       const payload = { status: "Loading", current_queue_position: newPosition };
       const { error } = await admin
         .from("vehicles")
-        .update({
-          ...payload,
-          version: vehicle.version + 1,
-          updated_at: nowIso,
-        })
+        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
         .eq("registration_number", reg)
         .eq("version", vehicle.version);
       if (error) return { success: false, error: error.message };
+
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
+      await consumeDriverSignals(reg);
       await writeAudit(admin, {
         action: "dispatch.load",
         actorId: context.marshalId,
@@ -364,11 +364,7 @@ export async function applyDispatchAction(
       const payload = { status: "Departed", current_queue_position: 0 };
       const { data: updated, error } = await admin
         .from("vehicles")
-        .update({
-          ...payload,
-          version: vehicle.version + 1,
-          updated_at: nowIso,
-        })
+        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
         .eq("registration_number", reg)
         .eq("version", vehicle.version)
         .select("registration_number")
@@ -382,7 +378,6 @@ export async function applyDispatchAction(
         };
       }
 
-      // Fee ONLY after status transition succeeds
       const trigger =
         action === "full_cabin" ? "Full Cabin Button" : "Depart Button";
       const fee = await writeRankFee(context, reg, trigger);
@@ -398,14 +393,14 @@ export async function applyDispatchAction(
         }
       }
 
-      const estimated =
-        passengerCount == null || !(passengerCount > 0);
+      const estimated = passengerCount == null || !(passengerCount > 0);
       await recordTrip(
         { ...vehicle, reg },
         nowIso,
         { passengerCount: passengerCount ?? null, estimated }
       );
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
+      await consumeDriverSignals(reg);
       await writeAudit(admin, {
         action: "dispatch.depart",
         actorId: context.marshalId,
@@ -413,10 +408,7 @@ export async function applyDispatchAction(
         entityType: "vehicle",
         entityId: reg,
         summary: `Depart ${reg}`,
-        meta: {
-          estimatedPassengers: estimated,
-          rankFeeWritten: fee.written,
-        },
+        meta: { estimatedPassengers: estimated, rankFeeWritten: fee.written },
       });
       return {
         success: true,
@@ -428,17 +420,14 @@ export async function applyDispatchAction(
     }
 
     case "delay": {
-      const payload = { status: "Delayed" };
+      const payload = { status: "Delayed" as const };
       const { error } = await admin
         .from("vehicles")
-        .update({
-          ...payload,
-          version: vehicle.version + 1,
-          updated_at: nowIso,
-        })
+        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
         .eq("registration_number", reg);
       if (error) return { success: false, error: error.message };
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
+      await consumeDriverSignals(reg);
       await writeAudit(admin, {
         action: "dispatch.delay",
         actorId: context.marshalId,
@@ -451,17 +440,14 @@ export async function applyDispatchAction(
     }
 
     case "breakdown": {
-      const payload = { status: "Breakdown", current_queue_position: 0 };
+      const payload = { status: "Breakdown" as const, current_queue_position: 0 };
       const { error } = await admin
         .from("vehicles")
-        .update({
-          ...payload,
-          version: vehicle.version + 1,
-          updated_at: nowIso,
-        })
+        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
         .eq("registration_number", reg);
       if (error) return { success: false, error: error.message };
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
+      await consumeDriverSignals(reg);
       await writeAudit(admin, {
         action: "dispatch.breakdown",
         actorId: context.marshalId,
@@ -474,17 +460,14 @@ export async function applyDispatchAction(
     }
 
     case "reset_to_waiting": {
-      const payload = { status: "Waiting", current_queue_position: 0 };
+      const payload = { status: "Waiting" as const, current_queue_position: 0 };
       const { error } = await admin
         .from("vehicles")
-        .update({
-          ...payload,
-          version: vehicle.version + 1,
-          updated_at: nowIso,
-        })
+        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
         .eq("registration_number", reg);
       if (error) return { success: false, error: error.message };
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
+      await consumeDriverSignals(reg);
       await writeAudit(admin, {
         action: "dispatch.reset",
         actorId: context.marshalId,

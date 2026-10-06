@@ -2,16 +2,20 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Supabase session refresh logic for Next.js middleware.
+ * Supabase session refresh for Next.js middleware.
  *
- * Called on every request from `middleware.ts`. Refreshes the Supabase
- * session cookie if the token is near expiry, and returns the user.
+ * Returns the raw user object; the caller reads role from app_metadata.role.
+ * Never queries the DB — edge must stay cheap.
  */
 
 import { createServerClient } from "@supabase/ssr";
+import type { User } from "@supabase/supabase-js";
 import { type NextRequest, NextResponse } from "next/server";
 
-export async function updateSupabaseSession(request: NextRequest) {
+export async function updateSupabaseSession(request: NextRequest): Promise<{
+  response: NextResponse;
+  user: User | null;
+}> {
   let response = NextResponse.next({ request });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

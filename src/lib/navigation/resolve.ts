@@ -3,9 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Map a resolved user to their navigation tree + home route.
+ *
+ * Roles arrive already validated by resolveUserRole(). This file does not
+ * coerce — it maps. An unknown role reaching this file is a bug in the caller.
  */
 
-import type { ResolvedUser } from "@/lib/auth/roles";
+import type { AuthRole, NavRole } from "@/lib/auth/roles";
 import {
   ADMIN_NAV,
   PLATFORM_NAV,
@@ -15,14 +18,16 @@ import {
   INSPECTOR_NAV,
   PUBLIC_NAV,
   type NavGroup,
-  type Role,
   type NavItem,
 } from "@/config/navigation";
 
 /**
  * The home route for a role. What they land on after login.
+ * `null` input = unauthenticated visitor → public kiosk.
  */
-export function homeRouteForRole(role: Role): string {
+export function homeRouteForRole(role: NavRole | null): string {
+  if (role === null) return "/kiosk";
+
   switch (role) {
     case "super-admin":
     case "admin":
@@ -37,19 +42,16 @@ export function homeRouteForRole(role: Role): string {
     case "inspector":
       return "/inspector/scan";
     case "commuter":
-    default:
       return "/kiosk";
   }
 }
 
 /**
- * Nav tree for a role, with role-gated items filtered out.
- *
- * Super-admin gets the same job-first admin tree as everyone else,
- * plus a single Platform group at the bottom — not a second full catalogue.
+ * Nav tree for a role. Role-gated items are filtered out.
+ * Super-admin gets ADMIN_NAV + PLATFORM_NAV.
  */
-export function navForRole(role: Role): NavGroup[] {
-  let groups: NavGroup[] = [];
+export function navForRole(role: NavRole): NavGroup[] {
+  let groups: NavGroup[];
 
   switch (role) {
     case "super-admin":
@@ -72,8 +74,8 @@ export function navForRole(role: Role): NavGroup[] {
       groups = INSPECTOR_NAV;
       break;
     case "commuter":
-    default:
       groups = PUBLIC_NAV;
+      break;
   }
 
   return groups
@@ -143,10 +145,7 @@ export interface Crumb {
   href?: string;
 }
 
-export function breadcrumbsFor(
-  pathname: string,
-  groups: NavGroup[]
-): Crumb[] {
+export function breadcrumbsFor(pathname: string, groups: NavGroup[]): Crumb[] {
   const crumbs: Crumb[] = [{ label: "Home", href: "/" }];
 
   for (const group of groups) {
@@ -162,13 +161,30 @@ export function breadcrumbsFor(
   return crumbs;
 }
 
-export function toRole(roleString: string): Role {
-  if (roleString === "super-admin") return "super-admin";
-  if (roleString === "admin") return "admin";
-  if (roleString === "fleet-manager") return "fleet-manager";
-  if (roleString === "marshal") return "marshal";
-  if (roleString === "operator") return "operator";
-  if (roleString === "driver") return "driver";
-  if (roleString === "inspector") return "inspector";
-  return "commuter";
+/**
+ * Runtime guard: narrow an untyped role string (e.g. from a JWT or URL)
+ * to NavRole. Returns null when the input is not a known role.
+ *
+ * Use this ONLY at trust boundaries (URL params, third-party data).
+ * In-app code should already have a typed value.
+ */
+export function toNavRole(roleString: string): NavRole | null {
+  switch (roleString) {
+    case "super-admin":
+    case "admin":
+    case "fleet-manager":
+    case "marshal":
+    case "operator":
+    case "driver":
+    case "inspector":
+    case "commuter":
+      return roleString;
+    default:
+      return null;
+  }
+}
+
+/** @deprecated — kept for one release to avoid a hard break. */
+export function toRole(roleString: string): NavRole {
+  return toNavRole(roleString) ?? "commuter";
 }
