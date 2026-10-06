@@ -1,18 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Plus,
   Search,
   Car,
   QrCode,
   Printer,
-  Eye,
   Edit2,
   Trash2,
   RefreshCw,
 } from "lucide-react";
 import { useVehicleRegistry, type CreateVehicleRequest } from "@/hooks/useVehicleRegistry";
+import { useDeepLinkFilter } from "@/hooks/useDeepLinkFilter";
 import type { VehicleRow } from "@/lib/vehicles/queries";
 import {
   Button,
@@ -32,7 +32,6 @@ import {
   ConfirmDialog,
   useToast,
 } from "@/components/ui";
-import { cn } from "@/lib/utils";
 import VehicleFormModal from "./VehicleFormModal";
 import OfficialPlaqueQRModal from "@/components/fleet/OfficialPlaqueQRModal";
 import A4PermitPrintModal from "@/components/fleet/A4PermitPrintModal";
@@ -67,18 +66,43 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
   } = useVehicleRegistry();
 
   const toast = useToast();
+  const deep = useDeepLinkFilter();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [permitFilter, setPermitFilter] = useState<string>("all");
   const [classFilter, setClassFilter] = useState<string>("all");
+  const [intelFilter, setIntelFilter] = useState<string>("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<VehicleRow | null>(null);
   const [qrVehicle, setQrVehicle] = useState<Vehicle | null>(null);
   const [printVehicle, setPrintVehicle] = useState<Vehicle | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<VehicleRow | null>(null);
 
+  useEffect(() => {
+    if (deep.q) setSearchQuery(deep.q);
+    if (
+      deep.filter === "unassigned" ||
+      deep.filter === "cof_expired" ||
+      deep.filter === "cof_expiring"
+    ) {
+      setIntelFilter(deep.filter);
+    }
+    if (deep.filter === "expired") setPermitFilter("Expired");
+  }, [deep]);
+
   const filtered = useMemo(() => {
+    const now = Date.now();
     return vehicles.filter((v) => {
+      if (intelFilter === "unassigned" && v.driverId) return false;
+      if (intelFilter === "cof_expired") {
+        const t = v.cofExpiryDate ? new Date(v.cofExpiryDate).getTime() : NaN;
+        if (!(Number.isFinite(t) && t <= now)) return false;
+      }
+      if (intelFilter === "cof_expiring") {
+        const t = v.cofExpiryDate ? new Date(v.cofExpiryDate).getTime() : NaN;
+        const days = Number.isFinite(t) ? (t - now) / 86400000 : null;
+        if (days === null || days < 0 || days > 30) return false;
+      }
       if (permitFilter !== "all" && (v.permitStatus ?? "") !== permitFilter)
         return false;
       if (classFilter !== "all" && v.classification !== classFilter) return false;
@@ -95,7 +119,7 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
       }
       return true;
     });
-  }, [vehicles, permitFilter, classFilter, searchQuery]);
+  }, [vehicles, permitFilter, classFilter, searchQuery, intelFilter]);
 
   const toFullVehicle = (row: VehicleRow): Vehicle =>
     ({
@@ -179,16 +203,18 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
         title="Vehicle Registry"
         description="Register commercial vehicles, manage permits, fitness, and driver assignments."
         actions={
-          <Button
-            onClick={() => setShowCreateModal(true)}
-            leadingIcon={Plus}
-          >
+          <Button onClick={() => setShowCreateModal(true)} leadingIcon={Plus}>
             Register Vehicle
           </Button>
         }
       />
 
-      {/* Toolbar */}
+      {intelFilter !== "all" && (
+        <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+          Deep link: {intelFilter}
+        </div>
+      )}
+
       <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-3 mb-4">
         <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
           <div className="flex-1 min-w-0">
@@ -246,9 +272,7 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
         <EmptyState
           icon={Car}
           title={
-            vehicles.length === 0
-              ? "No vehicles registered"
-              : "No matching vehicles"
+            vehicles.length === 0 ? "No vehicles registered" : "No matching vehicles"
           }
           description={
             vehicles.length === 0
@@ -293,7 +317,6 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
                       </div>
                     </div>
                   </Td>
-
                   <Td>
                     {v.vic ? (
                       <span className="font-mono text-xs font-bold text-emerald-400 tracking-wider">
@@ -303,19 +326,15 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
                       <span className="text-zinc-600">—</span>
                     )}
                   </Td>
-
                   <Td>
                     {v.driverName ? (
                       <span className="text-zinc-300 text-xs truncate block max-w-[140px]">
                         {v.driverName}
                       </span>
                     ) : (
-                      <span className="text-zinc-600 italic text-xs">
-                        Unassigned
-                      </span>
+                      <span className="text-zinc-600 italic text-xs">Unassigned</span>
                     )}
                   </Td>
-
                   <Td>
                     <div className="space-y-1">
                       <div className="font-mono text-[11px] text-zinc-400">
@@ -331,19 +350,16 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
                       )}
                     </div>
                   </Td>
-
                   <Td>
                     <span className="font-mono text-[11px] text-zinc-300">
                       {v.loadingBay ?? "—"}
                     </span>
                   </Td>
-
                   <Td>
                     <span className="text-[11px] text-zinc-500">
                       {CLASSIFICATION_LABEL[v.classification] ?? v.classification}
                     </span>
                   </Td>
-
                   <Td align="right">
                     <div className="flex items-center justify-end gap-0.5">
                       <IconButton
@@ -377,7 +393,6 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
         </div>
       )}
 
-      {/* Modals */}
       <VehicleFormModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
@@ -396,9 +411,7 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
           return { success: ok };
         }}
         editingVehicle={
-          editingVehicle
-            ? (toFullVehicle(editingVehicle) as Vehicle)
-            : null
+          editingVehicle ? (toFullVehicle(editingVehicle) as Vehicle) : null
         }
         routes={routes}
         drivers={drivers}
