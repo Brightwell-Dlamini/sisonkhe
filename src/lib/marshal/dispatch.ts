@@ -3,24 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Marshal dispatch transitions.
- *
- * Rank fee: one fee per real departure (Load → Full Cabin/Depart).
- * After Return to Queue → Load → depart again, another fee is charged.
- * Only a 3s window blocks double-click of Full Cabin + Depart on the same click.
- *
- * Trip row is written only when the rank fee transaction is successfully written,
- * so trips and fees stay in sync.
- *
- * Every successful vehicle mutation also appends a sync_events row for the
- * event-log protocol (auditing + multi-client pull).
+ * Domain gates: no load/depart without valid driver, permit, COF, PDP.
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 import type { MarshalContext } from "./queries";
+import { canDispatchLoad, canDispatchDepart } from "@/lib/domain/eligibility";
 
 const RANK_FEE_SZL = 25;
-/** Double-click guard only (Full Cabin then Depart on same departure). */
 const DOUBLE_CLICK_MS = 3_000;
 
 const DEPARTABLE_STATUSES = new Set(["Loading", "Waiting", "Delayed"]);
@@ -38,12 +29,10 @@ export interface DispatchResult {
   error?: string;
   rankFeeWritten?: boolean;
   newStatus?: string;
+  warning?: string;
 }
 
-async function authorizeVehicle(
-  context: MarshalContext,
-  registrationNumber: string
-): Promise<{
+type AuthVehicle = {
   reg: string;
   routeId: string | null;
   status: string;
@@ -51,13 +40,24 @@ async function authorizeVehicle(
   seatingCapacity: number;
   driverId: string | null;
   version: number;
-} | null> {
+  permitStatus: string | null;
+  permitExpiryDate: string | null;
+  cofExpiryDate: string | null;
+  driverStatus: string | null;
+  driverPdpStatus: string | null;
+  driverPdpExpiry: string | null;
+};
+
+async function authorizeVehicle(
+  context: MarshalContext,
+  registrationNumber: string
+): Promise<AuthVehicle | null> {
   const admin = createSupabaseAdminClient();
 
   let { data: vehicle, error } = await admin
     .from("vehicles")
     .select(
-      "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id, version"
+      "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id, version, permit_status, permit_expiry_date, cof_expiry_date"
     )
     .eq("registration_number", registrationNumber)
     .maybeSingle();
@@ -66,7 +66,7 @@ async function authorizeVehicle(
     const { data: alt } = await admin
       .from("vehicles")
       .select(
-        "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id, version"
+        "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id, version, permit_status, permit_expiry_date, cof_expiry_date"
       )
       .ilike("registration_number", registrationNumber)
       .limit(1)
@@ -90,14 +90,50 @@ async function authorizeVehicle(
     }
   }
 
+  let driverStatus: string | null = null;
+  let driverPdpStatus: string | null = null;
+  let driverPdpExpiry: string | null = null;
+  const driverId = (vehicle.driver_id as string | null) ?? null;
+  if (driverId) {
+    const { data: driver } = await admin
+      .from("drivers")
+      .select("status, pdp_status, pdp_expiry_date")
+      .eq("id", driverId)
+      .maybeSingle();
+    if (driver) {
+      driverStatus = (driver.status as string | null) ?? null;
+      driverPdpStatus = (driver.pdp_status as string | null) ?? null;
+      driverPdpExpiry = (driver.pdp_expiry_date as string | null) ?? null;
+    }
+  }
+
   return {
     reg: vehicle.registration_number as string,
     routeId,
     status: vehicle.status as string,
     currentQueuePosition: (vehicle.current_queue_position as number) ?? 0,
     seatingCapacity: (vehicle.seating_capacity as number) ?? 15,
-    driverId: (vehicle.driver_id as string | null) ?? null,
+    driverId,
     version: (vehicle.version as number) ?? 1,
+    permitStatus: (vehicle.permit_status as string | null) ?? null,
+    permitExpiryDate: (vehicle.permit_expiry_date as string | null) ?? null,
+    cofExpiryDate: (vehicle.cof_expiry_date as string | null) ?? null,
+    driverStatus,
+    driverPdpStatus,
+    driverPdpExpiry,
+  };
+}
+
+function gatePayload(vehicle: AuthVehicle) {
+  return {
+    hasDriver: !!vehicle.driverId,
+    driverStatus: vehicle.driverStatus,
+    driverPdpStatus: vehicle.driverPdpStatus,
+    driverPdpExpiry: vehicle.driverPdpExpiry,
+    permitStatus: vehicle.permitStatus,
+    permitExpiryDate: vehicle.permitExpiryDate,
+    cofExpiryDate: vehicle.cofExpiryDate,
+    vehicleStatus: vehicle.status,
   };
 }
 
@@ -233,7 +269,6 @@ async function recordTrip(
   }
 }
 
-/** Append an event-log row so other clients can pull the change. */
 async function logSyncEvent(
   entityId: string,
   operation: "UPDATE",
@@ -258,7 +293,6 @@ async function logSyncEvent(
   });
 
   if (error) {
-    // Non-fatal: mutation already applied
     console.warn("[marshal/dispatch] sync_events insert failed:", error.message);
   }
 }
@@ -284,6 +318,11 @@ export async function applyDispatchAction(
 
   switch (action) {
     case "load": {
+      const gate = canDispatchLoad(gatePayload(vehicle));
+      if (!gate.eligible) {
+        return { success: false, error: gate.reason };
+      }
+
       let newPosition = vehicle.currentQueuePosition;
       if (newPosition < 1) {
         const maxQueued = await countQueuedOnRoute(vehicle.routeId ?? "", reg);
@@ -307,7 +346,11 @@ export async function applyDispatchAction(
       if (error) return { success: false, error: error.message };
 
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
-      return { success: true, newStatus: "Loading" };
+      return {
+        success: true,
+        newStatus: "Loading",
+        warning: gate.warning,
+      };
     }
 
     case "full_cabin":
@@ -320,6 +363,11 @@ export async function applyDispatchAction(
               ? "Already departed. Use Return to Queue, then Load, before departing again."
               : `Cannot depart from status "${vehicle.status}". Load the vehicle first.`,
         };
+      }
+
+      const gate = canDispatchDepart(gatePayload(vehicle));
+      if (!gate.eligible) {
+        return { success: false, error: gate.reason };
       }
 
       const trigger =
@@ -376,6 +424,7 @@ export async function applyDispatchAction(
         success: true,
         newStatus: "Departed",
         rankFeeWritten: true,
+        warning: gate.warning,
       };
     }
 
