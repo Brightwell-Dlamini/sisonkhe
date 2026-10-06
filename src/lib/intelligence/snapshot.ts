@@ -1,16 +1,13 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Builds the intelligence snapshot from live Supabase data.
- * Rank admin: filtered to their region. Super-admin: national.
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 import type { ResolvedUser } from "../auth/roles";
 import { isNationalScope } from "../auth/permissions";
-import { matchesRegion, normalizeRegion } from "../auth/region";
+import { matchesRegion } from "../auth/region";
 import {
   daysUntil,
   expirySeverity,
@@ -24,6 +21,7 @@ import type {
   RiskSignal,
   WorkItem,
 } from "./types";
+import { DeepLink } from "./deepLinks";
 
 function emptyKpis(): IntelligenceKpis {
   return {
@@ -46,26 +44,16 @@ function emptyKpis(): IntelligenceKpis {
 function buildBriefing(kpis: IntelligenceKpis, queueLen: number): string {
   const crises: string[] = [];
   if (kpis.permitsExpired > 0)
-    crises.push(
-      `${kpis.permitsExpired} expired permit${kpis.permitsExpired === 1 ? "" : "s"}`
-    );
+    crises.push(`${kpis.permitsExpired} expired permit${kpis.permitsExpired === 1 ? "" : "s"}`);
   if (kpis.cofExpired > 0)
-    crises.push(
-      `${kpis.cofExpired} expired COF${kpis.cofExpired === 1 ? "" : "s"}`
-    );
+    crises.push(`${kpis.cofExpired} expired COF${kpis.cofExpired === 1 ? "" : "s"}`);
   if (kpis.renewalsPending > 0)
-    crises.push(
-      `${kpis.renewalsPending} renewal${kpis.renewalsPending === 1 ? "" : "s"} waiting`
-    );
-  if (kpis.printQueueOpen > 0)
-    crises.push(`${kpis.printQueueOpen} ready to print`);
-
-  if (crises.length === 0 && queueLen === 0) {
+    crises.push(`${kpis.renewalsPending} renewal${kpis.renewalsPending === 1 ? "" : "s"} waiting`);
+  if (kpis.printQueueOpen > 0) crises.push(`${kpis.printQueueOpen} ready to print`);
+  if (crises.length === 0 && queueLen === 0)
     return "All clear within the 30-day horizon. Registry is quiet — use the time for audits and roster hygiene.";
-  }
-  if (crises.length === 0) {
+  if (crises.length === 0)
     return `${queueLen} item${queueLen === 1 ? "" : "s"} need attention before they become blockers.`;
-  }
   return `Focus now: ${crises.slice(0, 3).join(" · ")}.`;
 }
 
@@ -78,29 +66,21 @@ function pickPrimary(
   if (kpis.renewalsPending > 0 && top.kind === "renewal_pending") {
     return {
       label: `Review ${kpis.renewalsPending} renewal${kpis.renewalsPending === 1 ? "" : "s"}`,
-      href: "/admin/permits",
+      href: DeepLink.permitsPending,
       reason: "Approvals unblock print and keep vehicles legal on the rank.",
     };
   }
   if (top.kind === "permit_expired" || top.kind === "cof_expired") {
-    return {
-      label: "Clear expired compliance",
-      href: top.href,
-      reason: top.detail,
-    };
+    return { label: "Clear expired compliance", href: top.href, reason: top.detail };
   }
   if (kpis.printQueueOpen > 0) {
     return {
       label: `Print ${kpis.printQueueOpen} permit${kpis.printQueueOpen === 1 ? "" : "s"}`,
-      href: "/admin/permits/print",
+      href: DeepLink.permitsPrint,
       reason: "Approved renewals are waiting on paper with signed QR.",
     };
   }
-  return {
-    label: top.title,
-    href: top.href,
-    reason: top.detail,
-  };
+  return { label: top.title, href: top.href, reason: top.detail };
 }
 
 export async function buildIntelligenceSnapshot(
@@ -110,57 +90,40 @@ export async function buildIntelligenceSnapshot(
   const now = new Date();
   const national = isNationalScope(user);
   const regionScope = national ? null : (user.region ?? null);
-
-  if (!national && !regionScope) {
-    throw new Error("REGION_REQUIRED");
-  }
+  if (!national && !regionScope) throw new Error("REGION_REQUIRED");
 
   const kpis = emptyKpis();
   const queue: WorkItem[] = [];
   const risks: RiskSignal[] = [];
 
-  const [
-    vehiclesRes,
-    driversRes,
-    operatorsCountRes,
-    renewalsRes,
-    masterCardsRes,
-    routesRes,
-  ] = await Promise.all([
-    admin
-      .from("vehicles")
-      .select(
-        "registration_number, vic, make, model, owner_name, permit_number, permit_status, permit_expiry_date, cof_number, cof_expiry_date, driver_id, status, roadworthiness_expiry, insurance_expiry, route_assignment_id"
-      )
-      .limit(5000),
-    admin
-      .from("drivers")
-      .select(
-        "id, full_name, status, assigned_vehicle_reg, pdp_expiry_date, pdp_status, license_number, region"
-      )
-      .limit(5000),
-    admin.from("fleet_operators").select("*", { count: "exact", head: true }),
-    admin
-      .from("permit_renewal_requests")
-      .select(
-        "id, vehicle_reg, operator, status, request_date, current_expiry_date, region"
-      )
-      .eq("status", "Pending Admin Approval")
-      .order("request_date", { ascending: true })
-      .limit(200),
-    admin
-      .from("operator_master_cards")
-      .select("id, operator_id, status")
-      .eq("status", "Frozen")
-      .limit(200),
-    admin.from("routes").select("id, region_code").limit(2000),
-  ]);
+  const [vehiclesRes, driversRes, operatorsCountRes, renewalsRes, masterCardsRes, routesRes] =
+    await Promise.all([
+      admin
+        .from("vehicles")
+        .select(
+          "registration_number, vic, make, model, owner_name, permit_number, permit_status, permit_expiry_date, cof_number, cof_expiry_date, driver_id, status, roadworthiness_expiry, insurance_expiry, route_assignment_id"
+        )
+        .limit(5000),
+      admin
+        .from("drivers")
+        .select(
+          "id, full_name, status, assigned_vehicle_reg, pdp_expiry_date, pdp_status, license_number, region"
+        )
+        .limit(5000),
+      admin.from("fleet_operators").select("*", { count: "exact", head: true }),
+      admin
+        .from("permit_renewal_requests")
+        .select("id, vehicle_reg, operator, status, request_date, current_expiry_date, region")
+        .eq("status", "Pending Admin Approval")
+        .order("request_date", { ascending: true })
+        .limit(200),
+      admin.from("operator_master_cards").select("id, operator_id, status").eq("status", "Frozen").limit(200),
+      admin.from("routes").select("id, region_code").limit(2000),
+    ]);
 
   const routeRegion = new Map<string, string>();
   for (const r of routesRes.data ?? []) {
-    if (r.id && r.region_code) {
-      routeRegion.set(String(r.id), String(r.region_code));
-    }
+    if (r.id && r.region_code) routeRegion.set(String(r.id), String(r.region_code));
   }
 
   let vehicles = vehiclesRes.data ?? [];
@@ -170,26 +133,18 @@ export async function buildIntelligenceSnapshot(
 
   if (regionScope) {
     vehicles = vehicles.filter((v) => {
-      const rid = v.route_assignment_id
-        ? routeRegion.get(String(v.route_assignment_id))
-        : null;
+      const rid = v.route_assignment_id ? routeRegion.get(String(v.route_assignment_id)) : null;
       return matchesRegion(regionScope, rid);
     });
-    drivers = drivers.filter((d) =>
-      matchesRegion(regionScope, d.region as string | null)
-    );
+    drivers = drivers.filter((d) => matchesRegion(regionScope, d.region as string | null));
     renewals = renewals.filter(
-      (r) =>
-        matchesRegion(regionScope, r.region as string | null) ||
-        !r.region
+      (r) => matchesRegion(regionScope, r.region as string | null) || !r.region
     );
   }
 
   kpis.vehiclesTotal = vehicles.length;
   kpis.driversTotal = drivers.length;
-  kpis.operatorsTotal = national
-    ? (operatorsCountRes.count ?? 0)
-    : operatorsCountRes.count ?? 0;
+  kpis.operatorsTotal = operatorsCountRes.count ?? 0;
   kpis.renewalsPending = renewals.length;
   kpis.masterCardsFrozen = national ? frozenCards.length : 0;
 
@@ -207,7 +162,6 @@ export async function buildIntelligenceSnapshot(
     const reg = (v.registration_number as string) || "UNKNOWN";
     const label = v.vic ? `${reg} (${v.vic})` : reg;
     const owner = (v.owner_name as string) || "Unknown owner";
-
     const permitDays = daysUntil(v.permit_expiry_date as string | null, now);
     const cofDays = daysUntil(v.cof_expiry_date as string | null, now);
 
@@ -223,25 +177,24 @@ export async function buildIntelligenceSnapshot(
         entityType: "vehicle",
         entityId: reg,
         entityLabel: label,
-        href: "/admin/permits",
+        href: DeepLink.permitsExpired,
         dueAt: v.permit_expiry_date as string,
         daysUntil: permitDays,
         meta: { owner },
       });
     } else if (permitDays !== null && permitDays <= WINDOWS.horizonDays) {
       kpis.permitsExpiring30d += 1;
-      const sev = expirySeverity(permitDays);
       queue.push({
         id: `permit-expiring-${reg}`,
         kind: "permit_expiring",
-        severity: sev,
+        severity: expirySeverity(permitDays),
         score: rankScore("permit_expiring", permitDays),
         title: `Permit ${formatDaysUntil(permitDays)} — ${reg}`,
         detail: `${owner} · #${v.permit_number ?? "—"}`,
         entityType: "vehicle",
         entityId: reg,
         entityLabel: label,
-        href: "/admin/permits",
+        href: DeepLink.permitsExpiring,
         dueAt: v.permit_expiry_date as string,
         daysUntil: permitDays,
         meta: { owner },
@@ -260,7 +213,7 @@ export async function buildIntelligenceSnapshot(
         entityType: "vehicle",
         entityId: reg,
         entityLabel: label,
-        href: "/admin/vehicles",
+        href: DeepLink.vehiclesCofExpired,
         dueAt: v.cof_expiry_date as string,
         daysUntil: cofDays,
       });
@@ -276,26 +229,22 @@ export async function buildIntelligenceSnapshot(
         entityType: "vehicle",
         entityId: reg,
         entityLabel: label,
-        href: "/admin/vehicles",
+        href: DeepLink.vehiclesCofExpiring,
         dueAt: v.cof_expiry_date as string,
         daysUntil: cofDays,
       });
     }
 
     const hasDriver =
-      v.driver_id != null &&
-      String(v.driver_id).trim() !== "" &&
-      String(v.driver_id) !== "null";
+      v.driver_id != null && String(v.driver_id).trim() !== "" && String(v.driver_id) !== "null";
     if (!hasDriver) kpis.vehiclesUnassigned += 1;
   }
 
-  const unassignedVehicles = vehicles.filter(
-    (v) =>
-      !v.driver_id ||
-      String(v.driver_id).trim() === "" ||
-      String(v.driver_id) === "null"
-  );
-  for (const v of unassignedVehicles.slice(0, 15)) {
+  for (const v of vehicles
+    .filter(
+      (v) => !v.driver_id || String(v.driver_id).trim() === "" || String(v.driver_id) === "null"
+    )
+    .slice(0, 15)) {
     const reg = v.registration_number as string;
     queue.push({
       id: `veh-unassigned-${reg}`,
@@ -307,7 +256,7 @@ export async function buildIntelligenceSnapshot(
       entityType: "vehicle",
       entityId: reg,
       entityLabel: reg,
-      href: "/admin/vehicles",
+      href: DeepLink.vehiclesUnassigned,
     });
   }
 
@@ -325,11 +274,11 @@ export async function buildIntelligenceSnapshot(
         severity: "high",
         score: rankScore("suspended_driver"),
         title: `Suspended — ${name}`,
-        detail: assigned ? `Still linked to ${assigned}` : "No vehicle linked",
+        detail: assigned ? `Released from ${assigned}` : "No vehicle linked",
         entityType: "driver",
         entityId: id,
         entityLabel: name,
-        href: "/admin/drivers",
+        href: DeepLink.driversSuspended,
       });
     }
 
@@ -347,7 +296,7 @@ export async function buildIntelligenceSnapshot(
         entityType: "driver",
         entityId: id,
         entityLabel: name,
-        href: "/admin/drivers",
+        href: DeepLink.driversPdpExpired,
         dueAt: d.pdp_expiry_date as string,
         daysUntil: pdpDays,
       });
@@ -362,7 +311,7 @@ export async function buildIntelligenceSnapshot(
         entityType: "driver",
         entityId: id,
         entityLabel: name,
-        href: "/admin/drivers",
+        href: DeepLink.driversUnassigned,
         dueAt: d.pdp_expiry_date as string,
         daysUntil: pdpDays,
       });
@@ -370,24 +319,20 @@ export async function buildIntelligenceSnapshot(
   }
 
   const unassignedDrivers = drivers.filter(
-    (d) =>
-      !d.assigned_vehicle_reg || String(d.assigned_vehicle_reg).trim() === ""
+    (d) => !d.assigned_vehicle_reg || String(d.assigned_vehicle_reg).trim() === ""
   );
   if (unassignedDrivers.length > 5) {
     queue.push({
       id: "drivers-unassigned-summary",
       kind: "unassigned_driver",
       severity: "medium",
-      score:
-        rankScore("unassigned_driver") +
-        Math.min(unassignedDrivers.length, 40),
+      score: rankScore("unassigned_driver") + Math.min(unassignedDrivers.length, 40),
       title: `${unassignedDrivers.length} drivers without vehicles`,
-      detail:
-        "Assignment gaps reduce rank throughput and break roster integrity",
+      detail: "Assignment gaps reduce rank throughput and break roster integrity",
       entityType: "driver",
       entityId: "batch",
       entityLabel: "Unassigned drivers",
-      href: "/admin/drivers",
+      href: DeepLink.driversUnassigned,
     });
   }
 
@@ -395,27 +340,18 @@ export async function buildIntelligenceSnapshot(
     const id = r.id as string;
     const reg = (r.vehicle_reg as string) || "—";
     const ageDays = daysUntil(r.request_date as string | null, now);
-    const waitingDays =
-      ageDays === null ? null : ageDays > 0 ? 0 : Math.abs(ageDays);
-
+    const waitingDays = ageDays === null ? null : ageDays > 0 ? 0 : Math.abs(ageDays);
     queue.push({
       id: `renewal-${id}`,
       kind: "renewal_pending",
       severity: waitingDays !== null && waitingDays >= 3 ? "high" : "medium",
-      score: rankScore(
-        "renewal_pending",
-        waitingDays !== null ? -waitingDays : null
-      ),
+      score: rankScore("renewal_pending", waitingDays !== null ? -waitingDays : null),
       title: `Renewal pending — ${reg}`,
-      detail: `${r.operator ?? "Operator"} · requested ${r.request_date ?? "—"}${
-        waitingDays !== null && waitingDays > 0
-          ? ` · waiting ${waitingDays}d`
-          : ""
-      }`,
+      detail: `${r.operator ?? "Operator"} · requested ${r.request_date ?? "—"}`,
       entityType: "renewal",
       entityId: id,
       entityLabel: reg,
-      href: "/admin/permits",
+      href: DeepLink.permitsPending,
       dueAt: r.current_expiry_date as string | null,
       daysUntil: daysUntil(r.current_expiry_date as string | null, now),
       meta: { operator: (r.operator as string) ?? "" },
@@ -423,35 +359,19 @@ export async function buildIntelligenceSnapshot(
   }
 
   if (national) {
-    const frozenOpIds = frozenCards
-      .map((c) => c.operator_id as string | null)
-      .filter((id): id is string => !!id);
-    const opNameMap = new Map<string, string>();
-    if (frozenOpIds.length > 0) {
-      const { data: ops } = await admin
-        .from("fleet_operators")
-        .select("id, name, company_name")
-        .in("id", frozenOpIds);
-      for (const o of ops ?? []) {
-        const label =
-          (o.company_name as string) || (o.name as string) || "Operator";
-        opNameMap.set(o.id as string, label);
-      }
-    }
     for (const c of frozenCards.slice(0, 20)) {
       const opId = String(c.operator_id ?? c.id);
-      const name = opNameMap.get(opId) || "Operator";
       queue.push({
         id: `mcard-frozen-${c.id}`,
         kind: "frozen_master_card",
         severity: "high",
         score: rankScore("frozen_master_card"),
-        title: `Frozen Master Card — ${name}`,
+        title: `Frozen Master Card — ${opId}`,
         detail: "Disbursements and renewal payments blocked",
         entityType: "operator",
         entityId: opId,
-        entityLabel: name,
-        href: "/admin/operators",
+        entityLabel: opId,
+        href: DeepLink.operatorsFrozen,
       });
     }
   }
@@ -467,7 +387,7 @@ export async function buildIntelligenceSnapshot(
       entityType: "print",
       entityId: "queue",
       entityLabel: "Print queue",
-      href: "/admin/permits/print",
+      href: DeepLink.permitsPrint,
     });
   }
 
@@ -486,63 +406,14 @@ export async function buildIntelligenceSnapshot(
     risks.push({ id, label, value, severity, detail, href });
   };
 
-  pushRisk(
-    "risk-permit-expired",
-    "Expired permits",
-    kpis.permitsExpired,
-    "critical",
-    "Vehicles operating without valid road permit exposure",
-    "/admin/permits"
-  );
-  pushRisk(
-    "risk-cof-expired",
-    "Expired COF",
-    kpis.cofExpired,
-    "critical",
-    "Certificate of fitness failures — roadworthiness liability",
-    "/admin/vehicles"
-  );
-  pushRisk(
-    "risk-permit-window",
-    "Permits ≤30 days",
-    kpis.permitsExpiring30d,
-    kpis.permitsExpiring30d > 10 ? "high" : "medium",
-    "Renewal pipeline pressure over the next month",
-    "/admin/permits"
-  );
-  pushRisk(
-    "risk-renewals",
-    "Pending renewals",
-    kpis.renewalsPending,
-    kpis.renewalsPending > 5 ? "high" : "medium",
-    "Admin approval queue blocking legal continuity",
-    "/admin/permits"
-  );
-  pushRisk(
-    "risk-unassigned-veh",
-    "Vehicles without drivers",
-    kpis.vehiclesUnassigned,
-    kpis.vehiclesUnassigned > 10 ? "high" : "medium",
-    "Assignment gaps cut rank capacity",
-    "/admin/vehicles"
-  );
-  pushRisk(
-    "risk-suspended",
-    "Suspended drivers",
-    kpis.driversSuspended,
-    "high",
-    "Active suspensions — confirm still intended",
-    "/admin/drivers"
-  );
+  pushRisk("risk-permit-expired", "Expired permits", kpis.permitsExpired, "critical", "Permit exposure", DeepLink.permitsExpired);
+  pushRisk("risk-cof-expired", "Expired COF", kpis.cofExpired, "critical", "Roadworthiness liability", DeepLink.vehiclesCofExpired);
+  pushRisk("risk-permit-window", "Permits ≤30 days", kpis.permitsExpiring30d, kpis.permitsExpiring30d > 10 ? "high" : "medium", "Renewal pipeline", DeepLink.permitsExpiring);
+  pushRisk("risk-renewals", "Pending renewals", kpis.renewalsPending, kpis.renewalsPending > 5 ? "high" : "medium", "Approval queue", DeepLink.permitsPending);
+  pushRisk("risk-unassigned-veh", "Vehicles without drivers", kpis.vehiclesUnassigned, kpis.vehiclesUnassigned > 10 ? "high" : "medium", "Assignment gaps", DeepLink.vehiclesUnassigned);
+  pushRisk("risk-suspended", "Suspended drivers", kpis.driversSuspended, "high", "Confirm still intended", DeepLink.driversSuspended);
   if (national) {
-    pushRisk(
-      "risk-frozen-cards",
-      "Frozen Master Cards",
-      kpis.masterCardsFrozen,
-      "high",
-      "Operator money movement halted",
-      "/admin/operators"
-    );
+    pushRisk("risk-frozen-cards", "Frozen Master Cards", kpis.masterCardsFrozen, "high", "Money movement halted", DeepLink.operatorsFrozen);
   }
 
   risks.sort((a, b) => {
@@ -550,11 +421,9 @@ export async function buildIntelligenceSnapshot(
     return order[a.severity] - order[b.severity] || b.value - a.value;
   });
 
-  const scope: IntelligenceSnapshot["scope"] = national ? "national" : "region";
-
   return {
     generatedAt: now.toISOString(),
-    scope,
+    scope: national ? "national" : "region",
     region: regionScope,
     kpis,
     queue: trimmed,
