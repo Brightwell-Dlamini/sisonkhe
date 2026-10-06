@@ -2,14 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Marshal account claim flow.
- * Three steps:
- *   1. Verify identity (national ID + phone)
- *   2. Set username + password
- *   3. Success — server has signed the user in
- *
- * On success, redirect to the resolved home route. The server returns the
- * resolved user; we map it to a home path. No blind redirect to `/`.
+ * Claim account for marshal OR driver (portal-collected identity).
  */
 
 "use client";
@@ -31,10 +24,12 @@ import {
 import { homeRouteForRole, toNavRole } from "@/lib/navigation/resolve";
 
 type Step = "verify" | "credentials" | "success";
+type ClaimRole = "marshal" | "driver";
 
 interface ClaimResponse {
   success?: boolean;
   signedIn?: boolean;
+  verified?: boolean;
   user?: { role?: string } | null;
   error?: string;
   fullName?: string;
@@ -45,6 +40,7 @@ const REDIRECT_DELAY_MS = 1500;
 
 export default function ClaimPage() {
   const router = useRouter();
+  const [role, setRole] = useState<ClaimRole>("marshal");
   const [step, setStep] = useState<Step>("verify");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -57,16 +53,31 @@ export default function ClaimPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState("");
 
+  const claimPath =
+    role === "driver" ? "/api/auth/claim/driver" : "/api/auth/claim";
+
+  function switchRole(next: ClaimRole) {
+    setRole(next);
+    setStep("verify");
+    setError("");
+    setFullName("");
+  }
+
   async function onVerify(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/claim", {
+      const body =
+        role === "driver"
+          ? { nationalId: idNumber, phone }
+          : { idNumber, phone };
+
+      const res = await fetch(claimPath, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idNumber, phone }),
+        body: JSON.stringify(body),
       });
       const data = (await res.json()) as ClaimResponse;
 
@@ -100,10 +111,15 @@ export default function ClaimPage() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/claim", {
+      const body =
+        role === "driver"
+          ? { nationalId: idNumber, phone, username, password }
+          : { idNumber, phone, username, password };
+
+      const res = await fetch(claimPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idNumber, phone, username, password }),
+        body: JSON.stringify(body),
       });
       const data = (await res.json()) as ClaimResponse;
 
@@ -115,11 +131,12 @@ export default function ClaimPage() {
 
       setStep("success");
 
-      // Role-aware destination. The server resolved the user on creation.
-      // If for any reason the role is missing, fall back to /marshal — the
-      // only role this flow can create — never to the public kiosk.
-      const role = data.user?.role ? toNavRole(data.user.role) : "marshal";
-      const destination = homeRouteForRole(role ?? "marshal");
+      const navRole = data.user?.role
+        ? toNavRole(data.user.role)
+        : role === "driver"
+          ? "driver"
+          : "marshal";
+      const destination = homeRouteForRole(navRole ?? role);
 
       window.setTimeout(() => {
         router.replace(destination);
@@ -133,6 +150,24 @@ export default function ClaimPage() {
 
   return (
     <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-xl p-6 sm:p-8">
+      <div className="flex gap-2 mb-5">
+        {(["marshal", "driver"] as ClaimRole[]).map((r) => (
+          <button
+            key={r}
+            type="button"
+            onClick={() => switchRole(r)}
+            disabled={step !== "verify"}
+            className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider border transition ${
+              role === r
+                ? "bg-emerald-600 border-emerald-500 text-white"
+                : "bg-white/[0.03] border-white/[0.06] text-zinc-400"
+            }`}
+          >
+            {r}
+          </button>
+        ))}
+      </div>
+
       <div className="flex items-center gap-2 mb-6">
         {(["verify", "credentials", "success"] as Step[]).map((s, idx) => {
           const stepIndex = ["verify", "credentials", "success"].indexOf(step);
@@ -153,13 +188,13 @@ export default function ClaimPage() {
           {step === "verify" && (
             <>
               <ShieldCheck className="w-5 h-5 text-emerald-500" />
-              Claim Your Account
+              Claim {role} account
             </>
           )}
           {step === "credentials" && (
             <>
               <User className="w-5 h-5 text-emerald-500" />
-              Set Your Credentials
+              Set credentials
             </>
           )}
           {step === "success" && (
@@ -171,9 +206,9 @@ export default function ClaimPage() {
         </h2>
         <p className="text-xs text-zinc-400 mt-1">
           {step === "verify" &&
-            "Enter the National ID and phone number you registered with."}
+            "Enter the National ID and phone from your registration profile."}
           {step === "credentials" &&
-            "Choose a username and password. You'll use these to sign in."}
+            "Choose a username and password for sign-in."}
           {step === "success" && "Your account is ready. Signing you in…"}
         </p>
       </div>
@@ -197,8 +232,8 @@ export default function ClaimPage() {
               value={idNumber}
               onChange={(e) => setIdNumber(e.target.value)}
               required
-              placeholder="13 digits, e.g. 7609236100542"
-              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              placeholder="13 digits"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-emerald-500"
             />
           </div>
 
@@ -212,23 +247,23 @@ export default function ClaimPage() {
               onChange={(e) => setPhone(e.target.value)}
               required
               placeholder="e.g. 78653001"
-              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-emerald-500"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md flex items-center justify-center gap-2 transition-all"
+            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Verifying…</span>
+                Verifying…
               </>
             ) : (
               <>
-                <span>Verify Identity</span>
+                Verify Identity
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
@@ -239,11 +274,9 @@ export default function ClaimPage() {
       {step === "credentials" && (
         <form onSubmit={onCreate} className="space-y-4">
           <div className="bg-emerald-950/40 border border-emerald-800 rounded-xl p-3 text-xs">
-            <div className="font-bold text-emerald-200">
-              Welcome, {fullName}
-            </div>
+            <div className="font-bold text-emerald-200">Welcome, {fullName}</div>
             <div className="text-emerald-300 text-[11px] mt-0.5">
-              Identity verified. Now set your login credentials.
+              Identity verified. Set login credentials.
             </div>
           </div>
 
@@ -256,14 +289,9 @@ export default function ClaimPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value.toLowerCase())}
               required
-              placeholder="e.g. bongani.hlophe"
               pattern="[a-z0-9._]{3,32}"
-              title="3-32 characters, lowercase letters, numbers, dots or underscores"
-              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm font-medium text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
             />
-            <p className="text-[10px] text-zinc-400 mt-1">
-              You'll use this to sign in. Lowercase letters, numbers, dots, underscores.
-            </p>
           </div>
 
           <div>
@@ -277,21 +305,14 @@ export default function ClaimPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={8}
-                placeholder="At least 8 characters"
-                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 pr-10 text-sm font-medium text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 pr-10 text-sm text-white focus:outline-none focus:border-emerald-500"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200"
-                tabIndex={-1}
-                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400"
               >
-                {showPassword ? (
-                  <EyeOff className="w-4 h-4" />
-                ) : (
-                  <Eye className="w-4 h-4" />
-                )}
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
@@ -306,8 +327,7 @@ export default function ClaimPage() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               minLength={8}
-              placeholder="Re-enter your password"
-              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm font-medium text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
             />
           </div>
 
@@ -323,17 +343,17 @@ export default function ClaimPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md flex items-center justify-center gap-2 transition-all"
+              className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Creating account…</span>
+                  Creating…
                 </>
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Create Account</span>
+                  Create Account
                 </>
               )}
             </button>
@@ -343,29 +363,18 @@ export default function ClaimPage() {
 
       {step === "success" && (
         <div className="text-center py-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-950/60 mb-4">
-            <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-          </div>
-          <h3 className="text-base font-black text-white uppercase">
-            Account Ready
-          </h3>
-          <p className="text-xs text-zinc-400 mt-2">
-            You are being signed in to Sisonkhe In Transit.
-          </p>
+          <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-4" />
+          <h3 className="text-base font-black text-white uppercase">Account Ready</h3>
+          <p className="text-xs text-zinc-400 mt-2">Signing you in…</p>
         </div>
       )}
 
       {step === "verify" && (
-        <div className="mt-6 pt-4 border-t border-white/[0.06] text-center">
-          <p className="text-xs text-zinc-400">
-            Already claimed your account?{" "}
-            <Link
-              href="/login"
-              className="font-bold text-emerald-400 hover:underline"
-            >
-              Sign in
-            </Link>
-          </p>
+        <div className="mt-6 pt-4 border-t border-white/[0.06] text-center text-xs text-zinc-400">
+          Already claimed?{" "}
+          <Link href="/login" className="font-bold text-emerald-400 hover:underline">
+            Sign in
+          </Link>
         </div>
       )}
     </div>

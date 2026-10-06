@@ -206,7 +206,7 @@ function LoginForm() {
             onChange={(e) => setIdentifier(e.target.value)}
             autoComplete="username"
             required
-            className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+            className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
           />
         </div>
 
@@ -221,7 +221,7 @@ function LoginForm() {
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
               required
-              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 pr-10 text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 pr-10 text-sm text-white focus:outline-none focus:border-emerald-500"
             />
             <button
               type="button"
@@ -241,17 +241,17 @@ function LoginForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md flex items-center justify-center gap-2 transition-all"
+          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2"
         >
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Signing in…</span>
+              Signing in…
             </>
           ) : (
             <>
               <LogIn className="w-4 h-4" />
-              <span>Sign In</span>
+              Sign In
             </>
           )}
         </button>
@@ -263,34 +263,29 @@ function LoginForm() {
           className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-white/[0.06] bg-white/[0.03] text-xs font-bold text-zinc-200 hover:border-emerald-500/50 hover:text-emerald-400 transition-colors"
         >
           <Monitor className="w-3.5 h-3.5" />
-          View public kiosk (live terminal board)
+          View public kiosk
         </Link>
 
         <p className="text-center text-[11px] text-zinc-500 space-y-1">
           <span className="block">
-            Marshal without a password?{" "}
-            <Link
-              href="/claim"
-              className="font-bold text-emerald-600 hover:underline"
-            >
+            Registered but no password yet?{" "}
+            <Link href="/claim" className="font-bold text-emerald-600 hover:underline">
               Claim your account
             </Link>
+            {" "}
+            (marshal or driver)
           </span>
           <span className="block">
-            New driver?{" "}
-            <Link
-              href="/register/driver"
-              className="font-bold text-emerald-600 hover:underline"
-            >
-              Self-register
+            New profile only?{" "}
+            <Link href="/register/driver" className="font-bold text-emerald-600 hover:underline">
+              Driver registration
             </Link>
             {" · "}
-            <Link
-              href="/register/vehicle"
-              className="font-bold text-emerald-600 hover:underline"
-            >
-              Register vehicle
+            <Link href="/register/vehicle" className="font-bold text-emerald-600 hover:underline">
+              Vehicle record
             </Link>
+            {" "}
+            (data only — no login, no linking)
           </span>
         </p>
       </div>
@@ -300,11 +295,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="text-center text-xs text-zinc-500">Loading…</div>
-      }
-    >
+    <Suspense fallback={<div className="text-center text-xs text-zinc-500">Loading…</div>}>
       <LoginForm />
     </Suspense>
   );
