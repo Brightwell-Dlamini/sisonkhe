@@ -135,7 +135,7 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
       ownerName: row.ownerName ?? "",
       ownerPhone: row.ownerPhone ?? "",
       driverId: row.driverId ?? "",
-      status: (row as any).status ?? "Waiting",
+      status: (row as { status?: string }).status ?? "Waiting",
       currentQueuePosition: row.currentQueuePosition ?? 0,
       tripsToday: 0,
       lastActive: new Date().toISOString(),
@@ -160,7 +160,7 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
     if (result.success) {
       toast.success(
         "Vehicle registered",
-        `${result.registrationNumber} · VIC ${result.vic}. Virtual card issued.`
+        `${result.registrationNumber} · VIC ${result.vic}`
       );
       setShowCreateModal(false);
       return { success: true };
@@ -201,10 +201,10 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
     <div>
       <PageHeader
         title="Vehicle Registry"
-        description="Register commercial vehicles, manage permits, fitness, and driver assignments."
+        description="Portal collects asset data. Admin assigns driver/route and manages permits. Prefer Edit on portal-enrolled plates."
         actions={
           <Button onClick={() => setShowCreateModal(true)} leadingIcon={Plus}>
-            Register Vehicle
+            Add vehicle (edge case)
           </Button>
         }
       />
@@ -272,17 +272,17 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
         <EmptyState
           icon={Car}
           title={
-            vehicles.length === 0 ? "No vehicles registered" : "No matching vehicles"
+            vehicles.length === 0 ? "No vehicles yet" : "No matching vehicles"
           }
           description={
             vehicles.length === 0
-              ? "Register your first commercial vehicle to enable dispatch, permits, and tracking."
+              ? "Enrol at /register/vehicle, then assign drivers here via Edit."
               : "Try adjusting your search or filters."
           }
           action={
             vehicles.length === 0 ? (
               <Button onClick={() => setShowCreateModal(true)} leadingIcon={Plus}>
-                Register Vehicle
+                Add vehicle (edge case)
               </Button>
             ) : undefined
           }
@@ -375,7 +375,7 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
                       />
                       <IconButton
                         icon={Edit2}
-                        label="Edit vehicle"
+                        label="Assign driver / route"
                         onClick={() => setEditingVehicle(v)}
                       />
                       <IconButton
@@ -446,7 +446,7 @@ export default function VehiclesList({ routes = [], drivers = [] }: Props) {
         title="Deactivate Vehicle?"
         description={
           deleteTarget
-            ? `${deleteTarget.registrationNumber} will be marked Offline, removed from any active queue, and unassigned from its driver. Its history remains intact.`
+            ? `${deleteTarget.registrationNumber} will be marked Offline, removed from any active queue, and unassigned from its driver.`
             : ""
         }
         confirmLabel="Deactivate"
