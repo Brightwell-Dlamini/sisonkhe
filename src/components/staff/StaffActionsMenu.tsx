@@ -5,9 +5,10 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { MoreVertical, Edit2, KeyRound, UserX } from "lucide-react";
+import { useState } from "react";
+import { Edit2, KeyRound, UserX } from "lucide-react";
 import type { StaffRow } from "@/lib/staff/queries";
+import { ActionsMenu, type ActionsMenuItem } from "@/components/ui";
 import ResetPasswordDialog from "./ResetPasswordDialog";
 
 interface Props {
@@ -28,84 +29,56 @@ export default function StaffActionsMenu({
   onDeactivate,
   onResetPassword,
 }: Props) {
-  const [open, setOpen] = useState(false);
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const [resetResult, setResetResult] = useState<{
     fullName: string;
     tempPassword: string;
   } | null>(null);
   const [resetting, setResetting] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  const items: ActionsMenuItem[] = [
+    {
+      key: "edit",
+      label: "Edit",
+      icon: Edit2,
+      onClick: onEdit,
+    },
+    {
+      key: "reset-password",
+      label: resetting ? "Resetting…" : "Reset Password",
+      icon: KeyRound,
+      disabled: resetting,
+      onClick: async () => {
+        setResetting(true);
+        try {
+          const res = await onResetPassword();
+          if (res.success && res.tempPassword && res.fullName) {
+            setResetResult({
+              fullName: res.fullName,
+              tempPassword: res.tempPassword,
+            });
+          }
+        } finally {
+          setResetting(false);
+        }
+      },
+    },
+  ];
 
-  const handleReset = async () => {
-    setOpen(false);
-    setResetting(true);
-    const res = await onResetPassword();
-    setResetting(false);
-    if (res.success && res.tempPassword && res.fullName) {
-      setResetResult({
-        fullName: res.fullName,
-        tempPassword: res.tempPassword,
-      });
-    }
-  };
+  if (staff.isActive) {
+    items.push({
+      key: "deactivate",
+      label: "Deactivate",
+      icon: UserX,
+      tone: "danger",
+      dividerBefore: true,
+      onClick: () => setConfirmDeactivate(true),
+    });
+  }
 
   return (
     <>
-      <div className="relative inline-block" ref={menuRef}>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]"
-        >
-          <MoreVertical className="w-4 h-4" />
-        </button>
-
-        {open && (
-          <div className="absolute right-0 top-full mt-1 z-20 bg-[#0F0F10] border border-white/[0.06] rounded-xl shadow-xl py-1 min-w-[180px]">
-            <button
-              onClick={() => {
-                setOpen(false);
-                onEdit();
-              }}
-              className="w-full text-left px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-white/[0.06] flex items-center gap-2"
-            >
-              <Edit2 className="w-3.5 h-3.5" />
-              Edit
-            </button>
-            <button
-              onClick={handleReset}
-              disabled={resetting}
-              className="w-full text-left px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-white/[0.06] flex items-center gap-2 disabled:opacity-50"
-            >
-              <KeyRound className="w-3.5 h-3.5" />
-              Reset Password
-            </button>
-            {staff.isActive && (
-              <button
-                onClick={() => {
-                  setOpen(false);
-                  setConfirmDeactivate(true);
-                }}
-                className="w-full text-left px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-950/40 flex items-center gap-2"
-              >
-                <UserX className="w-3.5 h-3.5" />
-                Deactivate
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      <ActionsMenu items={items} label="Staff actions" />
 
       {/* Deactivate confirmation */}
       {confirmDeactivate && (
