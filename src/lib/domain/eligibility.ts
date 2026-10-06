@@ -195,23 +195,20 @@ export function vehicleOptionLabel(v: {
   return mm ? `${base} · ${mm}` : base;
 }
 
+/**
+ * Admin reassignment is always allowed when the caller is explicitly setting a new route.
+ * The old "clear first" rule made rank ops impossible — removed.
+ * Only blocks inactive marshals and conflicts when another marshal owns the route.
+ */
 export function marshalAssignableToRoute(
   marshal: { id: string; isActive?: boolean; assignedRouteId?: string | null },
   routeId: string | null | undefined,
   routeAlreadyHasMarshalId?: string | null
 ): EligibilityResult {
   if (marshal.isActive === false) {
-    return { eligible: false, reason: "Inactive marshals cannot be assigned to a route." };
-  }
-  if (
-    marshal.assignedRouteId &&
-    routeId &&
-    marshal.assignedRouteId !== routeId
-  ) {
     return {
       eligible: false,
-      reason:
-        "Marshal is already assigned to another route. Reassign explicitly (clear first).",
+      reason: "Inactive marshals cannot be assigned to a route.",
     };
   }
   if (
@@ -275,9 +272,7 @@ export type DispatchGateInput = {
   renewalStatus?: string | null;
 };
 
-/** Load/depart gates share evaluateCompliance — one brain with inspector. */
 export function canDispatchLoad(input: DispatchGateInput): EligibilityResult {
-  // Archived vehicles can never load or depart — checked before compliance.
   if ((input.vehicleStatus ?? "").trim() === "Archived") {
     return {
       eligible: false,

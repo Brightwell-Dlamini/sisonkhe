@@ -2,7 +2,9 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Single write path for driver ↔ vehicle. Compensating rollback on partial failure.
+ * Single write path for driver ↔ vehicle.
+ * Order: driver.assigned_vehicle_reg first, then vehicles.driver_id
+ * (DB triggers often require the driver side to match before vehicle.driver_id is set).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -169,6 +171,7 @@ export async function assignDriverVehicle(
   let releasedDriverId: string | null = null;
   let releasedVehicleReg: string | null = null;
 
+  // Clear previous occupant of this vehicle
   if (vehicle.driver_id && vehicle.driver_id !== driver.id) {
     if (!keys.force) {
       throw Object.assign(
@@ -185,6 +188,7 @@ export async function assignDriverVehicle(
     releasedDriverId = vehicle.driver_id as string;
   }
 
+  // Clear previous vehicle of this driver
   const prevReg = driver.assigned_vehicle_reg as string | null;
   if (prevReg && !platesEqual(prevReg, canonicalPlate)) {
     if (!keys.force && !eligibility.eligible) {
@@ -202,37 +206,48 @@ export async function assignDriverVehicle(
     releasedVehicleReg = normalizePlate(prevReg);
   }
 
-  const { error: vErr } = await admin
-    .from("vehicles")
-    .update({ driver_id: driver.id })
-    .eq("registration_number", canonicalPlate);
-  if (vErr) {
-    throw Object.assign(new Error(`Could not update vehicle: ${vErr.message}`), {
-      status: 500,
-    });
-  }
-
+  // CRITICAL ORDER for DB triggers:
+  // 1) drivers.assigned_vehicle_reg = plate
+  // 2) vehicles.driver_id = driver
   const { error: dErr } = await admin
     .from("drivers")
     .update({ assigned_vehicle_reg: canonicalPlate })
     .eq("id", driver.id);
 
   if (dErr) {
-    // Compensating rollback
+    throw Object.assign(new Error(`Could not update driver: ${dErr.message}`), {
+      status: 500,
+    });
+  }
+
+  const { error: vErr } = await admin
+    .from("vehicles")
+    .update({ driver_id: driver.id })
+    .eq("registration_number", canonicalPlate);
+
+  if (vErr) {
+    // Rollback driver side
     await admin
-      .from("vehicles")
-      .update({ driver_id: releasedDriverId })
-      .eq("registration_number", canonicalPlate);
+      .from("drivers")
+      .update({ assigned_vehicle_reg: prevReg })
+      .eq("id", driver.id);
     if (releasedVehicleReg) {
       await admin
         .from("vehicles")
         .update({ driver_id: driver.id })
         .eq("registration_number", releasedVehicleReg);
     }
-    throw Object.assign(new Error(`Could not update driver: ${dErr.message}`), {
+    throw Object.assign(new Error(`Could not update vehicle: ${vErr.message}`), {
       status: 500,
     });
   }
+
+  // Clear any other vehicles still pointing at this driver (split-brain cleanup)
+  await admin
+    .from("vehicles")
+    .update({ driver_id: null })
+    .eq("driver_id", driver.id)
+    .neq("registration_number", canonicalPlate);
 
   return {
     driverId: driver.id as string,
@@ -281,6 +296,7 @@ export async function unassignDriverVehicle(
     );
   }
 
+  // Clear vehicle first, then driver (triggers often check vehicle.driver_id)
   if (vehicleReg) {
     await admin
       .from("vehicles")

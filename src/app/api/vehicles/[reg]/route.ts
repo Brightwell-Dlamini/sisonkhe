@@ -37,7 +37,8 @@ function errorStatus(message: string): number {
     message.includes("suspended") ||
     message.includes("PDP") ||
     message.includes("Cannot") ||
-    message.includes("force")
+    message.includes("force") ||
+    message.includes("assignment")
   )
     return 409;
   return 500;
@@ -54,7 +55,10 @@ export async function GET(_: NextRequest, { params }: Params) {
     return NextResponse.json({ vehicle });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: errorStatus(message) });
+    return NextResponse.json(
+      { error: message },
+      { status: errorStatus(message) }
+    );
   }
 }
 
@@ -115,6 +119,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }
     }
 
+    // Never patch driver_id here — assignment service only
     const patch: Record<string, unknown> = {};
     if (input.make !== undefined) patch.make = input.make;
     if (input.model !== undefined) patch.model = input.model;
@@ -183,10 +188,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             driverId: oldDriverId,
           });
         } else {
+          // Staff UI may transfer — always force for admin roles
           await assignDriverVehicle(admin, {
             driverId: newDriverId,
             vehicleReg: decoded,
-            force: false,
+            force: true,
           });
         }
       } catch (assignErr) {
@@ -224,7 +230,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: errorStatus(message) });
+    return NextResponse.json(
+      { error: message },
+      { status: errorStatus(message) }
+    );
   }
 }
 
@@ -285,6 +294,9 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: errorStatus(message) });
+    return NextResponse.json(
+      { error: message },
+      { status: errorStatus(message) }
+    );
   }
 }
