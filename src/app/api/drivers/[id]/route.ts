@@ -4,7 +4,7 @@
  *
  * GET    /api/drivers/[id]  — fetch one driver
  * PATCH  /api/drivers/[id]  — update driver
- * DELETE /api/drivers/[id]  — deactivate (soft)
+ * DELETE /api/drivers/[id]  — deactivate (soft) + unlink vehicle
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -27,6 +27,8 @@ function errorStatus(message: string): number {
   if (message === "UNAUTHENTICATED") return 401;
   if (message === "FORBIDDEN") return 403;
   if (message.includes("not found")) return 404;
+  if (message.includes("already") || message.includes("suspended") || message.includes("PDP"))
+    return 409;
   return 500;
 }
 
@@ -118,8 +120,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const oldVehicle = current.assigned_vehicle_reg as string | null;
     const newVehicle = patch.assigned_vehicle_reg as string | null | undefined;
+    const suspending = input.status === "Suspended";
 
-    if (newVehicle && newVehicle !== oldVehicle) {
+    // Suspended driver cannot keep a vehicle
+    if (suspending && oldVehicle) {
+      await unassignDriverVehicle(admin, {
+        driverId: id,
+        vehicleReg: oldVehicle,
+      });
+      patch.assigned_vehicle_reg = null;
+    }
+
+    if (newVehicle && newVehicle !== oldVehicle && !suspending) {
       const { data: vehicle } = await admin
         .from("vehicles")
         .select("registration_number, driver_id")
@@ -151,7 +163,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Driver not found" }, { status: 404 });
     }
 
-    if (newVehicle !== undefined && newVehicle !== oldVehicle) {
+    if (!suspending && newVehicle !== undefined && newVehicle !== oldVehicle) {
       if (!newVehicle && oldVehicle) {
         await unassignDriverVehicle(admin, { driverId: id, vehicleReg: oldVehicle });
       } else if (newVehicle) {
@@ -179,7 +191,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      unlinkedVehicle: suspending ? oldVehicle : null,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[api/drivers/[id]] PATCH error:", err);
@@ -222,7 +237,10 @@ export async function DELETE(_: NextRequest, { params }: Params) {
       );
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      unlinkedVehicle: (driverRow?.assigned_vehicle_reg as string) ?? null,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[api/drivers/[id]] DELETE error:", err);
