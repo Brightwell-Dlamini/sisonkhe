@@ -6,9 +6,12 @@
  * Always writes BOTH:
  *   drivers.assigned_vehicle_reg
  *   vehicles.driver_id
+ *
+ * Domain rules: one driver ↔ one vehicle; suspended / invalid PDP blocked.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { driverAssignableToVehicle } from "@/lib/domain/eligibility";
 
 export type AssignmentKeys = {
   driverId?: string | null;
@@ -44,7 +47,9 @@ export async function resolveDriver(
   if (keys.driverId?.trim()) {
     const { data } = await admin
       .from("drivers")
-      .select("id, full_name, national_id, assigned_vehicle_reg, phone, status")
+      .select(
+        "id, full_name, national_id, assigned_vehicle_reg, phone, status, pdp_status, pdp_expiry_date"
+      )
       .eq("id", keys.driverId.trim())
       .maybeSingle();
     return data;
@@ -52,7 +57,9 @@ export async function resolveDriver(
   if (keys.nationalId?.trim()) {
     const { data } = await admin
       .from("drivers")
-      .select("id, full_name, national_id, assigned_vehicle_reg, phone, status")
+      .select(
+        "id, full_name, national_id, assigned_vehicle_reg, phone, status, pdp_status, pdp_expiry_date"
+      )
       .eq("national_id", normNid(keys.nationalId))
       .maybeSingle();
     return data;
@@ -78,9 +85,10 @@ export async function assignDriverVehicle(
 ): Promise<AssignmentResult> {
   const plate = keys.vehicleReg ? normPlate(keys.vehicleReg) : "";
   if (!plate) {
-    throw Object.assign(new Error("Vehicle registration (number plate) is required."), {
-      status: 400,
-    });
+    throw Object.assign(
+      new Error("Vehicle registration (number plate) is required."),
+      { status: 400 }
+    );
   }
   if (!keys.driverId?.trim() && !keys.nationalId?.trim()) {
     throw Object.assign(
@@ -109,6 +117,42 @@ export async function assignDriverVehicle(
     );
   }
 
+  const eligibility = driverAssignableToVehicle(
+    {
+      id: driver.id as string,
+      fullName: (driver.full_name as string) || "Driver",
+      status: driver.status as string | null,
+      assignedVehicleReg: driver.assigned_vehicle_reg as string | null,
+      pdpStatus: driver.pdp_status as string | null,
+      pdpExpiryDate: driver.pdp_expiry_date as string | null,
+    },
+    plate
+  );
+
+  // force only bypasses "already on another vehicle" conflict after explicit staff intent,
+  // never suspended / invalid PDP
+  const hardBlock =
+    eligibility.reason?.includes("suspended") ||
+    eligibility.reason?.includes("PDP") ||
+    eligibility.reason?.includes("On Leave") ||
+    eligibility.reason?.includes("Off-Duty");
+
+  if (!eligibility.eligible && hardBlock) {
+    throw Object.assign(new Error(eligibility.reason ?? "Driver not eligible."), {
+      status: 409,
+    });
+  }
+
+  if (!eligibility.eligible && !keys.force) {
+    throw Object.assign(
+      new Error(
+        eligibility.reason ??
+          "Driver is not available for this vehicle. Unlink first or use staff force transfer."
+      ),
+      { status: 409 }
+    );
+  }
+
   let releasedDriverId: string | null = null;
   let releasedVehicleReg: string | null = null;
 
@@ -116,7 +160,7 @@ export async function assignDriverVehicle(
     if (!keys.force) {
       throw Object.assign(
         new Error(
-          `Vehicle ${plate} is already linked to another driver. Unlink first or use force (staff).`
+          `Vehicle ${plate} is already linked to another driver. Unlink first or use force (staff transfer).`
         ),
         { status: 409 }
       );
@@ -130,6 +174,14 @@ export async function assignDriverVehicle(
 
   const prevReg = driver.assigned_vehicle_reg as string | null;
   if (prevReg && normPlate(prevReg) !== plate) {
+    if (!keys.force && !eligibility.eligible) {
+      throw Object.assign(
+        new Error(
+          `Driver is on ${normPlate(prevReg)}. Confirm transfer (force) to move them to ${plate}.`
+        ),
+        { status: 409 }
+      );
+    }
     await admin
       .from("vehicles")
       .update({ driver_id: null })
@@ -198,9 +250,10 @@ export async function unassignDriverVehicle(
   }
 
   if (!driverId && !vehicleReg) {
-    throw Object.assign(new Error("Nothing to unlink — no matching assignment."), {
-      status: 404,
-    });
+    throw Object.assign(
+      new Error("Nothing to unlink — no matching assignment."),
+      { status: 404 }
+    );
   }
 
   if (vehicleReg) {
@@ -214,7 +267,10 @@ export async function unassignDriverVehicle(
       .from("drivers")
       .update({ assigned_vehicle_reg: null })
       .eq("id", driverId);
-    await admin.from("vehicles").update({ driver_id: null }).eq("driver_id", driverId);
+    await admin
+      .from("vehicles")
+      .update({ driver_id: null })
+      .eq("driver_id", driverId);
   }
 
   return { driverId, vehicleReg };
