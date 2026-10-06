@@ -2,8 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Drivers table may not have a `region` column yet. Region scope is applied
- * via assigned vehicle → route.region_code when regionScope is set.
+ * Region scope via assigned vehicle → route. Unassigned drivers only for national scope.
  */
 
 import "server-only";
@@ -33,14 +32,12 @@ export interface DriverRow {
   avatarSeed: string | null;
   profilePictureUrl: string | null;
   status: string;
-  /** Derived from vehicle route when available */
   region: string | null;
   username: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-/** Columns that exist on live drivers table (no region). */
 const SELECT_COLUMNS = `
   id, full_name, national_id, phone, residential_address, date_of_birth, gender,
   license_number, license_class,
@@ -149,7 +146,7 @@ async function platesInRegion(regionScope: string): Promise<Set<string>> {
   );
 }
 
-/** @param regionScope null = national (all drivers) */
+/** @param regionScope null = national (all drivers + unassigned) */
 export async function listDrivers(
   regionScope: string | null = null
 ): Promise<DriverRow[]> {
@@ -167,12 +164,12 @@ export async function listDrivers(
 
   if (regionScope) {
     const allowedPlates = await platesInRegion(regionScope);
+    // Regional: only drivers currently on in-region vehicles (no cross-region unassigned leak)
     rows = rows.filter((d) => {
       const plate = d.assigned_vehicle_reg
         ? normalizePlate(d.assigned_vehicle_reg as string)
         : null;
-      // Unassigned drivers visible to all rank admins so they can be assigned
-      if (!plate) return true;
+      if (!plate) return false;
       return allowedPlates.has(plate);
     });
   }

@@ -6,6 +6,7 @@
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 import { matchesRegion } from "../auth/region";
+import { normalizePlate, plateKey } from "../domain/identity";
 
 export interface VehicleRow {
   registrationNumber: string;
@@ -40,6 +41,8 @@ export interface VehicleRow {
   midMonthJoinDay: number | null;
   monthlySequenceBaseIndex: number | null;
   vehiclePhotoUrl: string | null;
+  /** True when vehicle has no route — still listed for regional admins as orphan */
+  unrouted?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -95,6 +98,7 @@ function mapRow(
     monthlySequenceBaseIndex:
       (row.monthly_sequence_base_index as number | null) ?? null,
     vehiclePhotoUrl: null,
+    unrouted: !(row.route_assignment_id as string | null),
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -126,10 +130,10 @@ export async function listVehicles(
         routeRegion.set(String(r.id), String(r.region_code));
       }
     }
+    // Include in-region routed vehicles AND unrouted (orphan) so staff can assign routes
     rows = data.filter((v) => {
-      const rid = v.route_assignment_id
-        ? routeRegion.get(String(v.route_assignment_id))
-        : null;
+      if (!v.route_assignment_id) return true;
+      const rid = routeRegion.get(String(v.route_assignment_id));
       return matchesRegion(regionScope, rid);
     });
   }
@@ -159,14 +163,29 @@ export async function getVehicleByReg(
   reg: string
 ): Promise<VehicleRow | null> {
   const admin = createSupabaseAdminClient();
+  const plate = normalizePlate(reg);
+  const compact = plateKey(plate);
 
-  const { data, error } = await admin
+  let { data, error } = await admin
     .from("vehicles")
     .select(SELECT_COLUMNS)
-    .eq("registration_number", reg.toUpperCase())
+    .eq("registration_number", plate)
     .maybeSingle();
 
   if (error) throw new Error(`Failed to fetch vehicle: ${error.message}`);
+
+  if (!data && compact) {
+    const { data: candidates } = await admin
+      .from("vehicles")
+      .select(SELECT_COLUMNS)
+      .ilike("registration_number", `%${compact.slice(0, 4)}%`)
+      .limit(40);
+    data =
+      (candidates ?? []).find(
+        (r) => plateKey(String(r.registration_number)) === compact
+      ) ?? null;
+  }
+
   if (!data) return null;
 
   let driverName: string | null = null;
