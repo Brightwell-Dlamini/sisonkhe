@@ -1,6 +1,10 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Rotation view is a PROJECTED roster from current fleet + day index.
+ * It is NOT a persisted daily commitment. For true rank law, persist
+ * daily_rotation_slots (future). Callers must treat this as planning only.
  */
 
 import "server-only";
@@ -31,6 +35,9 @@ export interface RotationView {
   totalDays: number;
   cycleEndDate: string;
   dailyRoster: RotationDay[];
+  /** Always true until daily slots are persisted */
+  isProjected: true;
+  disclaimer: string;
 }
 
 const MONTH_NAMES = [
@@ -73,11 +80,15 @@ export async function getRotationView(
       .from("drivers")
       .select("id, full_name")
       .in("id", driverIds);
-    for (const d of drivers ?? []) driverMap.set(d.id as string, d.full_name as string);
+    for (const d of drivers ?? [])
+      driverMap.set(d.id as string, d.full_name as string);
   }
 
   const now = new Date();
-  const parts = (monthStr ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`).split("-");
+  const parts = (
+    monthStr ??
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+  ).split("-");
   const year = parseInt(parts[0], 10);
   const monthIndex = parseInt(parts[1], 10) - 1;
   const totalDays = new Date(year, monthIndex + 1, 0).getDate();
@@ -100,9 +111,10 @@ export async function getRotationView(
       now.getDate() === day;
 
     const shift = regulars.length > 0 ? (day - 1) % regulars.length : 0;
-    const rotated = regulars.length > 0
-      ? [...regulars.slice(shift), ...regulars.slice(0, shift)]
-      : [];
+    const rotated =
+      regulars.length > 0
+        ? [...regulars.slice(shift), ...regulars.slice(0, shift)]
+        : [];
 
     const queue = rotated.map((v, idx) => {
       const driverId = v.driver_id as string | null;
@@ -146,5 +158,8 @@ export async function getRotationView(
     totalDays,
     cycleEndDate,
     dailyRoster,
+    isProjected: true,
+    disclaimer:
+      "Projected roster from current fleet — not a locked daily commitment. Changing the vehicle list rewrites the calendar.",
   };
 }
