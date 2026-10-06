@@ -1,9 +1,6 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * GET  /api/renewals?status=Pending+Admin+Approval   — list (scoped by role)
- * POST /api/renewals                                  — create (operator only)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -13,23 +10,21 @@ import { createRenewalSchema, RENEWAL_TERMS } from "@/lib/renewals/validation";
 import {
   createRenewalRequest,
   listRenewals,
-  getVehicleRegsInScope,
   type RenewalRow,
 } from "@/lib/renewals/queries";
+import { normalizePlate } from "@/lib/domain/identity";
+import { nextReceiptNumber } from "@/lib/domain/serials";
+import { writeAudit } from "@/lib/domain/audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const VIEW_ROLES = ["super-admin", "admin", "fleet-manager", "operator"] as const;
 
-// ---------------------------------------------------------------------------
-// GET
-// ---------------------------------------------------------------------------
-
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession();
-    if (!session || !VIEW_ROLES.includes(session.role as any)) {
+    if (!session || !VIEW_ROLES.includes(session.role as (typeof VIEW_ROLES)[number])) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -42,14 +37,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ renewals });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/renewals] GET error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-// ---------------------------------------------------------------------------
-// POST — operator submits a renewal
-// ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
   try {
@@ -74,20 +64,20 @@ export async function POST(request: NextRequest) {
     }
 
     const input = parsed.data;
+    const plate = normalizePlate(input.vehicleReg);
     const admin = createSupabaseAdminClient();
 
-    // Verify operator owns this vehicle
     const { data: vehicle } = await admin
       .from("vehicles")
       .select(
-        "registration_number, vic, permit_number, permit_expiry_date, driver_id, owner_operator_id"
+        "registration_number, vic, permit_number, permit_expiry_date, driver_id, owner_operator_id, status"
       )
-      .eq("registration_number", input.vehicleReg)
+      .eq("registration_number", plate)
       .maybeSingle();
 
     if (!vehicle) {
       return NextResponse.json(
-        { error: `Vehicle ${input.vehicleReg} not found.` },
+        { error: `Vehicle ${plate} not found.` },
         { status: 404 }
       );
     }
@@ -99,24 +89,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check no pending request already exists
-    const { data: existing } = await admin
-      .from("permit_renewal_requests")
-      .select("id")
-      .eq("vehicle_reg", input.vehicleReg)
-      .eq("status", "Pending Admin Approval")
-      .maybeSingle();
-
-    if (existing) {
+    if (vehicle.status === "Loading" || vehicle.status === "Departed") {
       return NextResponse.json(
         {
-          error: `A pending renewal already exists for ${input.vehicleReg}.`,
+          error: `Vehicle is ${vehicle.status}. Return to Waiting before submitting a renewal.`,
         },
         { status: 409 }
       );
     }
 
-    // Find driver name
+    const { data: existing } = await admin
+      .from("permit_renewal_requests")
+      .select("id")
+      .eq("vehicle_reg", plate)
+      .in("status", ["Pending Admin Approval", "Approved"])
+      .maybeSingle();
+
+    if (existing) {
+      return NextResponse.json(
+        {
+          error: `An open renewal already exists for ${plate} (pending or approved awaiting print).`,
+        },
+        { status: 409 }
+      );
+    }
+
     let driverName: string | null = null;
     if (vehicle.driver_id) {
       const { data: driver } = await admin
@@ -127,7 +124,6 @@ export async function POST(request: NextRequest) {
       driverName = (driver?.full_name as string | undefined) ?? null;
     }
 
-    // Handle Master Card payment
     let masterPaymentRef: string | undefined;
     let masterPaymentAmountSzl: number | undefined;
 
@@ -137,7 +133,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid term." }, { status: 400 });
       }
 
-      // Load master card
       const { data: card } = await admin
         .from("operator_master_cards")
         .select("id, balance_szl, status")
@@ -158,32 +153,46 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (Number(card.balance_szl) < term.feeSzl) {
+      const bal = Number(card.balance_szl);
+      if (bal < term.feeSzl) {
         return NextResponse.json(
           {
-            error: `Insufficient master card balance (E${Number(card.balance_szl).toFixed(2)} available, E${term.feeSzl.toFixed(2)} required).`,
+            error: `Insufficient master card balance (E${bal.toFixed(2)} available, E${term.feeSzl.toFixed(2)} required).`,
           },
           { status: 400 }
         );
       }
 
-      // Debit card
-      masterPaymentRef = `REN-PAY-${Math.floor(100000 + Math.random() * 900000)}`;
+      masterPaymentRef = await nextReceiptNumber(admin, "REN-PAY");
       masterPaymentAmountSzl = term.feeSzl;
+      const newBal = bal - term.feeSzl;
 
-      await admin
+      // Conditional update — only if balance unchanged (optimistic concurrency)
+      const { data: debited, error: debitErr } = await admin
         .from("operator_master_cards")
-        .update({ balance_szl: Number(card.balance_szl) - term.feeSzl })
-        .eq("id", card.id as string);
+        .update({ balance_szl: newBal })
+        .eq("id", card.id as string)
+        .eq("balance_szl", bal)
+        .select("id")
+        .maybeSingle();
 
-      // Record transaction
+      if (debitErr || !debited) {
+        return NextResponse.json(
+          {
+            error:
+              "Could not debit master card (balance changed). Retry the payment.",
+          },
+          { status: 409 }
+        );
+      }
+
       await admin.from("operator_card_transactions").insert({
-        id: `tx-ren-${Date.now()}`,
+        id: `tx_ren_${Date.now()}_${plate.replace(/\s+/g, "").slice(0, 8)}`,
         card_id: card.id as string,
         timestamp: new Date().toISOString(),
         type: "PERMIT_RENEWAL_FEE",
-        description: `Permit renewal fee for ${input.vehicleReg} (${input.termMonths} months)`,
-        target_vehicle_reg: input.vehicleReg,
+        description: `Permit renewal fee for ${plate} (${input.termMonths} months)`,
+        target_vehicle_reg: plate,
         category: "Permit Renewal",
         amount_szl: term.feeSzl,
         direction: "DEBIT",
@@ -192,10 +201,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Create renewal request
     const renewal = await createRenewalRequest(
       {
-        vehicleReg: input.vehicleReg,
+        vehicleReg: plate,
         reason: input.reason,
         comments: input.comments || undefined,
         supportingDocuments: input.supportingDocuments ?? [],
@@ -217,10 +225,20 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    await writeAudit(admin, {
+      action: "permit.approve",
+      actorId: session.authUserId,
+      actorRole: session.role,
+      actorName: session.fullName,
+      entityType: "renewal",
+      entityId: plate,
+      summary: `Submitted renewal for ${plate}`,
+      meta: { masterPaymentRef: masterPaymentRef ?? null },
+    });
+
     return NextResponse.json({ success: true, renewal });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/renewals] POST error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
