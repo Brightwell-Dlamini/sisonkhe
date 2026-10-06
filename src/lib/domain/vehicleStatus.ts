@@ -9,6 +9,9 @@
  *  - Marshal dispatch is the ONLY writer of `Loading | Departed | Delayed | Breakdown`.
  *  - Driver signals are requests; they never write status directly.
  *  - `Full` is NOT a vehicle status. It is a driver *signal* (see driverSignal.ts).
+ *  - `Archived` is a terminal state. A vehicle that reaches it is retired
+ *    from operation, but its history is preserved (append-only discipline).
+ *    Archived vehicles are exempt from the operator-required constraint.
  */
 
 export const VEHICLE_STATUSES = [
@@ -18,6 +21,7 @@ export const VEHICLE_STATUSES = [
   "Delayed",
   "Breakdown",
   "Offline",
+  "Archived",
 ] as const;
 
 export type VehicleStatus = (typeof VEHICLE_STATUSES)[number];
@@ -42,6 +46,7 @@ const ALLOWED: Record<VehicleStatus, MarshalAction[]> = {
   Departed: ["reset_to_waiting"],
   Breakdown: ["reset_to_waiting"],
   Offline: [],
+  Archived: [],
 };
 
 export function canMarshalTransition(

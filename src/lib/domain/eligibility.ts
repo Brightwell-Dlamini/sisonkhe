@@ -112,6 +112,12 @@ export function vehicleAssignableToDriver(
   targetDriverId?: string | null
 ): EligibilityResult {
   const st = (vehicle.status ?? "").trim();
+  if (st === "Archived") {
+    return {
+      eligible: false,
+      reason: `${vehicle.registrationNumber} is archived and cannot take a driver.`,
+    };
+  }
   if (st === "Offline" || st === "Decommissioned") {
     return {
       eligible: false,
@@ -214,9 +220,9 @@ export function marshalAssignableToRoute(
     routeAlreadyHasMarshalId !== marshal.id
   ) {
     return {
-      eligible: true,
-      warning:
-        "Another marshal is already on this route. Both can work the rank, but clarify primary.",
+      eligible: false,
+      reason:
+        "Another marshal is already on this route. Only one active marshal per route is allowed.",
     };
   }
   return { eligible: true };
@@ -242,6 +248,12 @@ export function vehicleCanChangeOperator(
       reason: `Vehicle is ${st}. Return to Waiting before ownership transfer.`,
     };
   }
+  if (st === "Archived") {
+    return {
+      eligible: false,
+      reason: "Archived vehicles cannot change operator.",
+    };
+  }
   return {
     eligible: true,
     warning: "Ownership transfer moves permit liability to the new operator.",
@@ -265,6 +277,14 @@ export type DispatchGateInput = {
 
 /** Load/depart gates share evaluateCompliance — one brain with inspector. */
 export function canDispatchLoad(input: DispatchGateInput): EligibilityResult {
+  // Archived vehicles can never load or depart — checked before compliance.
+  if ((input.vehicleStatus ?? "").trim() === "Archived") {
+    return {
+      eligible: false,
+      reason: "Vehicle is archived and cannot be dispatched.",
+    };
+  }
+
   const report = evaluateCompliance({
     permitStatus: input.permitStatus,
     permitExpiryDate: input.permitExpiryDate,
@@ -279,7 +299,6 @@ export function canDispatchLoad(input: DispatchGateInput): EligibilityResult {
     driverPdpExpiry: input.driverPdpExpiry,
   });
 
-  // printPending from renewal or explicit flag
   if (input.printPending || report.printPending) {
     return {
       eligible: false,
@@ -312,6 +331,7 @@ export type RankStatus =
   | "Departed"
   | "Breakdown"
   | "Offline"
+  | "Archived"
   | string;
 
 export type RankAction =
@@ -329,6 +349,7 @@ const ALLOWED: Record<string, RankAction[]> = {
   Departed: ["reset_to_waiting"],
   Breakdown: ["reset_to_waiting"],
   Offline: [],
+  Archived: [],
 };
 
 export function canRankTransition(

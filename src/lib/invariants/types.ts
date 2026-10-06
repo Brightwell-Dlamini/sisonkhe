@@ -4,6 +4,8 @@
  *
  * Phase 0 — Types for the invariant observation layer.
  * Phase 2 — Added labels for the extended money-chain invariants.
+ * Phase 3 — Added labels for the extended operational invariants.
+ * Phase 4 — Added authority lattice label.
  */
 
 export interface InvariantRunSummary {
@@ -12,6 +14,7 @@ export interface InvariantRunSummary {
   money: number;
   identity: number;
   operational: number;
+  authority?: number;
   total: number;
   newly_inserted?: number;
   auto_resolved?: number;
@@ -85,7 +88,15 @@ export function invariantLabel(code: string): string {
     "ops.driver_vehicle_mismatch":
       "Driver and vehicle disagree about who is driving",
     "ops.vehicle_without_operator":
-      "Vehicle has no operator",
+      "Non-archived vehicle has no operator",
+    "ops.vehicle_driver_dangling":
+      "Vehicle's driver_id points at a driver that does not exist",
+    "ops.permit_status_drift":
+      "Vehicle permit_status disagrees with its active permit",
+
+    // Authority lattice
+    "authority.policy_gap":
+      "RLS write policy is too permissive — no role, region, or ownership scope",
   };
   return map[code] ?? code;
 }

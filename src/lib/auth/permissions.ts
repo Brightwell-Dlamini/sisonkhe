@@ -4,10 +4,22 @@
  *
  * Role capability matrix.
  *
- * super-admin  — national, platform + break-glass
- * admin        — region-scoped rank operations (no platform)
+ * super-admin   — national, platform + break-glass
+ * admin         — region-scoped rank operations (no platform)
  * fleet-manager — same operational surface as admin, region-aware
- * inspector    — roadside read + tickets (government enforcement)
+ * inspector     — roadside read + tickets (government enforcement)
+ *
+ * =============================================================================
+ * DB policy contract — Phase 4
+ * =============================================================================
+ * Every permission below has a matching RLS policy in
+ * supabase/migrations/20261018_authority_lattice.sql. The naming convention
+ * is <table>_scoped_<read|write> for anything that used to be loose.
+ *
+ * If you add a permission here, add the corresponding policy name to the
+ * comment. If the policy name is ever renamed in a migration, update it
+ * here in the same PR.
+ * =============================================================================
  */
 
 import type { AuthRole, ResolvedUser } from "./roles";
@@ -34,6 +46,34 @@ export type Permission =
   | "admin.national"
   | "inspector.lookup"
   | "inspector.ticket";
+
+/**
+ * Permission → DB policy pairs.
+ *
+ * Key:   the Permission used by the app.
+ * Value: the RLS policy name(s) that enforce the same rule at the DB.
+ *
+ * Kept as a separate map so a lint rule or test can assert the two stay in
+ * sync as the schema evolves.
+ */
+export const PERMISSION_POLICIES: Partial<Record<Permission, string[]>> = {
+  "admin.drivers":           ["drivers_scoped_write"],
+  "admin.operators":         ["omcards_scoped_write", "operators_scoped_update"],
+  "admin.marshals":          ["marshals_scoped_write"],
+  "admin.vehicles":          ["vehicles_scoped_write"],
+  "admin.routes":            ["routes_scoped_write"],
+  "admin.terminals":         ["regions_super_admin_write"],
+  "admin.permits.review":    ["renewals_scoped_write"],
+  "admin.permits.print":     ["renewals_scoped_write"],
+  "admin.reports":           ["trips_scoped_read"],
+  "admin.audits.view":       ["audit_scoped_read"],
+  "admin.staff":             ["staff_super_admin_write"],
+  "admin.platform":          ["adverts_super_admin_write"],
+  "admin.config":            ["system_config_super_admin_write"],
+  "admin.ledger.view":       ["trips_scoped_read", "payments_scoped_read"],
+  "inspector.ticket":        ["tickets_inspector_write"],
+  "inspector.lookup":        ["vehicles_scoped_read", "drivers_scoped_read"],
+};
 
 const SUPER: Permission[] = [
   "admin.shell",
