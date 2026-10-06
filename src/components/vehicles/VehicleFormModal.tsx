@@ -1,9 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { Modal, Button, Input, Textarea, Select, Checkbox, useToast } from "@/components/ui";
+import { useMemo, useState } from "react";
+import { Modal, Button, Input, Select, Checkbox, useToast } from "@/components/ui";
 import type { Vehicle, Route, Driver } from "@/types";
 import type { CreateVehicleRequest } from "@/hooks/useVehicleRegistry";
+import {
+  filterAssignableDrivers,
+  driverOptionLabel,
+  driverAssignableToVehicle,
+} from "@/lib/domain/eligibility";
 
 interface Props {
   isOpen: boolean;
@@ -24,7 +29,6 @@ export default function VehicleFormModal({
   editingVehicle,
   routes,
   drivers,
-  associations,
 }: Props) {
   const isEditing = !!editingVehicle;
   const toast = useToast();
@@ -61,6 +65,40 @@ export default function VehicleFormModal({
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
 
+  const eligibleDrivers = useMemo(() => {
+    const mapped = drivers.map((d) => ({
+      id: d.id,
+      fullName: d.fullName,
+      status: d.status ?? "Active",
+      assignedVehicleReg: d.assignedVehicleReg ?? null,
+      pdpStatus: (d as { pdpStatus?: string }).pdpStatus ?? null,
+      pdpExpiryDate: (d as { pdpExpiryDate?: string }).pdpExpiryDate ?? null,
+    }));
+    return filterAssignableDrivers(
+      mapped,
+      form.registrationNumber || editingVehicle?.registrationNumber,
+      form.driverId || editingVehicle?.driverId
+    );
+  }, [drivers, form.registrationNumber, form.driverId, editingVehicle]);
+
+  const driverHint = useMemo(() => {
+    if (!form.driverId) return null;
+    const d = drivers.find((x) => x.id === form.driverId);
+    if (!d) return null;
+    const r = driverAssignableToVehicle(
+      {
+        id: d.id,
+        fullName: d.fullName,
+        status: d.status,
+        assignedVehicleReg: d.assignedVehicleReg,
+        pdpStatus: (d as { pdpStatus?: string }).pdpStatus,
+        pdpExpiryDate: (d as { pdpExpiryDate?: string }).pdpExpiryDate,
+      },
+      form.registrationNumber || editingVehicle?.registrationNumber
+    );
+    return r.warning || (!r.eligible ? r.reason : null);
+  }, [form.driverId, form.registrationNumber, drivers, editingVehicle]);
+
   const update = <K extends keyof CreateVehicleRequest>(
     key: K,
     value: CreateVehicleRequest[K]
@@ -70,6 +108,33 @@ export default function VehicleFormModal({
     e.preventDefault();
     setErrors({});
     setSubmitting(true);
+
+    if (form.driverId) {
+      const d = drivers.find((x) => x.id === form.driverId);
+      if (d) {
+        const check = driverAssignableToVehicle(
+          {
+            id: d.id,
+            fullName: d.fullName,
+            status: d.status,
+            assignedVehicleReg: d.assignedVehicleReg,
+            pdpStatus: (d as { pdpStatus?: string }).pdpStatus,
+            pdpExpiryDate: (d as { pdpExpiryDate?: string }).pdpExpiryDate,
+          },
+          form.registrationNumber || editingVehicle?.registrationNumber
+        );
+        const sameVehicle =
+          d.assignedVehicleReg &&
+          form.registrationNumber &&
+          d.assignedVehicleReg.replace(/\s+/g, " ").toUpperCase() ===
+            form.registrationNumber.replace(/\s+/g, " ").toUpperCase();
+        if (!check.eligible && !sameVehicle && d.id !== editingVehicle?.driverId) {
+          setSubmitting(false);
+          toast.error(check.reason ?? "Driver not eligible");
+          return;
+        }
+      }
+    }
 
     const res = await onSubmit(form);
     setSubmitting(false);
@@ -110,7 +175,6 @@ export default function VehicleFormModal({
       }
     >
       <form id="vehicle-form" onSubmit={handleSubmit} className="space-y-5">
-        {/* Identification */}
         <Section title="Identification">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Field label="Registration Number *" error={errors.registrationNumber?.[0]}>
@@ -188,7 +252,6 @@ export default function VehicleFormModal({
           </div>
         </Section>
 
-        {/* Assignment */}
         <Section title="Assignment">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Route">
@@ -210,17 +273,25 @@ export default function VehicleFormModal({
                 onChange={(e) => update("driverId", e.target.value)}
               >
                 <option value="">— No driver —</option>
-                {drivers.map((d) => (
+                {eligibleDrivers.map((d) => (
                   <option key={d.id} value={d.id}>
-                    {d.fullName}
+                    {driverOptionLabel(d)}
                   </option>
                 ))}
               </Select>
+              <p className="mt-1 text-[10px] text-zinc-500">
+                Only available drivers (not already on another vehicle, not
+                suspended). {eligibleDrivers.length} of {drivers.length} shown.
+              </p>
+              {driverHint && (
+                <p className="mt-1 text-[10px] text-amber-400 font-medium">
+                  {driverHint}
+                </p>
+              )}
             </Field>
           </div>
         </Section>
 
-        {/* Ownership */}
         <Section title="Ownership">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Owner Name">
@@ -248,7 +319,6 @@ export default function VehicleFormModal({
           </div>
         </Section>
 
-        {/* Permit */}
         <Section title="Permit & Compliance">
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <Field label="Permit #">
@@ -322,7 +392,6 @@ export default function VehicleFormModal({
           </div>
         </Section>
 
-        {/* Mid-month */}
         <Section title="Queue Rotation">
           <Checkbox
             checked={!!form.isMidMonthAddition}
