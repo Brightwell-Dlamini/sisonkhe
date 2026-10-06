@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Marshal dispatch transitions.
- * Domain gates: no load/depart without valid driver, permit, COF, PDP.
+ * Domain gates: driver, permit, COF, PDP, print-pending.
  */
 
 import "server-only";
@@ -13,7 +13,6 @@ import { canDispatchLoad, canDispatchDepart } from "@/lib/domain/eligibility";
 
 const RANK_FEE_SZL = 25;
 const DOUBLE_CLICK_MS = 3_000;
-
 const DEPARTABLE_STATUSES = new Set(["Loading", "Waiting", "Delayed"]);
 
 export type DispatchAction =
@@ -46,6 +45,7 @@ type AuthVehicle = {
   driverStatus: string | null;
   driverPdpStatus: string | null;
   driverPdpExpiry: string | null;
+  printPending: boolean;
 };
 
 async function authorizeVehicle(
@@ -107,6 +107,19 @@ async function authorizeVehicle(
     }
   }
 
+  let printPending = false;
+  try {
+    const { data: pendingPrint } = await admin
+      .from("permit_renewal_requests")
+      .select("id")
+      .eq("vehicle_reg", vehicle.registration_number as string)
+      .eq("status", "Approved")
+      .limit(1);
+    printPending = !!(pendingPrint && pendingPrint.length > 0);
+  } catch {
+    printPending = false;
+  }
+
   return {
     reg: vehicle.registration_number as string,
     routeId,
@@ -121,6 +134,7 @@ async function authorizeVehicle(
     driverStatus,
     driverPdpStatus,
     driverPdpExpiry,
+    printPending,
   };
 }
 
@@ -134,6 +148,7 @@ function gatePayload(vehicle: AuthVehicle) {
     permitExpiryDate: vehicle.permitExpiryDate,
     cofExpiryDate: vehicle.cofExpiryDate,
     vehicleStatus: vehicle.status,
+    printPending: vehicle.printPending,
   };
 }
 
@@ -147,11 +162,7 @@ async function countQueuedOnRoute(
     .select("*", { count: "exact", head: true })
     .eq("route_assignment_id", routeId)
     .gt("current_queue_position", 0);
-
-  if (excludeReg) {
-    q = q.neq("registration_number", excludeReg);
-  }
-
+  if (excludeReg) q = q.neq("registration_number", excludeReg);
   const { count } = await q;
   return count ?? 0;
 }
@@ -162,8 +173,7 @@ async function writeRankFee(
   triggerSource: string
 ): Promise<{ written: boolean; error?: string }> {
   const admin = createSupabaseAdminClient();
-  const now = new Date();
-  const nowIso = now.toISOString();
+  const nowIso = new Date().toISOString();
   const date = nowIso.slice(0, 10);
   const month = nowIso.slice(0, 7);
   const sinceIso = new Date(Date.now() - DOUBLE_CLICK_MS).toISOString();
@@ -175,14 +185,10 @@ async function writeRankFee(
     .eq("vehicle_reg", registrationNumber)
     .gte("timestamp", sinceIso)
     .limit(1);
-
-  if (recent && recent.length > 0) {
-    return { written: false };
-  }
+  if (recent && recent.length > 0) return { written: false };
 
   const safeReg = registrationNumber.replace(/\s+/g, "");
   const txId = `mtx_${Date.now()}_${safeReg}`;
-
   const { error: txErr } = await admin.from("marshal_transactions").insert({
     id: txId,
     marshal_id: context.marshalId,
@@ -193,13 +199,9 @@ async function writeRankFee(
     trigger_source: triggerSource,
     amount_szl: RANK_FEE_SZL,
   });
+  if (txErr) return { written: false, error: txErr.message };
 
-  if (txErr) {
-    console.error("[marshal/dispatch] marshal_transactions insert error:", txErr);
-    return { written: false, error: txErr.message };
-  }
-
-  const { error: payErr } = await admin.from("rank_fee_payments").insert({
+  await admin.from("rank_fee_payments").insert({
     id: `rfp_${Date.now()}_${safeReg}`,
     timestamp: nowIso,
     vehicle_reg: registrationNumber,
@@ -211,11 +213,6 @@ async function writeRankFee(
     allocation_nrtc: 3.5,
     allocation_maintenance: 1.5,
   });
-
-  if (payErr) {
-    console.error("[marshal/dispatch] rank_fee_payments insert error:", payErr);
-  }
-
   return { written: true };
 }
 
@@ -228,16 +225,9 @@ async function recordTrip(
   },
   nowIso: string
 ): Promise<void> {
-  if (!vehicle.routeId) {
-    console.warn("[marshal/dispatch] skip trip — no route:", vehicle.reg);
-    return;
-  }
-
+  if (!vehicle.routeId) return;
   const admin = createSupabaseAdminClient();
   const now = new Date(nowIso);
-  const date = now.toISOString().slice(0, 10);
-  const departureTime = now.toISOString().slice(11, 16);
-
   const { data: route } = await admin
     .from("routes")
     .select("base_fare_e")
@@ -245,14 +235,10 @@ async function recordTrip(
     .maybeSingle();
   const fare = Number(route?.base_fare_e ?? 0);
   const passengers = Math.max(1, vehicle.seatingCapacity);
-  const revenue = fare * passengers;
-
-  const id = `trip_${Date.now()}_${vehicle.reg.replace(/\s+/g, "")}`;
-
-  const { error } = await admin.from("trips").insert({
-    id,
-    date,
-    departure_time: departureTime,
+  await admin.from("trips").insert({
+    id: `trip_${Date.now()}_${vehicle.reg.replace(/\s+/g, "")}`,
+    date: now.toISOString().slice(0, 10),
+    departure_time: now.toISOString().slice(11, 16),
     arrival_time: null,
     route_id: vehicle.routeId,
     vehicle_reg: vehicle.reg,
@@ -261,12 +247,8 @@ async function recordTrip(
     trip_duration_minutes: null,
     delay_reason: null,
     status: "Completed",
-    revenue_szl: revenue,
+    revenue_szl: fare * passengers,
   });
-
-  if (error) {
-    console.error("[marshal/dispatch] trip insert error:", error);
-  }
 }
 
 async function logSyncEvent(
@@ -278,23 +260,17 @@ async function logSyncEvent(
 ): Promise<void> {
   const admin = createSupabaseAdminClient();
   const id = `evt_${Date.now()}_${entityId.replace(/\s+/g, "")}`;
-  const idempotencyKey = `${id}_${operation}`;
-
-  const { error } = await admin.from("sync_events").insert({
+  await admin.from("sync_events").insert({
     id,
     entity_type: "vehicle",
     entity_id: entityId,
     operation,
     payload,
-    idempotency_key: idempotencyKey,
+    idempotency_key: `${id}_${operation}`,
     client_id: clientId,
     occurred_at: new Date().toISOString(),
     base_version: baseVersion,
   });
-
-  if (error) {
-    console.warn("[marshal/dispatch] sync_events insert failed:", error.message);
-  }
 }
 
 export async function applyDispatchAction(
@@ -305,10 +281,7 @@ export async function applyDispatchAction(
 ): Promise<DispatchResult> {
   const vehicle = await authorizeVehicle(context, registrationNumber);
   if (!vehicle) {
-    return {
-      success: false,
-      error: "Vehicle not found or not under your authority.",
-    };
+    return { success: false, error: "Vehicle not found or not under your authority." };
   }
 
   const reg = vehicle.reg;
@@ -319,38 +292,20 @@ export async function applyDispatchAction(
   switch (action) {
     case "load": {
       const gate = canDispatchLoad(gatePayload(vehicle));
-      if (!gate.eligible) {
-        return { success: false, error: gate.reason };
-      }
+      if (!gate.eligible) return { success: false, error: gate.reason };
 
       let newPosition = vehicle.currentQueuePosition;
       if (newPosition < 1) {
-        const maxQueued = await countQueuedOnRoute(vehicle.routeId ?? "", reg);
-        newPosition = maxQueued + 1;
+        newPosition = (await countQueuedOnRoute(vehicle.routeId ?? "", reg)) + 1;
       }
-
-      const payload = {
-        status: "Loading",
-        current_queue_position: newPosition,
-      };
-
+      const payload = { status: "Loading", current_queue_position: newPosition };
       const { error } = await admin
         .from("vehicles")
-        .update({
-          ...payload,
-          version: vehicle.version + 1,
-          updated_at: nowIso,
-        })
+        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
         .eq("registration_number", reg);
-
       if (error) return { success: false, error: error.message };
-
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
-      return {
-        success: true,
-        newStatus: "Loading",
-        warning: gate.warning,
-      };
+      return { success: true, newStatus: "Loading", warning: gate.warning };
     }
 
     case "full_cabin":
@@ -364,46 +319,22 @@ export async function applyDispatchAction(
               : `Cannot depart from status "${vehicle.status}". Load the vehicle first.`,
         };
       }
-
       const gate = canDispatchDepart(gatePayload(vehicle));
-      if (!gate.eligible) {
-        return { success: false, error: gate.reason };
-      }
+      if (!gate.eligible) return { success: false, error: gate.reason };
 
-      const trigger =
-        action === "full_cabin" ? "Full Cabin Button" : "Depart Button";
+      const trigger = action === "full_cabin" ? "Full Cabin Button" : "Depart Button";
       const fee = await writeRankFee(context, reg, trigger);
-
-      if (fee.error) {
-        return {
-          success: false,
-          error: `Could not record rank fee: ${fee.error}`,
-        };
-      }
-
+      if (fee.error) return { success: false, error: `Could not record rank fee: ${fee.error}` };
       if (!fee.written) {
-        return {
-          success: true,
-          newStatus: vehicle.status === "Departed" ? "Departed" : vehicle.status,
-          rankFeeWritten: false,
-        };
+        return { success: true, newStatus: vehicle.status, rankFeeWritten: false };
       }
 
       const oldPos = vehicle.currentQueuePosition;
-      const payload = {
-        status: "Departed",
-        current_queue_position: 0,
-      };
-
+      const payload = { status: "Departed", current_queue_position: 0 };
       const { error } = await admin
         .from("vehicles")
-        .update({
-          ...payload,
-          version: vehicle.version + 1,
-          updated_at: nowIso,
-        })
+        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
         .eq("registration_number", reg);
-
       if (error) return { success: false, error: error.message };
 
       if (oldPos > 0 && vehicle.routeId) {
@@ -416,10 +347,8 @@ export async function applyDispatchAction(
           /* best-effort */
         }
       }
-
       await recordTrip({ ...vehicle, reg }, nowIso);
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
-
       return {
         success: true,
         newStatus: "Departed",
@@ -432,79 +361,49 @@ export async function applyDispatchAction(
       const payload = { status: "Delayed" };
       const { error } = await admin
         .from("vehicles")
-        .update({
-          ...payload,
-          version: vehicle.version + 1,
-          updated_at: nowIso,
-        })
+        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
         .eq("registration_number", reg);
-
       if (error) return { success: false, error: error.message };
-
       if (reason) {
         await admin.from("notifications").insert({
           id: `notif_${Date.now()}`,
           timestamp: nowIso,
           type: "Push",
-          recipient_name: null,
-          recipient_phone: null,
           message: `Delay reported for ${reg}: ${reason}`,
           status: "Sent",
         });
       }
-
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
       return { success: true, newStatus: "Delayed" };
     }
 
     case "breakdown": {
-      const payload = {
-        status: "Breakdown",
-        current_queue_position: 0,
-      };
+      const payload = { status: "Breakdown", current_queue_position: 0 };
       const { error } = await admin
         .from("vehicles")
-        .update({
-          ...payload,
-          version: vehicle.version + 1,
-          updated_at: nowIso,
-        })
+        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
         .eq("registration_number", reg);
-
       if (error) return { success: false, error: error.message };
-
       if (reason) {
         await admin.from("notifications").insert({
           id: `notif_${Date.now()}`,
           timestamp: nowIso,
           type: "Push",
-          recipient_name: null,
-          recipient_phone: null,
           message: `Breakdown reported for ${reg}: ${reason}`,
           status: "Sent",
         });
       }
-
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
       return { success: true, newStatus: "Breakdown" };
     }
 
     case "reset_to_waiting": {
-      const payload = {
-        status: "Waiting",
-        current_queue_position: 0,
-      };
+      const payload = { status: "Waiting", current_queue_position: 0 };
       const { error } = await admin
         .from("vehicles")
-        .update({
-          ...payload,
-          version: vehicle.version + 1,
-          updated_at: nowIso,
-        })
+        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
         .eq("registration_number", reg);
-
       if (error) return { success: false, error: error.message };
-
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
       return { success: true, newStatus: "Waiting" };
     }
