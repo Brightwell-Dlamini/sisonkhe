@@ -81,8 +81,8 @@ export function previewSuspendDriver(input: SuspendDriverInput): ConsequencePrev
   if (input.assignedVehicleReg) {
     effects.push(
       effect(
-        `Vehicle ${input.assignedVehicleReg} remains assigned — reassign if it must keep operating`,
-        "high",
+        `Vehicle ${input.assignedVehicleReg} will be unlinked automatically (both sides cleared)`,
+        "critical",
         true
       )
     );
@@ -102,7 +102,7 @@ export function previewSuspendDriver(input: SuspendDriverInput): ConsequencePrev
     blockers: [],
     recommended: true,
     summary: input.assignedVehicleReg
-      ? `Blocks ${input.driverName}. Vehicle ${input.assignedVehicleReg} stays linked until you reassign.`
+      ? `Blocks ${input.driverName} and releases ${input.assignedVehicleReg} for reassignment.`
       : `Blocks ${input.driverName} from the network.`,
   };
 }
@@ -129,7 +129,7 @@ export function previewApproveRenewal(input: ApproveRenewalInput): ConsequencePr
     effects.push(effect(`COF expiry set to ${input.cofExpiryDate}`, "medium", false));
   }
   effects.push(
-    effect("Vehicle becomes eligible for print queue (A4 + signed QR)", "high", false)
+    effect("Vehicle enters print queue — rank load stays blocked until printed", "critical", false)
   );
   effects.push(effect("Prior permit archived for audit", "low", false));
   if (input.paidWithMasterCard) {
@@ -149,7 +149,7 @@ export function previewApproveRenewal(input: ApproveRenewalInput): ConsequencePr
     summary:
       blockers.length > 0
         ? "Complete required fields before approval."
-        : `Activates compliance for ${input.vehicleReg} and opens print eligibility.`,
+        : `Activates ${input.vehicleReg}. Print A4 + QR before rank can load.`,
   };
 }
 
