@@ -6,10 +6,8 @@
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 import type { ResolvedUser } from "../auth/roles";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import { writeAudit } from "../domain/audit";
+import { randomBytes } from "crypto";
 
 export interface RenewalRow {
   id: string;
@@ -22,7 +20,7 @@ export interface RenewalRow {
   reasonForRenewal: string;
   comments: string | null;
   supportingDocuments: string[];
-  status: "Pending Admin Approval" | "Approved" | "Rejected";
+  status: "Pending Admin Approval" | "Approved" | "Rejected" | "Printed";
   timestamp: string;
   requestDate: string;
 
@@ -49,16 +47,6 @@ export interface RenewalRow {
   renewalFeeAmountSzl: number | null;
 }
 
-// ---------------------------------------------------------------------------
-// Scope resolution
-// ---------------------------------------------------------------------------
-
-/**
- * Determine which vehicle registrations the caller can see.
- *   - operator: only their own vehicles
- *   - admin: only vehicles in their region
- *   - fleet-manager / super-admin: everything
- */
 export async function getVehicleRegsInScope(
   user: ResolvedUser
 ): Promise<string[] | null> {
@@ -87,13 +75,8 @@ export async function getVehicleRegsInScope(
     return (data ?? []).map((v) => v.registration_number as string);
   }
 
-  // super-admin, fleet-manager: national
   return null;
 }
-
-// ---------------------------------------------------------------------------
-// Mapping
-// ---------------------------------------------------------------------------
 
 function mapRow(row: Record<string, unknown>): RenewalRow {
   return {
@@ -147,10 +130,6 @@ const SELECT_COLUMNS = `
   paid_with_master_card, master_payment_ref, renewal_fee_amount_szl
 `;
 
-// ---------------------------------------------------------------------------
-// List
-// ---------------------------------------------------------------------------
-
 export async function listRenewals(
   user: ResolvedUser,
   opts: { status?: RenewalRow["status"]; limit?: number } = {}
@@ -173,7 +152,6 @@ export async function listRenewals(
     .limit(opts.limit ?? 200);
 
   if (error) {
-    console.error("[renewals] list error:", error);
     throw new Error(`Failed to list renewals: ${error.message}`);
   }
 
@@ -191,13 +169,8 @@ export async function getRenewalById(
     .eq("id", id)
     .maybeSingle();
 
-  if (error) {
-    console.error("[renewals] getById error:", error);
-    return null;
-  }
-  if (!data) return null;
+  if (error || !data) return null;
 
-  // Scope check
   const vehicleRegs = await getVehicleRegsInScope(user);
   if (vehicleRegs !== null && !vehicleRegs.includes(data.vehicle_reg as string)) {
     return null;
@@ -205,10 +178,6 @@ export async function getRenewalById(
 
   return mapRow(data);
 }
-
-// ---------------------------------------------------------------------------
-// Create
-// ---------------------------------------------------------------------------
 
 export interface CreateRenewalOptions {
   operator: string;
@@ -237,8 +206,7 @@ export async function createRenewalRequest(
 ): Promise<RenewalRow> {
   const admin = createSupabaseAdminClient();
   const now = new Date();
-
-  const id = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const id = `req_${randomBytes(8).toString("hex")}`;
 
   const { data, error } = await admin
     .from("permit_renewal_requests")
@@ -269,16 +237,11 @@ export async function createRenewalRequest(
     .single();
 
   if (error || !data) {
-    console.error("[renewals] create error:", error);
     throw new Error(`Failed to create renewal: ${error?.message}`);
   }
 
   return mapRow(data);
 }
-
-// ---------------------------------------------------------------------------
-// Approve / Reject
-// ---------------------------------------------------------------------------
 
 export interface ApprovalInput {
   decision: "Approved" | "Rejected";
@@ -296,11 +259,10 @@ export interface ApprovalInput {
 export async function approveRenewal(
   id: string,
   input: ApprovalInput,
-  approver: { fullName: string }
+  approver: { fullName: string; authUserId?: string }
 ): Promise<{ success: boolean; error?: string }> {
   const admin = createSupabaseAdminClient();
 
-  // 1. Load the request
   const { data: request, error: fetchErr } = await admin
     .from("permit_renewal_requests")
     .select(SELECT_COLUMNS)
@@ -319,7 +281,6 @@ export async function approveRenewal(
   const now = new Date();
   const today = now.toISOString().split("T")[0];
 
-  // 2. Update the renewal request
   const { error: updateReqErr } = await admin
     .from("permit_renewal_requests")
     .update({
@@ -339,27 +300,23 @@ export async function approveRenewal(
     .eq("id", id);
 
   if (updateReqErr) {
-    console.error("[renewals] update request error:", updateReqErr);
     return { success: false, error: updateReqErr.message };
   }
 
   if (input.decision === "Rejected") {
-    // Write audit log
-    await admin.from("permit_audit_logs").insert({
-      id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      user_role: "Fleet Manager",
-      date: today,
-      time: now.toTimeString().split(" ")[0],
-      device: "Web (Admin Portal)",
-      action: "REJECTED_RENEWAL_REQUEST",
-      previous_values: JSON.stringify({ permit: request.current_permit_number }),
-      new_values: JSON.stringify({ reason: input.renewalNotes ?? "Not specified" }),
-      approval_decision: "Rejected",
+    await writeAudit(admin, {
+      action: "permit.reject",
+      actorId: approver.authUserId,
+      actorName: approver.fullName,
+      entityType: "renewal",
+      entityId: id,
+      summary: `Rejected renewal ${id} for ${vehicleReg}`,
     });
     return { success: true };
   }
 
-  // Approved: update vehicle + archive old permit
+  // Approved: write new permit data to vehicle, but status stays "Approved"
+  // until print marks "Printed" — rank load stays blocked.
   const { data: vehicle } = await admin
     .from("vehicles")
     .select("permit_number, permit_issue_date, permit_expiry_date")
@@ -368,7 +325,7 @@ export async function approveRenewal(
 
   if (vehicle && vehicle.permit_number) {
     await admin.from("permit_renewal_archives").insert({
-      id: `arc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: `arc_${randomBytes(6).toString("hex")}`,
       vehicle_reg: vehicleReg,
       previous_permit_number: vehicle.permit_number as string,
       new_permit_number: input.newPermitNumber ?? "RPT-NEW",
@@ -389,6 +346,7 @@ export async function approveRenewal(
   if (input.cofIssueDate) vehiclePatch.cof_issue_date = input.cofIssueDate;
   if (input.cofExpiryDate) vehiclePatch.cof_expiry_date = input.cofExpiryDate;
   if (input.inspectionDate) vehiclePatch.last_inspection_date = input.inspectionDate;
+  // Keep permit Active numbers, but rank gate still sees renewalStatus=Approved
   vehiclePatch.permit_status = "Active";
 
   if (Object.keys(vehiclePatch).length > 0) {
@@ -398,22 +356,60 @@ export async function approveRenewal(
       .eq("registration_number", vehicleReg);
   }
 
-  // Audit log
-  await admin.from("permit_audit_logs").insert({
-    id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    user_role: "Fleet Manager",
-    date: today,
-    time: now.toTimeString().split(" ")[0],
-    device: "Web (Admin Portal)",
-    action: "APPROVED_RENEWAL_REQUEST",
-    previous_values: JSON.stringify({ permit: request.current_permit_number }),
-    new_values: JSON.stringify({
-      newPermit: input.newPermitNumber,
-      issue: input.permitIssueDate,
-      expiry: input.permitExpiryDate,
-    }),
-    approval_decision: "Approved",
+  await writeAudit(admin, {
+    action: "permit.approve",
+    actorId: approver.authUserId,
+    actorName: approver.fullName,
+    entityType: "renewal",
+    entityId: id,
+    summary: `Approved renewal ${id} for ${vehicleReg} — print required before rank load`,
   });
 
   return { success: true };
+}
+
+/**
+ * After A4/QR print: mark Approved → Printed so rank load is allowed again.
+ */
+export async function markRenewalPrinted(
+  vehicleReg: string,
+  actor: { fullName: string; authUserId?: string }
+): Promise<{ success: boolean; error?: string; marked?: number }> {
+  const admin = createSupabaseAdminClient();
+
+  const { data: open, error } = await admin
+    .from("permit_renewal_requests")
+    .select("id")
+    .eq("vehicle_reg", vehicleReg)
+    .eq("status", "Approved");
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  if (!open || open.length === 0) {
+    return { success: true, marked: 0 };
+  }
+
+  const ids = open.map((r) => r.id as string);
+  const { error: updErr } = await admin
+    .from("permit_renewal_requests")
+    .update({ status: "Printed" })
+    .in("id", ids);
+
+  if (updErr) {
+    return { success: false, error: updErr.message };
+  }
+
+  await writeAudit(admin, {
+    action: "permit.print",
+    actorId: actor.authUserId,
+    actorName: actor.fullName,
+    entityType: "vehicle",
+    entityId: vehicleReg,
+    summary: `Printed permit for ${vehicleReg} — rank load unlocked`,
+    meta: { renewalIds: ids },
+  });
+
+  return { success: true, marked: ids.length };
 }

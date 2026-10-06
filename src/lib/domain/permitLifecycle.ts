@@ -1,8 +1,6 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Permit lifecycle — single mental model for rank + inspector + print queue.
  */
 
 export type PermitLifecycleState =
@@ -18,7 +16,6 @@ export type PermitLifecycleState =
 export type PermitLifecycleInput = {
   permitStatus?: string | null;
   permitExpiryDate?: string | null;
-  /** Open renewal request status if any */
   renewalStatus?: string | null;
 };
 
@@ -53,6 +50,9 @@ export function resolvePermitLifecycle(
       reason: "Approved permit must be printed before rank load.",
     };
   }
+  if (renewal === "Printed") {
+    // Printed closes the open renewal gate; fall through to permit fields
+  }
 
   const st = (input.permitStatus ?? "").trim();
   if (st === "Suspended") {
@@ -80,13 +80,15 @@ export function resolvePermitLifecycle(
   }
 
   if (st === "Active" || st === "Valid" || !st) {
-    return { state: st ? "active" : "none", blocksRankLoad: false };
+    return {
+      state: renewal === "Printed" ? "printed" : st ? "active" : "none",
+      blocksRankLoad: false,
+    };
   }
 
   return { state: "none", blocksRankLoad: false };
 }
 
-/** Block route reassignment while vehicle is in active rank motion. */
 export function canChangeRoute(
   vehicleStatus: string | null | undefined
 ): { allowed: boolean; reason?: string } {

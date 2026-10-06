@@ -1,14 +1,12 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * POST /api/operator/transfer
- * Body: { vehicleReg, amountSzl, category, description? }
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth/session";
 import { transferToVehicle } from "@/lib/operator/transfers";
+import { rateLimit } from "@/lib/domain/rateLimit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,8 +18,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Operator only" }, { status: 403 });
     }
 
+    const rl = rateLimit(`xfer:${session.operatorId}`, 20, 60_000);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Too many transfers. Wait a moment." },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
-    const vehicleReg = String(body.vehicleReg ?? "").trim().toUpperCase();
+    const vehicleReg = String(body.vehicleReg ?? "").trim();
     const amountSzl = Number(body.amountSzl ?? 0);
     const category = String(body.category ?? "Fuel Allowance");
     const description = body.description ? String(body.description) : undefined;
@@ -39,6 +45,7 @@ export async function POST(request: NextRequest) {
       amountSzl,
       category,
       description,
+      actorUserId: session.authUserId,
     });
 
     if (!result.success) {
@@ -48,7 +55,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/operator/transfer] error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

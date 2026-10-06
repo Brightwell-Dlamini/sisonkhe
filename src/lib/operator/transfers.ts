@@ -1,15 +1,14 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Master Card → Vehicle Card transfers.
- * Domain rules enforced before any ledger write (payment providers untouched).
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 import { canTransferToVehicle } from "@/lib/domain/operatorRules";
 import { normalizePlate } from "@/lib/domain/identity";
+import { nextReceiptNumber } from "@/lib/domain/serials";
+import { writeAudit } from "@/lib/domain/audit";
 
 export interface TransferInput {
   operatorId: string;
@@ -17,6 +16,7 @@ export interface TransferInput {
   amountSzl: number;
   category: string;
   description?: string;
+  actorUserId?: string;
 }
 
 export interface TransferResult {
@@ -85,8 +85,8 @@ export async function transferToVehicle(
   const masterBalance = Number(masterCard.balance_szl ?? 0);
   const vehicleBalance = Number(vehicleCard.balance_szl ?? 0);
   const now = new Date();
-  const masterReceipt = `DISB-${Math.floor(100000 + Math.random() * 900000)}`;
-  const vehicleReceipt = `RCV-${Math.floor(100000 + Math.random() * 900000)}`;
+  const masterReceipt = await nextReceiptNumber(admin, "DISB");
+  const vehicleReceipt = await nextReceiptNumber(admin, "RCV");
 
   let driverName: string | null = null;
   if (vehicle?.driver_id) {
@@ -101,16 +101,23 @@ export async function transferToVehicle(
   const newMasterBalance = masterBalance - input.amountSzl;
   const newVehicleBalance = vehicleBalance + input.amountSzl;
 
-  const { error: masterErr } = await admin
+  // Optimistic concurrency on master balance
+  const { data: debited, error: masterErr } = await admin
     .from("operator_master_cards")
     .update({ balance_szl: newMasterBalance })
-    .eq("id", masterCard.id as string);
+    .eq("id", masterCard.id as string)
+    .eq("balance_szl", masterBalance)
+    .select("id")
+    .maybeSingle();
 
-  if (masterErr) {
-    return { success: false, error: `Master debit failed: ${masterErr.message}` };
+  if (masterErr || !debited) {
+    return {
+      success: false,
+      error: "Master debit failed (balance changed). Retry.",
+    };
   }
 
-  const masterTxId = `tx-disb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const masterTxId = `tx_disb_${Date.now()}_${reg.replace(/\s+/g, "").slice(0, 6)}`;
   await admin.from("operator_card_transactions").insert({
     id: masterTxId,
     card_id: masterCard.id as string,
@@ -145,7 +152,7 @@ export async function transferToVehicle(
   }
 
   await admin.from("virtual_card_transactions").insert({
-    id: `tx-rcv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    id: `tx_rcv_${Date.now()}_${reg.replace(/\s+/g, "").slice(0, 6)}`,
     card_id: vehicleCard.id as string,
     timestamp: now.toISOString(),
     type: "TOP_UP",
@@ -154,6 +161,15 @@ export async function transferToVehicle(
     direction: "CREDIT",
     receipt_number: vehicleReceipt,
     status: "Completed",
+  });
+
+  await writeAudit(admin, {
+    action: "ledger.adjust",
+    actorId: input.actorUserId,
+    entityType: "vehicle",
+    entityId: reg,
+    summary: `Transfer E${input.amountSzl.toFixed(2)} to ${reg}`,
+    meta: { masterReceipt, vehicleReceipt },
   });
 
   return {
