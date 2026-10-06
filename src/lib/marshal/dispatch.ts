@@ -17,7 +17,7 @@ import { getRankFeeConfig } from "@/lib/domain/rankFee";
 import { nextMarshalTxId } from "@/lib/domain/serials";
 import { writeAudit } from "@/lib/domain/audit";
 
-const DOUBLE_CLICK_MS = 3_000;
+const IDEMPOTENCY_MS = 60_000; // 1 minute same vehicle+marshal
 
 export type DispatchAction =
   | "load"
@@ -47,6 +47,8 @@ type AuthVehicle = {
   permitStatus: string | null;
   permitExpiryDate: string | null;
   cofExpiryDate: string | null;
+  insuranceExpiry: string | null;
+  roadworthinessExpiry: string | null;
   driverStatus: string | null;
   driverPdpStatus: string | null;
   driverPdpExpiry: string | null;
@@ -59,25 +61,31 @@ async function authorizeVehicle(
 ): Promise<AuthVehicle | null> {
   const admin = createSupabaseAdminClient();
   const plate = normalizePlate(registrationNumber);
+  const compact = plate.replace(/\s+/g, "");
 
   let { data: vehicle } = await admin
     .from("vehicles")
     .select(
-      "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id, version, permit_status, permit_expiry_date, cof_expiry_date"
+      "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id, version, permit_status, permit_expiry_date, cof_expiry_date, insurance_expiry, roadworthiness_expiry"
     )
     .eq("registration_number", plate)
     .maybeSingle();
 
-  if (!vehicle && plate) {
-    const { data: alt } = await admin
+  if (!vehicle && compact) {
+    const { data: candidates } = await admin
       .from("vehicles")
       .select(
-        "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id, version, permit_status, permit_expiry_date, cof_expiry_date"
+        "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id, version, permit_status, permit_expiry_date, cof_expiry_date, insurance_expiry, roadworthiness_expiry"
       )
-      .ilike("registration_number", plate)
-      .limit(1)
-      .maybeSingle();
-    vehicle = alt;
+      .ilike("registration_number", `%${compact.slice(0, 4)}%`)
+      .limit(30);
+    vehicle =
+      (candidates ?? []).find(
+        (r) =>
+          String(r.registration_number)
+            .toUpperCase()
+            .replace(/\s+/g, "") === compact
+      ) ?? null;
   }
 
   if (!vehicle) return null;
@@ -137,6 +145,9 @@ async function authorizeVehicle(
     permitStatus: (vehicle.permit_status as string | null) ?? null,
     permitExpiryDate: (vehicle.permit_expiry_date as string | null) ?? null,
     cofExpiryDate: (vehicle.cof_expiry_date as string | null) ?? null,
+    insuranceExpiry: (vehicle.insurance_expiry as string | null) ?? null,
+    roadworthinessExpiry:
+      (vehicle.roadworthiness_expiry as string | null) ?? null,
     driverStatus,
     driverPdpStatus,
     driverPdpExpiry,
@@ -153,6 +164,8 @@ function gatePayload(vehicle: AuthVehicle) {
     permitStatus: vehicle.permitStatus,
     permitExpiryDate: vehicle.permitExpiryDate,
     cofExpiryDate: vehicle.cofExpiryDate,
+    insuranceExpiry: vehicle.insuranceExpiry,
+    roadworthinessExpiry: vehicle.roadworthinessExpiry,
     vehicleStatus: vehicle.status,
     printPending: vehicle.printPending,
   };
@@ -183,13 +196,12 @@ async function writeRankFee(
   const nowIso = new Date().toISOString();
   const date = nowIso.slice(0, 10);
   const month = nowIso.slice(0, 7);
-  const sinceIso = new Date(Date.now() - DOUBLE_CLICK_MS).toISOString();
+  const sinceIso = new Date(Date.now() - IDEMPOTENCY_MS).toISOString();
 
-  // Idempotency: same marshal + vehicle + second window
+  // Any successful fee for this vehicle in window (any marshal) blocks double-charge
   const { data: recent } = await admin
     .from("marshal_transactions")
     .select("id")
-    .eq("marshal_id", context.marshalId)
     .eq("vehicle_reg", registrationNumber)
     .gte("timestamp", sinceIso)
     .limit(1);
@@ -213,9 +225,9 @@ async function writeRankFee(
     timestamp: nowIso,
     vehicle_reg: registrationNumber,
     amount_szl: feeCfg.rankFee,
-    payment_method: "Cash",
+    payment_method: "Rank Fee (Operational)",
     transaction_ref: txId,
-    status: "Success",
+    status: "Recorded",
     allocation_operational: feeCfg.splitOperational,
     allocation_nrtc: feeCfg.splitNRTC,
     allocation_maintenance: feeCfg.splitMaintenance,
@@ -242,11 +254,12 @@ async function recordTrip(
     .eq("id", vehicle.routeId)
     .maybeSingle();
   const fare = Number(route?.base_fare_e ?? 0);
-  // Honest: if no headcount, use capacity but flag estimated
-  const passengers =
-    opts.passengerCount != null && opts.passengerCount > 0
-      ? opts.passengerCount
-      : Math.max(1, vehicle.seatingCapacity);
+  const hasCount = opts.passengerCount != null && opts.passengerCount > 0;
+  const passengers = hasCount
+    ? opts.passengerCount!
+    : Math.max(1, vehicle.seatingCapacity);
+  const revenue = hasCount ? fare * passengers : null;
+
   await admin.from("trips").insert({
     id: `trip_${Date.now()}_${vehicle.reg.replace(/\s+/g, "")}`,
     date: now.toISOString().slice(0, 10),
@@ -258,8 +271,8 @@ async function recordTrip(
     passenger_count: passengers,
     trip_duration_minutes: null,
     delay_reason: opts.estimated ? "passenger_count_estimated" : null,
-    status: "Completed",
-    revenue_szl: fare * passengers,
+    status: "Departed",
+    revenue_szl: revenue,
   });
 }
 
@@ -347,25 +360,9 @@ export async function applyDispatchAction(
       const gate = canDispatchDepart(gatePayload(vehicle));
       if (!gate.eligible) return { success: false, error: gate.reason };
 
-      const trigger =
-        action === "full_cabin" ? "Full Cabin Button" : "Depart Button";
-      const fee = await writeRankFee(context, reg, trigger);
-      if (fee.error)
-        return {
-          success: false,
-          error: `Could not record rank fee: ${fee.error}`,
-        };
-      if (!fee.written) {
-        return {
-          success: true,
-          newStatus: vehicle.status,
-          rankFeeWritten: false,
-        };
-      }
-
       const oldPos = vehicle.currentQueuePosition;
       const payload = { status: "Departed", current_queue_position: 0 };
-      const { error } = await admin
+      const { data: updated, error } = await admin
         .from("vehicles")
         .update({
           ...payload,
@@ -373,8 +370,22 @@ export async function applyDispatchAction(
           updated_at: nowIso,
         })
         .eq("registration_number", reg)
-        .eq("version", vehicle.version);
+        .eq("version", vehicle.version)
+        .select("registration_number")
+        .maybeSingle();
+
       if (error) return { success: false, error: error.message };
+      if (!updated) {
+        return {
+          success: false,
+          error: "Vehicle changed under you — refresh and try again.",
+        };
+      }
+
+      // Fee ONLY after status transition succeeds
+      const trigger =
+        action === "full_cabin" ? "Full Cabin Button" : "Depart Button";
+      const fee = await writeRankFee(context, reg, trigger);
 
       if (oldPos > 0 && vehicle.routeId) {
         try {
@@ -386,6 +397,7 @@ export async function applyDispatchAction(
           /* best-effort */
         }
       }
+
       const estimated =
         passengerCount == null || !(passengerCount > 0);
       await recordTrip(
@@ -401,12 +413,15 @@ export async function applyDispatchAction(
         entityType: "vehicle",
         entityId: reg,
         summary: `Depart ${reg}`,
-        meta: { estimatedPassengers: estimated },
+        meta: {
+          estimatedPassengers: estimated,
+          rankFeeWritten: fee.written,
+        },
       });
       return {
         success: true,
         newStatus: "Departed",
-        rankFeeWritten: true,
+        rankFeeWritten: fee.written,
         warning: gate.warning,
         revenueEstimated: estimated,
       };

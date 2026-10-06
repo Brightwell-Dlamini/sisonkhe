@@ -2,16 +2,12 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Single source of truth for driver ↔ vehicle assignment.
- * Always writes BOTH:
- *   drivers.assigned_vehicle_reg
- *   vehicles.driver_id
- *
- * Domain rules: one driver ↔ one vehicle; suspended / invalid PDP blocked.
+ * Single write path for driver ↔ vehicle. Compensating rollback on partial failure.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { driverAssignableToVehicle } from "@/lib/domain/eligibility";
+import { normalizePlate, plateKey, platesEqual } from "@/lib/domain/identity";
 
 export type AssignmentKeys = {
   driverId?: string | null;
@@ -31,10 +27,6 @@ export type AssignmentResult = {
   releasedDriverId: string | null;
   releasedVehicleReg: string | null;
 };
-
-function normPlate(reg: string): string {
-  return reg.trim().toUpperCase().replace(/\s+/g, " ");
-}
 
 function normNid(id: string): string {
   return id.trim();
@@ -68,22 +60,43 @@ export async function resolveDriver(
 }
 
 export async function resolveVehicle(admin: SupabaseClient, vehicleReg: string) {
-  const plate = normPlate(vehicleReg);
-  const { data } = await admin
+  const plate = normalizePlate(vehicleReg);
+  const compact = plateKey(plate);
+
+  let { data } = await admin
     .from("vehicles")
     .select(
       "registration_number, make, model, vic, driver_id, status, owner_name"
     )
     .eq("registration_number", plate)
     .maybeSingle();
-  return data ? { ...data, registration_number: plate } : null;
+
+  if (!data && compact) {
+    const { data: candidates } = await admin
+      .from("vehicles")
+      .select(
+        "registration_number, make, model, vic, driver_id, status, owner_name"
+      )
+      .ilike("registration_number", `%${compact.slice(0, 4)}%`)
+      .limit(40);
+    data =
+      (candidates ?? []).find(
+        (r) => plateKey(String(r.registration_number)) === compact
+      ) ?? null;
+  }
+
+  if (!data) return null;
+  return {
+    ...data,
+    registration_number: normalizePlate(data.registration_number as string),
+  };
 }
 
 export async function assignDriverVehicle(
   admin: SupabaseClient,
   keys: AssignmentKeys
 ): Promise<AssignmentResult> {
-  const plate = keys.vehicleReg ? normPlate(keys.vehicleReg) : "";
+  const plate = keys.vehicleReg ? normalizePlate(keys.vehicleReg) : "";
   if (!plate) {
     throw Object.assign(
       new Error("Vehicle registration (number plate) is required."),
@@ -117,6 +130,8 @@ export async function assignDriverVehicle(
     );
   }
 
+  const canonicalPlate = vehicle.registration_number as string;
+
   const eligibility = driverAssignableToVehicle(
     {
       id: driver.id as string,
@@ -126,11 +141,9 @@ export async function assignDriverVehicle(
       pdpStatus: driver.pdp_status as string | null,
       pdpExpiryDate: driver.pdp_expiry_date as string | null,
     },
-    plate
+    canonicalPlate
   );
 
-  // force only bypasses "already on another vehicle" conflict after explicit staff intent,
-  // never suspended / invalid PDP
   const hardBlock =
     eligibility.reason?.includes("suspended") ||
     eligibility.reason?.includes("PDP") ||
@@ -160,7 +173,7 @@ export async function assignDriverVehicle(
     if (!keys.force) {
       throw Object.assign(
         new Error(
-          `Vehicle ${plate} is already linked to another driver. Unlink first or use force (staff transfer).`
+          `Vehicle ${canonicalPlate} is already linked to another driver. Unlink first or use force (staff transfer).`
         ),
         { status: 409 }
       );
@@ -173,11 +186,11 @@ export async function assignDriverVehicle(
   }
 
   const prevReg = driver.assigned_vehicle_reg as string | null;
-  if (prevReg && normPlate(prevReg) !== plate) {
+  if (prevReg && !platesEqual(prevReg, canonicalPlate)) {
     if (!keys.force && !eligibility.eligible) {
       throw Object.assign(
         new Error(
-          `Driver is on ${normPlate(prevReg)}. Confirm transfer (force) to move them to ${plate}.`
+          `Driver is on ${normalizePlate(prevReg)}. Confirm transfer (force) to move them to ${canonicalPlate}.`
         ),
         { status: 409 }
       );
@@ -185,14 +198,14 @@ export async function assignDriverVehicle(
     await admin
       .from("vehicles")
       .update({ driver_id: null })
-      .eq("registration_number", normPlate(prevReg));
-    releasedVehicleReg = normPlate(prevReg);
+      .eq("registration_number", normalizePlate(prevReg));
+    releasedVehicleReg = normalizePlate(prevReg);
   }
 
   const { error: vErr } = await admin
     .from("vehicles")
     .update({ driver_id: driver.id })
-    .eq("registration_number", plate);
+    .eq("registration_number", canonicalPlate);
   if (vErr) {
     throw Object.assign(new Error(`Could not update vehicle: ${vErr.message}`), {
       status: 500,
@@ -201,9 +214,21 @@ export async function assignDriverVehicle(
 
   const { error: dErr } = await admin
     .from("drivers")
-    .update({ assigned_vehicle_reg: plate })
+    .update({ assigned_vehicle_reg: canonicalPlate })
     .eq("id", driver.id);
+
   if (dErr) {
+    // Compensating rollback
+    await admin
+      .from("vehicles")
+      .update({ driver_id: releasedDriverId })
+      .eq("registration_number", canonicalPlate);
+    if (releasedVehicleReg) {
+      await admin
+        .from("vehicles")
+        .update({ driver_id: driver.id })
+        .eq("registration_number", releasedVehicleReg);
+    }
     throw Object.assign(new Error(`Could not update driver: ${dErr.message}`), {
       status: 500,
     });
@@ -213,7 +238,7 @@ export async function assignDriverVehicle(
     driverId: driver.id as string,
     driverName: driver.full_name as string,
     nationalId: (driver.national_id as string | null) ?? null,
-    vehicleReg: plate,
+    vehicleReg: canonicalPlate,
     vehicleMake: (vehicle.make as string | null) ?? null,
     vehicleModel: (vehicle.model as string | null) ?? null,
     vic: (vehicle.vic as string | null) ?? null,
@@ -244,7 +269,7 @@ export async function unassignDriverVehicle(
       vehicleReg =
         vehicleReg ||
         ((driver.assigned_vehicle_reg as string | null)
-          ? normPlate(driver.assigned_vehicle_reg as string)
+          ? normalizePlate(driver.assigned_vehicle_reg as string)
           : null);
     }
   }
