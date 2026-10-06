@@ -2,24 +2,25 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * POST /api/register/driver — public self-registration.
- * Creates auth user + drivers row in one step. Account is Active immediately.
+ * POST /api/register/driver — public driver data collection.
+ *
+ * Creates ONLY the driver row. No auth user. No password.
+ *
+ * Claiming happens later at rollout via /api/auth/claim/driver, which
+ * creates the auth user and links it to the pre-existing row.
+ *
+ * This is the "collect first, claim later" pattern, matching marshals.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { selfRegisterDriverSchema } from "@/lib/drivers/selfRegister";
-import {
-  generateDriverId,
-  generateUsername,
-} from "@/lib/drivers/generators";
+import { generateDriverId } from "@/lib/drivers/generators";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  let createdAuthUserId: string | null = null;
-
   try {
     const body = await request.json();
     const parsed = selfRegisterDriverSchema.safeParse(body);
@@ -37,7 +38,6 @@ export async function POST(request: NextRequest) {
     const input = parsed.data;
     const admin = createSupabaseAdminClient();
 
-    // Uniqueness: phone
     {
       const { data: clash } = await admin
         .from("drivers")
@@ -46,13 +46,15 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       if (clash) {
         return NextResponse.json(
-          { error: "A driver with that phone number already exists. Sign in or contact admin." },
+          {
+            error:
+              "A driver with that phone number already exists. Sign in or contact admin.",
+          },
           { status: 409 }
         );
       }
     }
 
-    // Uniqueness: national ID
     {
       const { data: clash } = await admin
         .from("drivers")
@@ -61,7 +63,10 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       if (clash) {
         return NextResponse.json(
-          { error: "A driver with that National ID already exists. Sign in or contact admin." },
+          {
+            error:
+              "A driver with that National ID already exists. Sign in or contact admin.",
+          },
           { status: 409 }
         );
       }
@@ -82,34 +87,6 @@ export async function POST(request: NextRequest) {
     }
 
     const driverId = generateDriverId();
-    const username = await generateUniqueUsername(input.fullName);
-    const syntheticEmail = `${driverId}@driver.sisonkhe.local`;
-
-    const { data: created, error: createErr } =
-      await admin.auth.admin.createUser({
-        email: syntheticEmail,
-        password: input.password,
-        email_confirm: true,
-        user_metadata: {
-          username,
-          full_name: input.fullName,
-          role: "driver",
-          driver_id: driverId,
-        },
-      });
-
-    if (createErr || !created.user) {
-      console.error("[api/register/driver] createUser error:", createErr);
-      return NextResponse.json(
-        {
-          error: `Could not create account: ${createErr?.message ?? "Unknown error"}`,
-        },
-        { status: 500 }
-      );
-    }
-
-    createdAuthUserId = created.user.id;
-
     const avatarSeed = input.fullName
       .toLowerCase()
       .replace(/[^a-z]/g, "")
@@ -134,15 +111,14 @@ export async function POST(request: NextRequest) {
       emergency_contact_phone: input.emergencyContactPhone || null,
       emergency_contact_relation: input.emergencyContactRelation || null,
       assigned_vehicle_reg: null,
-      auth_user_id: createdAuthUserId,
+      auth_user_id: null,
       avatar_seed: avatarSeed,
       profile_picture_url: null,
       status: "Active",
+      // claimed_at stays NULL — this row is not yet claimable by anyone.
     });
 
     if (insertErr) {
-      await admin.auth.admin.deleteUser(createdAuthUserId);
-      createdAuthUserId = null;
       console.error("[api/register/driver] insert error:", insertErr);
       return NextResponse.json(
         { error: `Could not save driver profile: ${insertErr.message}` },
@@ -153,40 +129,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       driverId,
-      username,
       fullName: input.fullName,
       nationalId: input.nationalId,
       message:
-        "Registration complete. Sign in with your username and password. Register your vehicle with the same National ID to link it.",
+        "Data collected. You will claim your account at rollout. " +
+        "Register your vehicle with the same National ID to link it.",
     });
   } catch (err) {
-    if (createdAuthUserId) {
-      try {
-        const admin = createSupabaseAdminClient();
-        await admin.auth.admin.deleteUser(createdAuthUserId);
-      } catch {
-        /* ignore rollback errors */
-      }
-    }
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[api/register/driver] error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
-
-async function generateUniqueUsername(fullName: string): Promise<string> {
-  const admin = createSupabaseAdminClient();
-  const taken = new Set<string>();
-
-  try {
-    const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    for (const u of data?.users ?? []) {
-      const uname = u.user_metadata?.username as string | undefined;
-      if (uname) taken.add(uname.toLowerCase());
-    }
-  } catch (err) {
-    console.warn("[api/register/driver] could not preload usernames:", err);
-  }
-
-  return generateUsername(fullName, taken).toLowerCase();
 }

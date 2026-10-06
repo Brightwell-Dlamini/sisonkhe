@@ -1,6 +1,14 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * GET  /api/operators   — list operators (admin / fleet-manager / super-admin)
+ * POST /api/operators   — create operator + master card (same roles)
+ *
+ * Operators are provisioned in one step: auth user + fleet_operators row,
+ * via provisionAuthUser. Master card issuance is a follow-up and is
+ * non-fatal if it fails (the operator is usable without a card; a super-admin
+ * can issue one later).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -17,6 +25,7 @@ import {
   generateUsername,
 } from "@/lib/operators/generators";
 import { claimUsername, isUsernameTaken } from "@/lib/domain/usernames";
+import { provisionAuthUser } from "@/lib/auth/provision";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,8 +51,6 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  let createdAuthUserId: string | null = null;
-
   try {
     const user = await requireServerRole([...ALLOWED_ROLES]);
     const regionScope = regionScopeOrThrow(user);
@@ -94,6 +101,7 @@ export async function POST(request: NextRequest) {
 
     const operatorId = generateOperatorId();
     const username = await generateUniqueUsername(input.name);
+
     if (await isUsernameTaken(admin, username)) {
       return NextResponse.json(
         { error: "Username collision — retry." },
@@ -102,63 +110,50 @@ export async function POST(request: NextRequest) {
     }
 
     const tempPassword = generateTempPassword();
-
-    const { data: created, error: createErr } =
-      await admin.auth.admin.createUser({
-        email: input.email,
-        password: tempPassword,
-        email_confirm: true,
-        user_metadata: {
-          username,
-          full_name: input.name,
-          role: "operator",
-          operator_id: operatorId,
-          must_change_password: true,
-        },
-      });
-
-    if (createErr || !created.user) {
-      const msg = createErr?.message ?? "Failed to create auth user";
-      const status = msg.toLowerCase().includes("already") ? 409 : 500;
-      return NextResponse.json({ error: msg }, { status });
-    }
-
-    createdAuthUserId = created.user.id;
-
     const region =
       (input as { region?: string }).region || regionScope || null;
 
-    const insertPayload: Record<string, unknown> = {
-      id: operatorId,
-      name: input.name,
-      company_name: input.companyName,
-      phone: input.phone,
+    const { authUserId } = await provisionAuthUser({
       email: input.email,
-      national_id: input.nationalId || null,
-      tax_number: input.taxNumber || null,
-      association: input.association || null,
-      avatar_url: input.avatarUrl || null,
-      bank_account_ref: input.bankAccountRef || null,
-      operator_license_number: input.operatorLicenseNumber || null,
-      auth_user_id: createdAuthUserId,
-    };
-    if (region) insertPayload.region = region;
+      password: tempPassword,
+      role: "operator",
+      userMetadata: {
+        username,
+        full_name: input.name,
+        operator_id: operatorId,
+        must_change_password: true,
+      },
+      insertRoleRow: async (createdAuthUserId) => {
+        const insertPayload: Record<string, unknown> = {
+          id: operatorId,
+          name: input.name,
+          company_name: input.companyName,
+          phone: input.phone,
+          email: input.email,
+          national_id: input.nationalId || null,
+          tax_number: input.taxNumber || null,
+          association: input.association || null,
+          avatar_url: input.avatarUrl || null,
+          bank_account_ref: input.bankAccountRef || null,
+          operator_license_number: input.operatorLicenseNumber || null,
+          auth_user_id: createdAuthUserId,
+        };
+        if (region) insertPayload.region = region;
 
-    const { error: insertErr } = await admin
-      .from("fleet_operators")
-      .insert(insertPayload);
+        const { error: insertErr } = await admin
+          .from("fleet_operators")
+          .insert(insertPayload);
 
-    if (insertErr) {
-      await admin.auth.admin.deleteUser(createdAuthUserId);
-      createdAuthUserId = null;
-      return NextResponse.json(
-        { error: `Could not create operator: ${insertErr.message}` },
-        { status: 500 }
-      );
-    }
+        if (insertErr) {
+          throw new Error(`operator insert failed: ${insertErr.message}`);
+        }
+      },
+    });
 
-    await claimUsername(admin, username, createdAuthUserId, "operator");
+    await claimUsername(admin, username, authUserId, "operator");
 
+    // Master card: non-fatal. If it fails, the operator still exists and can
+    // be issued a card later by a super-admin.
     const cardId = `MCARD-${operatorId.toUpperCase()}`;
     const cardNumber = generateMasterCardNumber(operatorId);
     const cvvHash = generateCvvHash(operatorId);
@@ -194,6 +189,7 @@ export async function POST(request: NextRequest) {
       masterCard: {
         cardNumber,
         initialBalance,
+        issued: !cardErr,
       },
     });
   } catch (err) {
@@ -203,17 +199,11 @@ export async function POST(request: NextRequest) {
         ? 401
         : message === "FORBIDDEN" || message === "REGION_REQUIRED"
           ? 403
-          : 500;
+          : message.toLowerCase().includes("already")
+            ? 409
+            : 500;
 
-    if (createdAuthUserId) {
-      try {
-        const admin = createSupabaseAdminClient();
-        await admin.auth.admin.deleteUser(createdAuthUserId);
-      } catch {
-        /* */
-      }
-    }
-
+    console.error("[api/operators] POST error:", err);
     return NextResponse.json({ error: message }, { status });
   }
 }

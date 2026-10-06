@@ -2,16 +2,14 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Marshal claim flow. Two phases:
+ * Driver claim flow. Two phases, mirroring /api/auth/claim (marshals):
  *
- *   PUT  /api/auth/claim  — verify identity (national ID + phone)
- *   POST /api/auth/claim  — create auth user, link to existing marshal row
+ *   PUT  /api/auth/claim/driver  — verify identity (national ID + phone)
+ *   POST /api/auth/claim/driver  — create auth user, link to existing row
  *
- * Marshals were collected as data (no auth users) during pre-rollout.
- * This route is where they claim their pre-existing row.
- *
- * Uses the DB function link_marshal_auth (id_number, phone, auth_user_id)
- * for the atomic link. claimExistingRow guarantees rollback if linking fails.
+ * The driver row must already exist (via /api/register/driver).
+ * The link is done by claimExistingRow, which sets claimed_at and
+ * guarantees atomic rollback if the link fails.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -19,7 +17,6 @@ import {
   createSupabaseAdminClient,
   createSupabaseServerClient,
 } from "@/lib/supabase/server";
-import { looseAdmin, rpcRow } from "@/lib/supabase/rpc";
 import { resolveUserRole } from "@/lib/auth/roles";
 import { rateLimit } from "@/lib/domain/rateLimit";
 import { isUsernameTaken, claimUsername } from "@/lib/domain/usernames";
@@ -43,7 +40,7 @@ function clientIp(request: NextRequest): string {
 
 export async function PUT(request: NextRequest) {
   try {
-    const rl = rateLimit(`claim:${clientIp(request)}`, 15, 15 * 60_000);
+    const rl = rateLimit(`claim-driver:${clientIp(request)}`, 15, 15 * 60_000);
     if (!rl.ok) {
       return NextResponse.json(
         { error: "Too many attempts. Try again later." },
@@ -52,10 +49,10 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const idNumber = String(body.idNumber ?? "").trim().replace(/\s+/g, "");
+    const nationalId = String(body.nationalId ?? "").trim().replace(/\s+/g, "");
     const phone = String(body.phone ?? "").trim();
 
-    if (!idNumber || !phone) {
+    if (!nationalId || !phone) {
       return NextResponse.json(
         { error: "National ID and phone number are required." },
         { status: 400 }
@@ -63,36 +60,24 @@ export async function PUT(request: NextRequest) {
     }
 
     const admin = createSupabaseAdminClient();
-    const { data, error } = await looseAdmin(admin).rpc(
-      "verify_marshal_identity",
-      { p_id_number: idNumber, p_phone: phone }
-    );
+    const { data: driver } = await admin
+      .from("drivers")
+      .select("id, full_name, auth_user_id, status")
+      .eq("national_id", nationalId)
+      .eq("phone", phone)
+      .maybeSingle();
 
-    if (error) {
-      console.error("[claim] verify_marshal_identity error:", error);
-      return NextResponse.json(
-        { error: "Verification service unavailable." },
-        { status: 500 }
-      );
-    }
-
-    const row = rpcRow<{
-      already_claimed?: boolean;
-      full_name?: string;
-      marshal_id?: string;
-    }>(data);
-
-    if (!row) {
+    if (!driver) {
       return NextResponse.json(
         {
           error:
-            "No marshal found with that National ID and phone number. Check your details or contact your supervisor.",
+            "No driver found with that National ID and phone number. Register first at /register/driver.",
         },
         { status: 404 }
       );
     }
 
-    if (row.already_claimed) {
+    if (driver.auth_user_id) {
       return NextResponse.json(
         {
           error:
@@ -102,13 +87,20 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    if (driver.status === "Suspended") {
+      return NextResponse.json(
+        { error: "This driver profile is suspended. Contact your supervisor." },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({
       verified: true,
-      fullName: row.full_name,
-      marshalId: row.marshal_id,
+      fullName: driver.full_name,
+      driverId: driver.id,
     });
   } catch (err) {
-    console.error("[api/auth/claim] PUT error:", err);
+    console.error("[api/auth/claim/driver] PUT error:", err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -122,7 +114,11 @@ export async function PUT(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const rl = rateLimit(`claim-post:${clientIp(request)}`, 10, 15 * 60_000);
+    const rl = rateLimit(
+      `claim-driver-post:${clientIp(request)}`,
+      10,
+      15 * 60_000
+    );
     if (!rl.ok) {
       return NextResponse.json(
         { error: "Too many attempts. Try again later." },
@@ -131,12 +127,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const idNumber = String(body.idNumber ?? "").trim().replace(/\s+/g, "");
+    const nationalId = String(body.nationalId ?? "").trim().replace(/\s+/g, "");
     const phone = String(body.phone ?? "").trim();
     const username = String(body.username ?? "").trim().toLowerCase();
     const password = String(body.password ?? "");
 
-    if (!idNumber || !phone || !username || !password) {
+    if (!nationalId || !phone || !username || !password) {
       return NextResponse.json(
         { error: "All fields are required." },
         { status: 400 }
@@ -161,36 +157,32 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = createSupabaseAdminClient();
-    const loose = looseAdmin(admin);
 
-    const { data: verifyData, error: verifyErr } = await loose.rpc(
-      "verify_marshal_identity",
-      { p_id_number: idNumber, p_phone: phone }
-    );
+    const { data: driver } = await admin
+      .from("drivers")
+      .select("id, full_name, auth_user_id, status")
+      .eq("national_id", nationalId)
+      .eq("phone", phone)
+      .maybeSingle();
 
-    if (verifyErr) {
-      return NextResponse.json(
-        { error: "Verification service unavailable." },
-        { status: 500 }
-      );
-    }
-
-    const match = rpcRow<{
-      already_claimed?: boolean;
-      full_name?: string;
-      marshal_id: string;
-    }>(verifyData);
-
-    if (!match) {
+    if (!driver) {
       return NextResponse.json(
         { error: "Identity verification failed." },
         { status: 404 }
       );
     }
-    if (match.already_claimed) {
+
+    if (driver.auth_user_id) {
       return NextResponse.json(
         { error: "This account has already been claimed." },
         { status: 409 }
+      );
+    }
+
+    if (driver.status === "Suspended") {
+      return NextResponse.json(
+        { error: "This driver profile is suspended." },
+        { status: 403 }
       );
     }
 
@@ -201,41 +193,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const marshalId = match.marshal_id;
-    const syntheticEmail = `${marshalId}@marshal.sisonkhe.local`;
+    const driverId = driver.id as string;
+    const syntheticEmail = `${driverId}@driver.sisonkhe.local`;
 
     const { authUserId } = await claimExistingRow({
       email: syntheticEmail,
       password,
-      role: "marshal",
+      role: "driver",
       userMetadata: {
         username,
-        full_name: match.full_name,
-        marshal_id: marshalId,
+        full_name: driver.full_name,
+        driver_id: driverId,
         must_change_password: false,
       },
       linkExistingRow: async (createdAuthUserId) => {
-        const { data, error } = await loose.rpc("link_marshal_auth", {
-          p_id_number: idNumber,
-          p_phone: phone,
-          p_auth_user_id: createdAuthUserId,
-        });
+        // Atomic link — only succeeds if the row still has no auth_user_id.
+        const { data, error } = await admin
+          .from("drivers")
+          .update({
+            auth_user_id: createdAuthUserId,
+            claimed_at: new Date().toISOString(),
+          })
+          .eq("id", driverId)
+          .is("auth_user_id", null)
+          .select("id");
+
         if (error) {
-          throw new Error(`link_marshal_auth failed: ${error.message}`);
+          throw new Error(`driver link failed: ${error.message}`);
         }
-        return data === true;
+        return Array.isArray(data) && data.length > 0;
       },
     });
 
-    await claimUsername(admin, username, authUserId, "marshal");
+    await claimUsername(admin, username, authUserId, "driver");
 
     await writeAudit(admin, {
       action: "claim.success",
       actorId: authUserId,
-      actorRole: "marshal",
-      entityType: "marshals",
-      entityId: marshalId,
-      summary: `Marshal ${marshalId} claimed account`,
+      actorRole: "driver",
+      entityType: "drivers",
+      entityId: driverId,
+      summary: `Driver ${driverId} claimed account`,
     });
 
     const supabase = await createSupabaseServerClient();
@@ -268,7 +266,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     const status = message.toLowerCase().includes("already") ? 409 : 500;
-    console.error("[api/auth/claim] POST error:", err);
+    console.error("[api/auth/claim/driver] POST error:", err);
     return NextResponse.json({ error: message }, { status });
   }
 }

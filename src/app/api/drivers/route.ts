@@ -1,6 +1,13 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * GET  /api/drivers   — list drivers (admin / fleet-manager / super-admin)
+ * POST /api/drivers   — create driver + auth account in one step
+ *
+ * Admins can still provision a driver fully in one step (this route).
+ * Drivers can also self-register their data without an auth account
+ * (see /api/register/driver) and claim later.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -18,6 +25,7 @@ import { assignDriverVehicle } from "@/lib/assignments/service";
 import { normalizePlate } from "@/lib/domain/identity";
 import { writeAudit } from "@/lib/domain/audit";
 import { claimUsername, isUsernameTaken } from "@/lib/domain/usernames";
+import { provisionAuthUser } from "@/lib/auth/provision";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -43,8 +51,6 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  let createdAuthUserId: string | null = null;
-
   try {
     const user = await requireServerRole([...ALLOWED_ROLES]);
     regionScopeOrThrow(user);
@@ -137,73 +143,55 @@ export async function POST(request: NextRequest) {
     const tempPassword = generateTempPassword();
     const syntheticEmail = `${driverId}@driver.sisonkhe.local`;
 
-    const { data: created, error: createErr } =
-      await admin.auth.admin.createUser({
-        email: syntheticEmail,
-        password: tempPassword,
-        email_confirm: true,
-        user_metadata: {
-          username,
-          full_name: input.fullName,
-          role: "driver",
-          driver_id: driverId,
-          must_change_password: true,
-        },
-      });
-
-    if (createErr || !created.user) {
-      return NextResponse.json(
-        {
-          error: `Could not create driver account: ${
-            createErr?.message ?? "Unknown error"
-          }`,
-        },
-        { status: 500 }
-      );
-    }
-
-    createdAuthUserId = created.user.id;
-
     const avatarSeed = input.fullName
       .toLowerCase()
       .replace(/[^a-z]/g, "")
       .slice(0, 12);
 
-    const { error: insertErr } = await admin.from("drivers").insert({
-      id: driverId,
-      full_name: input.fullName,
-      national_id: input.nationalId || null,
-      phone: input.phone,
-      residential_address: input.residentialAddress || null,
-      date_of_birth: input.dateOfBirth || null,
-      gender: input.gender || null,
-      license_number: input.licenseNumber || null,
-      license_class: input.licenseClass || null,
-      pdp_number: input.pdpNumber || null,
-      pdp_issue_date: input.pdpIssueDate || null,
-      pdp_expiry_date: input.pdpExpiryDate || null,
-      pdp_issuing_authority: input.pdpIssuingAuthority || null,
-      pdp_status: input.pdpStatus || null,
-      emergency_contact_name: input.emergencyContactName || null,
-      emergency_contact_phone: input.emergencyContactPhone || null,
-      emergency_contact_relation: input.emergencyContactRelation || null,
-      assigned_vehicle_reg: null,
-      auth_user_id: createdAuthUserId,
-      avatar_seed: avatarSeed,
-      profile_picture_url: input.profilePictureUrl || null,
-      status: input.status,
+    const { authUserId } = await provisionAuthUser({
+      email: syntheticEmail,
+      password: tempPassword,
+      role: "driver",
+      userMetadata: {
+        username,
+        full_name: input.fullName,
+        driver_id: driverId,
+        must_change_password: true,
+      },
+      insertRoleRow: async (createdAuthUserId) => {
+        const { error: insertErr } = await admin.from("drivers").insert({
+          id: driverId,
+          full_name: input.fullName,
+          national_id: input.nationalId || null,
+          phone: input.phone,
+          residential_address: input.residentialAddress || null,
+          date_of_birth: input.dateOfBirth || null,
+          gender: input.gender || null,
+          license_number: input.licenseNumber || null,
+          license_class: input.licenseClass || null,
+          pdp_number: input.pdpNumber || null,
+          pdp_issue_date: input.pdpIssueDate || null,
+          pdp_expiry_date: input.pdpExpiryDate || null,
+          pdp_issuing_authority: input.pdpIssuingAuthority || null,
+          pdp_status: input.pdpStatus || null,
+          emergency_contact_name: input.emergencyContactName || null,
+          emergency_contact_phone: input.emergencyContactPhone || null,
+          emergency_contact_relation: input.emergencyContactRelation || null,
+          assigned_vehicle_reg: null,
+          auth_user_id: createdAuthUserId,
+          avatar_seed: avatarSeed,
+          profile_picture_url: input.profilePictureUrl || null,
+          status: input.status,
+          claimed_at: new Date().toISOString(),
+        });
+
+        if (insertErr) {
+          throw new Error(`driver insert failed: ${insertErr.message}`);
+        }
+      },
     });
 
-    if (insertErr) {
-      await admin.auth.admin.deleteUser(createdAuthUserId);
-      createdAuthUserId = null;
-      return NextResponse.json(
-        { error: `Could not create driver record: ${insertErr.message}` },
-        { status: 500 }
-      );
-    }
-
-    await claimUsername(admin, username, createdAuthUserId, "driver");
+    await claimUsername(admin, username, authUserId, "driver");
 
     let assignmentWarning: string | null = null;
     if (plate) {
@@ -249,17 +237,11 @@ export async function POST(request: NextRequest) {
         ? 401
         : message === "FORBIDDEN" || message === "REGION_REQUIRED"
           ? 403
-          : 500;
+          : message.toLowerCase().includes("already")
+            ? 409
+            : 500;
 
-    if (createdAuthUserId) {
-      try {
-        const admin = createSupabaseAdminClient();
-        await admin.auth.admin.deleteUser(createdAuthUserId);
-      } catch {
-        /* */
-      }
-    }
-
+    console.error("[api/drivers] POST error:", err);
     return NextResponse.json({ error: message }, { status });
   }
 }
