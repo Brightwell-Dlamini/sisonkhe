@@ -5,7 +5,7 @@
  * Pure domain rules — no I/O.
  *
  * One human cannot drive two kombis. Suspended drivers cannot be assigned.
- * Expired permit/PDP cannot load or depart. The UI and API both use these.
+ * Expired permit/PDP cannot load or depart. Print-pending blocks rank load.
  */
 
 export type DriverEligibilityInput = {
@@ -29,7 +29,6 @@ export type VehicleEligibilityInput = {
 export type EligibilityResult = {
   eligible: boolean;
   reason?: string;
-  /** Soft warning — allowed with confirmation */
   warning?: string;
 };
 
@@ -51,7 +50,6 @@ function daysUntil(dateStr: string | null | undefined, now = Date.now()): number
   return Math.ceil((t - now) / (24 * 60 * 60 * 1000));
 }
 
-/** Driver may be offered for assignment to `targetVehicleReg` (empty = any free vehicle). */
 export function driverAssignableToVehicle(
   driver: DriverEligibilityInput,
   targetVehicleReg?: string | null
@@ -109,7 +107,6 @@ export function driverAssignableToVehicle(
   return { eligible: true };
 }
 
-/** Drivers shown in assignment dropdown for a vehicle. */
 export function filterAssignableDrivers<T extends DriverEligibilityInput>(
   drivers: T[],
   targetVehicleReg?: string | null,
@@ -118,14 +115,11 @@ export function filterAssignableDrivers<T extends DriverEligibilityInput>(
   const target = normPlate(targetVehicleReg);
   return drivers.filter((d) => {
     if (currentDriverId && d.id === currentDriverId) return true;
-    const result = driverAssignableToVehicle(d, target || null);
-    // Allow currently assigned-to-this-plate (editing same vehicle)
     if (target && normPlate(d.assignedVehicleReg) === target) return true;
-    return result.eligible;
+    return driverAssignableToVehicle(d, target || null).eligible;
   });
 }
 
-/** Label for option list: name + plate if taken (should rarely show taken). */
 export function driverOptionLabel(d: DriverEligibilityInput): string {
   const plate = normPlate(d.assignedVehicleReg);
   if (plate) return `${d.fullName} · ${plate}`;
@@ -141,9 +135,9 @@ export type DispatchGateInput = {
   permitExpiryDate?: string | null;
   cofExpiryDate?: string | null;
   vehicleStatus?: string | null;
+  printPending?: boolean;
 };
 
-/** Can this vehicle enter Loading / depart from rank? */
 export function canDispatchLoad(input: DispatchGateInput): EligibilityResult {
   if (!input.hasDriver) {
     return {
@@ -168,12 +162,6 @@ export function canDispatchLoad(input: DispatchGateInput): EligibilityResult {
     };
   }
 
-  const permitOk =
-    (input.permitStatus === "Active" ||
-      input.permitStatus === "Valid" ||
-      !input.permitStatus) &&
-    !isExpired(input.permitExpiryDate);
-
   if (input.permitStatus === "Expired" || isExpired(input.permitExpiryDate)) {
     return {
       eligible: false,
@@ -186,17 +174,19 @@ export function canDispatchLoad(input: DispatchGateInput): EligibilityResult {
       reason: "Vehicle permit is suspended. Cannot load.",
     };
   }
-  if (!permitOk && input.permitExpiryDate) {
-    return {
-      eligible: false,
-      reason: "Vehicle permit is not valid for rank operations.",
-    };
-  }
 
   if (isExpired(input.cofExpiryDate)) {
     return {
       eligible: false,
       reason: "Certificate of fitness (COF) is expired. Cannot load.",
+    };
+  }
+
+  if (input.printPending) {
+    return {
+      eligible: false,
+      reason:
+        "Approved permit is waiting to be printed. Print A4 + QR before loading at the rank.",
     };
   }
 
