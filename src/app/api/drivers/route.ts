@@ -17,6 +17,7 @@ import {
 import { assignDriverVehicle } from "@/lib/assignments/service";
 import { normalizePlate } from "@/lib/domain/identity";
 import { writeAudit } from "@/lib/domain/audit";
+import { claimUsername, isUsernameTaken } from "@/lib/domain/usernames";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -126,6 +127,13 @@ export async function POST(request: NextRequest) {
 
     const driverId = generateDriverId();
     const username = await generateUniqueUsername(input.fullName);
+    if (await isUsernameTaken(admin, username)) {
+      return NextResponse.json(
+        { error: "Generated username collided — retry." },
+        { status: 409 }
+      );
+    }
+
     const tempPassword = generateTempPassword();
     const syntheticEmail = `${driverId}@driver.sisonkhe.local`;
 
@@ -139,6 +147,7 @@ export async function POST(request: NextRequest) {
           full_name: input.fullName,
           role: "driver",
           driver_id: driverId,
+          must_change_password: true,
         },
       });
 
@@ -160,7 +169,6 @@ export async function POST(request: NextRequest) {
       .replace(/[^a-z]/g, "")
       .slice(0, 12);
 
-    // No drivers.region column on live DB — do not insert it
     const { error: insertErr } = await admin.from("drivers").insert({
       id: driverId,
       full_name: input.fullName,
@@ -194,6 +202,8 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    await claimUsername(admin, username, createdAuthUserId, "driver");
 
     let assignmentWarning: string | null = null;
     if (plate) {
@@ -229,6 +239,7 @@ export async function POST(request: NextRequest) {
       credentials: {
         username,
         password: tempPassword,
+        mustChangePassword: true,
       },
     });
   } catch (err) {
@@ -257,13 +268,20 @@ async function generateUniqueUsername(fullName: string): Promise<string> {
   const admin = createSupabaseAdminClient();
   const taken = new Set<string>();
   try {
-    const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    for (const u of data?.users ?? []) {
-      const uname = u.user_metadata?.username as string | undefined;
-      if (uname) taken.add(uname.toLowerCase());
+    const { data } = await admin.from("usernames").select("username").limit(5000);
+    for (const r of data ?? []) {
+      if (r.username) taken.add(String(r.username).toLowerCase());
     }
   } catch {
-    /* */
+    try {
+      const { data } = await admin.auth.admin.listUsers({ perPage: 200 });
+      for (const u of data?.users ?? []) {
+        const uname = u.user_metadata?.username as string | undefined;
+        if (uname) taken.add(uname.toLowerCase());
+      }
+    } catch {
+      /* */
+    }
   }
   return generateUsername(fullName, taken).toLowerCase();
 }

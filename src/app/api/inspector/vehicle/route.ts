@@ -1,24 +1,31 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * GET /api/inspector/vehicle?q=HSD%20101%20BM
- * GET /api/inspector/vehicle?reg=...
- * GET /api/inspector/vehicle?vic=...
- *
- * Government / traffic inspector roadside lookup.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/session";
 import { lookupVehicleForInspector } from "@/lib/inspector/queries";
+import { rateLimit } from "@/lib/domain/rateLimit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   try {
-    await requirePermission("inspector.lookup");
+    const session = await requirePermission("inspector.lookup");
+
+    const rl = rateLimit(
+      `insp-lookup:${session.authUserId}`,
+      60,
+      60_000
+    );
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Lookup rate limit exceeded. Wait a moment." },
+        { status: 429 }
+      );
+    }
 
     const q =
       request.nextUrl.searchParams.get("q") ??
@@ -52,7 +59,6 @@ export async function GET(request: NextRequest) {
         : message === "FORBIDDEN"
           ? 403
           : 500;
-    console.error("[api/inspector/vehicle] error:", err);
     return NextResponse.json({ error: message }, { status });
   }
 }

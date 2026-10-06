@@ -1,11 +1,10 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Pure domain rules — no I/O.
  */
 
 import { normalizePlate, platesEqual } from "./identity";
+import { evaluateCompliance } from "./compliance";
 
 export type DriverEligibilityInput = {
   id: string;
@@ -261,67 +260,27 @@ export type DispatchGateInput = {
   roadworthinessExpiry?: string | null;
   vehicleStatus?: string | null;
   printPending?: boolean;
+  renewalStatus?: string | null;
 };
 
+/** Load/depart gates share evaluateCompliance — one brain with inspector. */
 export function canDispatchLoad(input: DispatchGateInput): EligibilityResult {
-  if (!input.hasDriver) {
-    return {
-      eligible: false,
-      reason: "No driver assigned. Assign a driver before loading.",
-    };
-  }
-  if (input.driverStatus === "Suspended") {
-    return {
-      eligible: false,
-      reason: "Assigned driver is suspended. Cannot load.",
-    };
-  }
-  if (
-    input.driverPdpStatus === "Expired" ||
-    input.driverPdpStatus === "Suspended" ||
-    isExpired(input.driverPdpExpiry)
-  ) {
-    return {
-      eligible: false,
-      reason: "Assigned driver PDP is not valid. Cannot load.",
-    };
-  }
+  const report = evaluateCompliance({
+    permitStatus: input.permitStatus,
+    permitExpiryDate: input.permitExpiryDate,
+    cofExpiryDate: input.cofExpiryDate,
+    insuranceExpiry: input.insuranceExpiry,
+    roadworthinessExpiry: input.roadworthinessExpiry,
+    vehicleStatus: input.vehicleStatus,
+    renewalStatus: input.renewalStatus,
+    hasDriver: input.hasDriver,
+    driverStatus: input.driverStatus,
+    driverPdpStatus: input.driverPdpStatus,
+    driverPdpExpiry: input.driverPdpExpiry,
+  });
 
-  if (input.permitStatus === "Expired" || isExpired(input.permitExpiryDate)) {
-    return {
-      eligible: false,
-      reason: "Vehicle permit is expired. Cannot load until renewed.",
-    };
-  }
-  if (input.permitStatus === "Suspended") {
-    return {
-      eligible: false,
-      reason: "Vehicle permit is suspended. Cannot load.",
-    };
-  }
-
-  if (isExpired(input.cofExpiryDate)) {
-    return {
-      eligible: false,
-      reason: "Certificate of fitness (COF) is expired. Cannot load.",
-    };
-  }
-
-  if (isExpired(input.insuranceExpiry)) {
-    return {
-      eligible: false,
-      reason: "Insurance is expired. Cannot load.",
-    };
-  }
-
-  if (isExpired(input.roadworthinessExpiry)) {
-    return {
-      eligible: false,
-      reason: "Roadworthiness certificate is expired. Cannot load.",
-    };
-  }
-
-  if (input.printPending) {
+  // printPending from renewal or explicit flag
+  if (input.printPending || report.printPending) {
     return {
       eligible: false,
       reason:
@@ -329,15 +288,17 @@ export function canDispatchLoad(input: DispatchGateInput): EligibilityResult {
     };
   }
 
-  const permitDays = daysUntil(input.permitExpiryDate);
-  if (permitDays !== null && permitDays <= 7) {
+  if (report.blocksRankLoad) {
     return {
-      eligible: true,
-      warning: `Permit expires in ${permitDays} day${permitDays === 1 ? "" : "s"}.`,
+      eligible: false,
+      reason: report.reasons[0] ?? "Vehicle is not compliant for rank load.",
     };
   }
 
-  return { eligible: true };
+  return {
+    eligible: true,
+    warning: report.warnings[0],
+  };
 }
 
 export function canDispatchDepart(input: DispatchGateInput): EligibilityResult {
@@ -361,10 +322,6 @@ export type RankAction =
   | "breakdown"
   | "reset_to_waiting";
 
-/**
- * Rank law: depart / full_cabin only after Loading (or return from Delay into Loading first).
- * Delayed may load again or reset — not skip straight to depart.
- */
 const ALLOWED: Record<string, RankAction[]> = {
   Waiting: ["load", "delay", "breakdown"],
   Loading: ["depart", "full_cabin", "delay", "breakdown", "reset_to_waiting"],

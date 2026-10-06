@@ -1,15 +1,13 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * GET  /api/inspector/ticket  — list caller's tickets
- * POST /api/inspector/ticket  — create a ticket
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/session";
 import { createTicketSchema } from "@/lib/inspector/validation";
 import { createTicket, listTicketsForOfficer } from "@/lib/inspector/queries";
+import { rateLimit } from "@/lib/domain/rateLimit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,9 +16,10 @@ export async function GET() {
   try {
     const session = await requirePermission("inspector.ticket");
 
+    // officerUserId — not region (previous bug filtered wrong)
     const tickets = await listTicketsForOfficer(
       session.fullName,
-      session.region ?? null,
+      session.authUserId,
       50
     );
 
@@ -33,7 +32,6 @@ export async function GET() {
         : message === "FORBIDDEN"
           ? 403
           : 500;
-    console.error("[api/inspector/ticket] GET error:", err);
     return NextResponse.json({ error: message }, { status });
   }
 }
@@ -41,6 +39,14 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const session = await requirePermission("inspector.ticket");
+
+    const rl = rateLimit(`insp-ticket:${session.authUserId}`, 30, 60_000);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Ticket rate limit exceeded." },
+        { status: 429 }
+      );
+    }
 
     const body = await request.json();
     const parsed = createTicketSchema.safeParse(body);
@@ -57,6 +63,7 @@ export async function POST(request: NextRequest) {
     const ticket = await createTicket(parsed.data, {
       fullName: session.fullName,
       badgeNumber: session.staffId ?? null,
+      userId: session.authUserId,
     });
 
     return NextResponse.json({ success: true, ticket });
@@ -68,7 +75,6 @@ export async function POST(request: NextRequest) {
         : message === "FORBIDDEN"
           ? 403
           : 500;
-    console.error("[api/inspector/ticket] POST error:", err);
     return NextResponse.json({ error: message }, { status });
   }
 }
