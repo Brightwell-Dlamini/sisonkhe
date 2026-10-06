@@ -1,3 +1,12 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * GET  — list marshals (region scoped)
+ * POST — optional identity-row only (no auth). Prefer field portal for demographics.
+ *        Issue login via POST /api/admin/marshals/[id]/issue-login
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { requireServerRole } from "@/lib/auth/session";
 import { regionScopeOrThrow } from "@/lib/auth/permissions";
@@ -17,7 +26,6 @@ export async function GET() {
     return NextResponse.json({ marshals, count: marshals.length, regionScope });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error";
-    console.error("[api/admin/marshals] GET:", msg);
     return NextResponse.json(
       { error: msg, marshals: [] },
       {
@@ -32,6 +40,7 @@ export async function GET() {
   }
 }
 
+/** Identity row only — does not create a login. Use issue-login for access. */
 export async function POST(request: NextRequest) {
   try {
     const user = await requireServerRole(ALLOWED);
@@ -47,7 +56,10 @@ export async function POST(request: NextRequest) {
     const result = await createMarshal(body);
     if (!result.success)
       return NextResponse.json({ error: result.error }, { status: 400 });
-    return NextResponse.json({ marshal: result.marshal });
+    return NextResponse.json({
+      marshal: result.marshal,
+      note: "Identity saved without login. Call issue-login to create credentials.",
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error";
     return NextResponse.json({ error: msg }, { status: 500 });
