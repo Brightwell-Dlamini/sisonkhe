@@ -29,7 +29,6 @@ export default function DriversList() {
     loading,
     error,
     refresh,
-    createDriver,
     updateDriver,
     deactivateDriver,
     resetPassword,
@@ -109,26 +108,6 @@ export default function DriversList() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const handleCreate = async (input: CreateDriverRequest) => {
-    // Strip vehicle on create — assignment is staff action via edit / assignments API
-    const { assignedVehicleReg: _, ...rest } = input;
-    const result = await createDriver({ ...rest, assignedVehicleReg: "" });
-    if (result.success && result.credentials) {
-      setShowCreateModal(false);
-      setCredentials({
-        fullName: input.fullName,
-        username: result.credentials.username,
-        password: result.credentials.password,
-      });
-      return { success: true };
-    }
-    return {
-      success: false,
-      error: result.error,
-      issues: result.issues,
-    };
-  };
-
   const handleUpdate = async (id: string, input: Partial<CreateDriverRequest>) => {
     const ok = await updateDriver(id, input);
     if (ok) {
@@ -181,7 +160,6 @@ export default function DriversList() {
       {intelFilter !== "all" && (
         <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">
           Deep link: {intelFilter}
-          {statusFilter !== "all" ? ` · ${statusFilter}` : ""}
         </div>
       )}
 
@@ -214,7 +192,7 @@ export default function DriversList() {
             className={`px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
               healthOnly
                 ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                : "bg-white/[0.03] text-zinc-400 border-white/[0.06] hover:text-zinc-200"
+                : "bg-white/[0.03] text-zinc-400 border-white/[0.06]"
             }`}
           >
             Needs attention{attentionCount > 0 ? ` (${attentionCount})` : ""}
@@ -225,17 +203,17 @@ export default function DriversList() {
           <button
             onClick={refresh}
             disabled={loading}
-            className="px-3 py-2 rounded-xl bg-white/[0.06] text-zinc-300 text-xs font-bold hover:bg-white/[0.08] disabled:opacity-50 flex items-center gap-1.5"
+            className="px-3 py-2 rounded-xl bg-white/[0.06] text-zinc-300 text-xs font-bold disabled:opacity-50 flex items-center gap-1.5"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
-            Add + issue login
+            Issue login
           </button>
         </div>
       </div>
@@ -264,9 +242,7 @@ export default function DriversList() {
               {drivers.length === 0 ? "No drivers yet" : "No matching drivers"}
             </div>
             <div className="text-xs text-zinc-500 mt-1">
-              {drivers.length === 0
-                ? "Public portal collects data; admin issues login or adds + issues here."
-                : "Try a different search or filter."}
+              Portal collects profiles at /register/driver. Use Issue login after they enrol.
             </div>
           </div>
         ) : (
@@ -293,25 +269,18 @@ export default function DriversList() {
                     pdpStatus: d.pdpStatus,
                   });
                   return (
-                    <tr
-                      key={d.id}
-                      className="border-b border-white/[0.06] hover:bg-white/[0.03]"
-                    >
+                    <tr key={d.id} className="border-b border-white/[0.06] hover:bg-white/[0.03]">
                       <td className="px-4 py-3">
                         <div className="font-bold text-white">{d.fullName}</div>
                       </td>
                       <td className="px-4 py-3 text-zinc-400">
                         <div className="font-mono text-[11px]">{d.phone}</div>
                         {d.nationalId && (
-                          <div className="font-mono text-[10px] text-zinc-500">
-                            ID: {d.nationalId}
-                          </div>
+                          <div className="font-mono text-[10px] text-zinc-500">ID: {d.nationalId}</div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-zinc-400">
-                        <div className="font-mono text-[11px]">
-                          {d.licenseNumber ?? "—"}
-                        </div>
+                        <div className="font-mono text-[11px]">{d.licenseNumber ?? "—"}</div>
                         {d.pdpStatus && (
                           <div className="text-[10px]">
                             PDP:{" "}
@@ -384,7 +353,9 @@ export default function DriversList() {
         <DriverFormModal
           mode="create"
           onClose={() => setShowCreateModal(false)}
-          onSubmit={handleCreate}
+          onSubmit={async () => ({ success: false, error: "Use verify flow" })}
+          onIssuedLogin={(creds) => setCredentials(creds)}
+          onRefresh={refresh}
         />
       )}
 
