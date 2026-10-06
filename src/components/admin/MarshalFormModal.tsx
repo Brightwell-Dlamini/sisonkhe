@@ -26,6 +26,10 @@ type TerminalOpt = {
   region: string;
 };
 
+function regionMatch(a: string, b: string) {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
 export default function MarshalFormModal({
   mode,
   marshal,
@@ -66,17 +70,37 @@ export default function MarshalFormModal({
             })
           )
         );
-        // Prefer dedicated terminals list if present; fall back to region configs
-        const termList: TerminalOpt[] =
-          (tData.terminalRecords as TerminalOpt[] | undefined) ??
-          (tData.terminals ?? []).map(
-            (t: { region: string; terminalName: string }) => ({
-              id: t.region,
-              name: t.terminalName,
-              region: t.region,
-            })
-          );
-        setTerminals(termList);
+
+        const fromTable: TerminalOpt[] = (
+          (tData.terminalRecords as TerminalOpt[] | undefined) ?? []
+        ).map((t) => ({
+          id: t.id,
+          name: t.name,
+          region: t.region,
+        }));
+
+        // Always include region default terminals so the dropdown is never empty
+        const fromRegions: TerminalOpt[] = (tData.terminals ?? []).map(
+          (t: { region: string; terminalName: string }) => ({
+            id: `region:${t.region}`,
+            name: t.terminalName || `${t.region} Terminal`,
+            region: t.region,
+          })
+        );
+
+        const merged = [...fromTable];
+        for (const fr of fromRegions) {
+          if (
+            !merged.some(
+              (m) =>
+                regionMatch(m.region, fr.region) &&
+                m.name.toLowerCase() === fr.name.toLowerCase()
+            )
+          ) {
+            merged.push(fr);
+          }
+        }
+        setTerminals(merged);
       } catch {
         setRoutes([]);
         setTerminals([]);
@@ -85,21 +109,22 @@ export default function MarshalFormModal({
   }, []);
 
   const routesInRegion = useMemo(
-    () => routes.filter((r) => r.region === region || r.region === region),
+    () => routes.filter((r) => regionMatch(r.region, region)),
     [routes, region]
   );
 
   const terminalsInRegion = useMemo(
-    () => terminals.filter((t) => t.region === region),
+    () => terminals.filter((t) => regionMatch(t.region, region)),
     [terminals, region]
   );
 
+  // When region changes, keep selection if still valid
   useEffect(() => {
-    // Clear route if it no longer belongs to selected region
     if (routeId && !routesInRegion.some((r) => r.id === routeId)) {
-      setRouteId("");
+      // Keep if routes not loaded yet; only clear when we have data for this region
+      if (routes.length > 0) setRouteId("");
     }
-  }, [region, routesInRegion, routeId]);
+  }, [region, routesInRegion, routeId, routes.length]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,11 +133,15 @@ export default function MarshalFormModal({
     setError(null);
 
     const selectedTerminal = terminalsInRegion.find((t) => t.id === terminalId);
+    const resolvedName =
+      selectedTerminal?.name || terminalName.trim() || null;
 
     const body = {
       region,
-      terminalId: terminalId || null,
-      terminalName: selectedTerminal?.name || terminalName || null,
+      terminalId: terminalId.startsWith("region:")
+        ? null
+        : terminalId || null,
+      terminalName: resolvedName,
       assignedRouteId: routeId || null,
       isActive,
     };
@@ -136,7 +165,6 @@ export default function MarshalFormModal({
     }
   };
 
-  // Create mode is retired — identity comes from field portal
   if (mode === "create") {
     return (
       <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
@@ -145,8 +173,8 @@ export default function MarshalFormModal({
             Marshals enrol in the field
           </h3>
           <p className="text-xs text-zinc-400">
-            Identity is collected on the marshal portal / claim flow. Use Issue
-            login on the list, then Edit to assign region, terminal, and route.
+            Identity is collected on the marshal portal. Use Issue login, then
+            Edit to assign region, terminal, and route.
           </p>
           <button
             type="button"
@@ -169,8 +197,7 @@ export default function MarshalFormModal({
               Assign rank post
             </h3>
             <p className="text-[11px] text-zinc-500 mt-1">
-              {marshal?.fullName} — link region, terminal, and corridor. No raw
-              database IDs.
+              {marshal?.fullName} — region, terminal, corridor.
             </p>
           </div>
           <button
@@ -213,28 +240,42 @@ export default function MarshalFormModal({
           </Field>
 
           <Field label="Terminal">
-            <select
-              value={terminalId}
-              onChange={(e) => {
-                setTerminalId(e.target.value);
-                const t = terminalsInRegion.find((x) => x.id === e.target.value);
-                if (t) setTerminalName(t.name);
-              }}
-              className="input"
-            >
-              <option value="">— Select terminal —</option>
-              {terminalsInRegion.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            {terminalsInRegion.length === 0 && (
-              <p className="text-[10px] text-zinc-500 mt-1">
-                No terminals for this region yet. Add them under Admin →
-                Terminals.
-              </p>
+            {terminalsInRegion.length > 0 ? (
+              <select
+                value={terminalId}
+                onChange={(e) => {
+                  setTerminalId(e.target.value);
+                  const t = terminalsInRegion.find(
+                    (x) => x.id === e.target.value
+                  );
+                  if (t) setTerminalName(t.name);
+                }}
+                className="input"
+              >
+                <option value="">— Select terminal —</option>
+                {terminalsInRegion.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={terminalName}
+                onChange={(e) => {
+                  setTerminalName(e.target.value);
+                  setTerminalId("");
+                }}
+                placeholder="e.g. Mbabane Bus Rank"
+                className="input"
+              />
             )}
+            <p className="text-[10px] text-zinc-500 mt-1">
+              {terminalsInRegion.length > 0
+                ? "From Terminals admin + region defaults."
+                : "Type a terminal name, or add terminals under Admin → Terminals."}
+            </p>
           </Field>
 
           <Field label="Corridor / Route">
@@ -249,9 +290,19 @@ export default function MarshalFormModal({
                   {r.origin} to {r.destination}
                 </option>
               ))}
+              {/* If current route is outside filter, still show it so we don't lose it */}
+              {routeId &&
+                !routesInRegion.some((r) => r.id === routeId) &&
+                routes
+                  .filter((r) => r.id === routeId)
+                  .map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.origin} to {r.destination} (other region)
+                    </option>
+                  ))}
             </select>
             <p className="text-[10px] text-zinc-500 mt-1">
-              Shown as origin to destination — never as an internal ID.
+              Changing route reassigns immediately — no need to clear first.
             </p>
           </Field>
 
