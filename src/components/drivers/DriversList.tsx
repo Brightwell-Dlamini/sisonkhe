@@ -5,9 +5,10 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { useDrivers, type CreateDriverRequest } from "@/hooks/useDrivers";
+import { useDeepLinkFilter } from "@/hooks/useDeepLinkFilter";
 import type { DriverRow } from "@/lib/drivers/queries";
 import { driverHealth } from "@/lib/intelligence/entityHealth";
 import { HealthChips } from "@/components/intelligence/HealthChips";
@@ -34,8 +35,10 @@ export default function DriversList() {
     resetPassword,
   } = useDrivers();
 
+  const deep = useDeepLinkFilter();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [intelFilter, setIntelFilter] = useState<string>("all");
   const [healthOnly, setHealthOnly] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingDriver, setEditingDriver] = useState<DriverRow | null>(null);
@@ -47,8 +50,22 @@ export default function DriversList() {
   } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (deep.q) setSearchQuery(deep.q);
+    if (deep.filter === "suspended") setStatusFilter("Suspended");
+    if (deep.filter === "unassigned" || deep.filter === "pdp_expired") {
+      setIntelFilter(deep.filter);
+    }
+  }, [deep]);
+
   const filtered = useMemo(() => {
+    const now = Date.now();
     return drivers.filter((d) => {
+      if (intelFilter === "unassigned" && d.assignedVehicleReg) return false;
+      if (intelFilter === "pdp_expired") {
+        const t = d.pdpExpiryDate ? new Date(d.pdpExpiryDate).getTime() : NaN;
+        if (!(Number.isFinite(t) && t <= now) && d.pdpStatus !== "Expired") return false;
+      }
       if (statusFilter !== "all" && d.status !== statusFilter) return false;
       if (healthOnly) {
         const signals = driverHealth({
@@ -71,7 +88,7 @@ export default function DriversList() {
       }
       return true;
     });
-  }, [drivers, statusFilter, searchQuery, healthOnly]);
+  }, [drivers, statusFilter, searchQuery, healthOnly, intelFilter]);
 
   const attentionCount = useMemo(
     () =>
@@ -140,6 +157,13 @@ export default function DriversList() {
 
   return (
     <div className="space-y-4">
+      {intelFilter !== "all" && (
+        <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+          Deep link: {intelFilter}
+          {statusFilter !== "all" ? ` · ${statusFilter}` : ""}
+        </div>
+      )}
+
       <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
         <div className="flex flex-1 gap-2 min-w-0 flex-wrap">
           <div className="relative flex-1 min-w-[10rem]">
