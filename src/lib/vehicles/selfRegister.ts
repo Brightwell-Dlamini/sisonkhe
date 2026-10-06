@@ -2,8 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Public vehicle self-registration validation.
- * Driver is linked by National ID (not internal driver id).
+ * Public vehicle registration = asset data only.
+ * No driver link. No operator link. Staff assign later.
  */
 
 import { z } from "zod";
@@ -35,14 +35,6 @@ export const selfRegisterVehicleSchema = z.object({
     .max(120, "Capacity seems too high"),
 
   classification: z.enum(CLASSIFICATIONS),
-
-  /** National ID of the driver who operates this vehicle — primary link. */
-  driverNationalId: z
-    .string()
-    .trim()
-    .min(5, "Driver National ID is required")
-    .max(30)
-    .regex(/^[A-Za-z0-9-]+$/, "National ID must be alphanumeric"),
 
   ownerName: z.string().trim().max(120).optional().or(z.literal("")),
   ownerPhone: z.string().trim().max(20).optional().or(z.literal("")),

@@ -2,26 +2,33 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * POST /api/register/driver — public driver data collection.
- *
- * Creates ONLY the driver row. No auth user. No password.
- *
- * Claiming happens later at rollout via /api/auth/claim/driver, which
- * creates the auth user and links it to the pre-existing row.
- *
- * This is the "collect first, claim later" pattern, matching marshals.
+ * POST /api/register/driver — public identity collection only.
+ * No auth user. No password. No vehicle link.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { selfRegisterDriverSchema } from "@/lib/drivers/selfRegister";
 import { generateDriverId } from "@/lib/drivers/generators";
+import { rateLimit } from "@/lib/domain/rateLimit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      request.headers.get("x-real-ip") ||
+      "unknown";
+    const rl = rateLimit(`reg-driver:${ip}`, 15, 15 * 60_000);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Too many registrations. Try again later." },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const parsed = selfRegisterDriverSchema.safeParse(body);
 
@@ -48,7 +55,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "A driver with that phone number already exists. Sign in or contact admin.",
+              "A driver with that phone already exists. Claim your account at rollout or contact admin.",
           },
           { status: 409 }
         );
@@ -65,7 +72,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "A driver with that National ID already exists. Sign in or contact admin.",
+              "A driver with that National ID already exists. Claim your account or contact admin.",
           },
           { status: 409 }
         );
@@ -115,11 +122,9 @@ export async function POST(request: NextRequest) {
       avatar_seed: avatarSeed,
       profile_picture_url: null,
       status: "Active",
-      // claimed_at stays NULL — this row is not yet claimable by anyone.
     });
 
     if (insertErr) {
-      console.error("[api/register/driver] insert error:", insertErr);
       return NextResponse.json(
         { error: `Could not save driver profile: ${insertErr.message}` },
         { status: 500 }
@@ -132,12 +137,10 @@ export async function POST(request: NextRequest) {
       fullName: input.fullName,
       nationalId: input.nationalId,
       message:
-        "Data collected. You will claim your account at rollout. " +
-        "Register your vehicle with the same National ID to link it.",
+        "Profile saved. No login was created. At rollout, claim your account with National ID + phone, or an admin will issue login credentials.",
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/register/driver] error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
