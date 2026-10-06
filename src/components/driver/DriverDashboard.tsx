@@ -2,35 +2,26 @@
 
 import { useMemo, useState } from "react";
 import { Car, Calendar, CreditCard, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useDriverSummary } from "@/hooks/useDriverSummary";
-import { useDriverRoster } from "@/hooks/useDriverRoster";
 import { useDriverSignal } from "@/hooks/useDriverSignal";
 import DriverHeader from "./DriverHeader";
 import DriverVehicleCard from "./DriverVehicleCard";
 import DriverSummaryCards from "./DriverSummaryCards";
 import DriverTripsList from "./DriverTripsList";
-import DriverRosterView from "./DriverRosterView";
-import DriverCardView from "./DriverCardView";
 import MessageMarshalModal from "./MessageMarshalModal";
 import { IconButton, TableSkeleton, useToast } from "@/components/ui";
 
-type Tab = "vehicle" | "roster" | "card";
-
-const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: "vehicle", label: "My Vehicle", icon: Car },
-  { id: "roster", label: "30-Day Roster", icon: Calendar },
-  { id: "card", label: "Virtual Card", icon: CreditCard },
-];
-
 function isAfter830PMLocal(): boolean {
   const now = new Date();
-  return now.getHours() > 20 || (now.getHours() === 20 && now.getMinutes() >= 30);
+  return (
+    now.getHours() > 20 || (now.getHours() === 20 && now.getMinutes() >= 30)
+  );
 }
 
 export default function DriverDashboard() {
-  const { context, summary, trips, loading, error, refresh } = useDriverSummary();
-  const { roster } = useDriverRoster();
-  const [tab, setTab] = useState<Tab>("vehicle");
+  const { context, summary, trips, loading, error, refresh } =
+    useDriverSummary();
   const [showMessage, setShowMessage] = useState(false);
   const toast = useToast();
 
@@ -80,45 +71,42 @@ export default function DriverDashboard() {
       <DriverSummaryCards summary={summary} />
 
       <div className="flex items-center gap-1.5 bg-[#0F0F10] border border-white/[0.06] p-1 rounded-2xl w-fit">
-        {TABS.map((t) => {
-          const Icon = t.icon;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                tab === t.id
-                  ? "bg-white/[0.08] text-white"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {t.label}
-            </button>
-          );
-        })}
+        <span className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-white/[0.08] text-white">
+          <Car className="w-3.5 h-3.5" />
+          My Vehicle
+        </span>
+        <Link
+          href="/driver/roster"
+          className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 text-zinc-500 hover:text-zinc-300 transition-all"
+        >
+          <Calendar className="w-3.5 h-3.5" />
+          30-Day Roster
+        </Link>
+        <Link
+          href="/driver/card"
+          className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 text-zinc-500 hover:text-zinc-300 transition-all"
+        >
+          <CreditCard className="w-3.5 h-3.5" />
+          Virtual Card
+        </Link>
       </div>
 
-      {tab === "vehicle" && (
-        <div className="space-y-4">
-          <DriverVehicleCard
-            vehicle={context.vehicle}
-            marshal={context.marshal}
-            onMessageMarshal={() => setShowMessage(true)}
-            onEmitSignal={async (kind, note) => {
-              const res = await emitSignal(kind, note);
-              if (res.ok && !res.queued) await refresh();
-              return res;
-            }}
-            online={online}
-            pendingSignalCount={pendingSignals.length}
-            isAfter830PM={after830}
-          />
-          <DriverTripsList trips={trips} />
-        </div>
-      )}
-      {tab === "roster" && <DriverRosterView roster={roster} />}
-      {tab === "card" && <DriverCardView context={context} />}
+      <div className="space-y-4">
+        <DriverVehicleCard
+          vehicle={context.vehicle}
+          marshal={context.marshal}
+          onMessageMarshal={() => setShowMessage(true)}
+          onEmitSignal={async (kind, note) => {
+            const res = await emitSignal(kind, note);
+            if (res.ok && !res.queued) await refresh();
+            return res;
+          }}
+          online={online}
+          pendingSignalCount={pendingSignals.length}
+          isAfter830PM={after830}
+        />
+        <DriverTripsList trips={trips} />
+      </div>
 
       {showMessage && context.marshal && (
         <MessageMarshalModal

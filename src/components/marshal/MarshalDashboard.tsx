@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import {
   Loader2,
   AlertCircle,
@@ -13,27 +14,12 @@ import {
 } from "lucide-react";
 import { useMarshalTerminal } from "@/hooks/useMarshalTerminal";
 import { useMarshalVehicles } from "@/hooks/useMarshalVehicles";
-import { useMarshalRoster } from "@/hooks/useMarshalRoster";
 import MarshalHeader from "./MarshalHeader";
 import SummaryCards from "./SummaryCards";
 import QueueList from "./QueueList";
 import RecentActivityFeed from "./RecentActivityFeed";
 import AddVehicleModal from "./AddVehicleModal";
 import VehicleDetailsModal from "./VehicleDetailsModal";
-import RosterView from "./RosterView";
-import YoYComparisonView from "./YoYComparisonView";
-import DriverCommsPanel from "./DriverCommsPanel";
-import SettingsPanel from "./SettingsPanel";
-
-type Tab = "queue" | "roster" | "yoy" | "comms" | "settings";
-
-const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: "queue", label: "Live Queue", icon: ListOrdered },
-  { id: "roster", label: "30-Day Roster", icon: Calendar },
-  { id: "yoy", label: "Rotation Summary", icon: Scale },
-  { id: "comms", label: "Driver Comms", icon: MessageSquare },
-  { id: "settings", label: "Settings", icon: Settings },
-];
 
 export default function MarshalDashboard() {
   const {
@@ -47,10 +33,9 @@ export default function MarshalDashboard() {
     dispatch,
   } = useMarshalTerminal();
 
-  const { vehicles: allVehicles, addToQueue, reorderQueue } = useMarshalVehicles();
-  const { roster } = useMarshalRoster();
+  const { vehicles: allVehicles, addToQueue, reorderQueue } =
+    useMarshalVehicles();
 
-  const [tab, setTab] = useState<Tab>("queue");
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [detailReg, setDetailReg] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -59,20 +44,6 @@ export default function MarshalDashboard() {
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
   };
-
-  const drivers = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; phone: string | null }>();
-    for (const v of allVehicles) {
-      if (v.driverId && v.driverName) {
-        map.set(v.driverId, {
-          id: v.driverId,
-          name: v.driverName,
-          phone: v.driverPhone ?? null,
-        });
-      }
-    }
-    return Array.from(map.values());
-  }, [allVehicles]);
 
   const handleReorder = async (reg: string, direction: "up" | "down") => {
     const res = await reorderQueue(reg, direction);
@@ -118,58 +89,59 @@ export default function MarshalDashboard() {
       {summary && <SummaryCards summary={summary} />}
 
       <div className="flex items-center gap-1 bg-[#0F0F10] border border-white/[0.06] p-1 rounded-2xl overflow-x-auto scrollbar-none">
-        {TABS.map((t) => {
-          const Icon = t.icon;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
-                tab === t.id
-                  ? "bg-white/[0.08] text-white"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {t.label}
-            </button>
-          );
-        })}
+        <span className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap bg-white/[0.08] text-white">
+          <ListOrdered className="w-3.5 h-3.5" />
+          Live Queue
+        </span>
+        <Link
+          href="/marshal/queue"
+          className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap text-zinc-500 hover:text-zinc-300"
+        >
+          <Calendar className="w-3.5 h-3.5" />
+          30-Day Roster
+        </Link>
+        <Link
+          href="/marshal/comms"
+          className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap text-zinc-500 hover:text-zinc-300"
+        >
+          <MessageSquare className="w-3.5 h-3.5" />
+          Driver Comms
+        </Link>
+        <Link
+          href="/marshal/settings"
+          className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap text-zinc-500 hover:text-zinc-300"
+        >
+          <Settings className="w-3.5 h-3.5" />
+          Settings
+        </Link>
       </div>
 
-      {tab === "queue" && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-black uppercase tracking-wider text-white">
-                Live Queue
-              </h2>
-              <button
-                onClick={() => setShowAddVehicle(true)}
-                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-bold flex items-center gap-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add Vehicle
-              </button>
-            </div>
-            <QueueList
-              vehicles={vehicles}
-              onDispatch={dispatch}
-              onReorder={handleReorder}
-              showToast={showToast}
-              onSelectVehicle={setDetailReg}
-            />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-black uppercase tracking-wider text-white">
+              Live Queue
+            </h2>
+            <button
+              onClick={() => setShowAddVehicle(true)}
+              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-bold flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Vehicle
+            </button>
           </div>
-          <div className="lg:col-span-1">
-            <RecentActivityFeed activity={activity} />
-          </div>
+          <QueueList
+            vehicles={vehicles}
+            onDispatch={dispatch}
+            onReorder={handleReorder}
+            showToast={showToast}
+            onSelectVehicle={setDetailReg}
+          />
         </div>
-      )}
-
-      {tab === "roster" && <RosterView />}
-      {tab === "yoy" && <YoYComparisonView roster={roster} />}
-      {tab === "comms" && <DriverCommsPanel drivers={drivers} />}
-      {tab === "settings" && <SettingsPanel />}
+        <div className="lg:col-span-1">
+          <RecentActivityFeed activity={activity} />
+        </div>
+      </div>
 
       {showAddVehicle && (
         <AddVehicleModal
