@@ -1,13 +1,11 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Marshal-scoped queries. Every function here resolves the caller's marshal
- * assignment first, then scopes all data to that terminal/region.
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
+import { autoResetStaleDeparted } from "./autoReset";
 
 export interface MarshalContext {
   marshalId: string;
@@ -36,10 +34,6 @@ export interface MarshalVehicle {
   lastActive: string | null;
 }
 
-/**
- * Resolve the calling marshal's context by auth user id.
- * Returns null if the auth user isn't a marshal.
- */
 export async function getMarshalContext(
   authUserId: string
 ): Promise<MarshalContext | null> {
@@ -68,22 +62,11 @@ export async function getMarshalContext(
   };
 }
 
-/**
- * Get all vehicles visible to this marshal.
- *
- * Scoping (Phase 5a):
- *   - Match the marshal's assigned_route_id if set (preferred, narrow)
- *   - Otherwise, match all routes in the marshal's region
- *
- * Sort order: current_queue_position ASC (0 = unqueued, appears last),
- * then registration number.
- */
 export async function listVehiclesForMarshal(
   context: MarshalContext
 ): Promise<MarshalVehicle[]> {
   const admin = createSupabaseAdminClient();
 
-  // 1. Find candidate routes
   let routeIds: string[] = [];
   if (context.assignedRouteId) {
     routeIds = [context.assignedRouteId];
@@ -97,14 +80,13 @@ export async function listVehiclesForMarshal(
 
   if (routeIds.length === 0) return [];
 
-  // 2. Fetch vehicles on those routes, exclude Offline
   const { data: vehicles, error } = await admin
     .from("vehicles")
     .select(
       `
       registration_number, vic, make, model, seating_capacity, classification,
       status, current_queue_position, loading_bay,
-      route_assignment_id, driver_id
+      route_assignment_id, driver_id, updated_at
     `
     )
     .in("route_assignment_id", routeIds)
@@ -117,9 +99,32 @@ export async function listVehiclesForMarshal(
     return [];
   }
 
-  const vehicleList = vehicles ?? [];
+  let vehicleList = vehicles ?? [];
 
-  // 3. Join route details
+  // Soft auto-reset: departed > 6h → Waiting so queue is not stuck forever
+  try {
+    const regs = vehicleList.map((v) => v.registration_number as string);
+    const n = await autoResetStaleDeparted(admin, regs);
+    if (n > 0) {
+      const { data: refreshed } = await admin
+        .from("vehicles")
+        .select(
+          `
+          registration_number, vic, make, model, seating_capacity, classification,
+          status, current_queue_position, loading_bay,
+          route_assignment_id, driver_id, updated_at
+        `
+        )
+        .in("route_assignment_id", routeIds)
+        .neq("status", "Offline")
+        .order("current_queue_position", { ascending: true })
+        .order("registration_number", { ascending: true });
+      vehicleList = refreshed ?? vehicleList;
+    }
+  } catch (err) {
+    console.warn("[marshal/queries] auto-reset skipped:", err);
+  }
+
   const { data: routes } = await admin
     .from("routes")
     .select("id, origin, destination")
@@ -133,7 +138,6 @@ export async function listVehiclesForMarshal(
     });
   }
 
-  // 4. Join driver details
   const driverIds = vehicleList
     .map((v) => v.driver_id as string | null)
     .filter((id): id is string => !!id);
@@ -174,14 +178,11 @@ export async function listVehiclesForMarshal(
       driverId,
       driverName: driver?.name ?? null,
       driverPhone: driver?.phone ?? null,
-      lastActive: null, // TODO: track last_active in a future sub-phase
+      lastActive: (v.updated_at as string | null) ?? null,
     };
   });
 }
 
-/**
- * Today's summary metrics for this marshal.
- */
 export interface MarshalSummary {
   dispatchedToday: number;
   feesCollectedToday: number;
@@ -197,7 +198,6 @@ export async function getMarshalSummary(
   const admin = createSupabaseAdminClient();
   const today = new Date().toISOString().split("T")[0];
 
-  // 1. Fees collected today
   const { data: txToday } = await admin
     .from("marshal_transactions")
     .select("amount_szl")
@@ -210,7 +210,6 @@ export async function getMarshalSummary(
   );
   const dispatchedToday = txToday?.length ?? 0;
 
-  // 2. Current queue counts (visible to this marshal)
   let routeIds: string[] = [];
   if (context.assignedRouteId) {
     routeIds = [context.assignedRouteId];
@@ -257,9 +256,6 @@ export async function getMarshalSummary(
   };
 }
 
-/**
- * Recent dispatch activity for this marshal (last N events).
- */
 export interface MarshalActivityItem {
   id: string;
   timestamp: string;
