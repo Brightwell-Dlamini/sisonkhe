@@ -8,9 +8,22 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { LogIn, Eye, EyeOff, Loader2, AlertCircle, Monitor } from "lucide-react";
-import { signInWithPassword, homePathForRole } from "@/lib/auth/client";
+import {
+  LogIn,
+  Eye,
+  EyeOff,
+  Loader2,
+  AlertCircle,
+  Monitor,
+  KeyRound,
+} from "lucide-react";
+import {
+  signInWithPassword,
+  changePassword,
+  homePathForRole,
+} from "@/lib/auth/client";
 import { useAuthStore } from "@/store/useAuthStore";
+import type { ResolvedUser } from "@/lib/auth/roles";
 
 function LoginForm() {
   const router = useRouter();
@@ -27,6 +40,27 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [forceChange, setForceChange] = useState(false);
+  const [pendingUser, setPendingUser] = useState<ResolvedUser | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  async function finishLogin(user: ResolvedUser | undefined) {
+    if (user) {
+      useAuthStore.getState().setUser(user);
+    } else {
+      await useAuthStore.getState().refresh();
+    }
+
+    const destination =
+      redirectParam && redirectParam !== "/"
+        ? redirectParam
+        : homePathForRole(user?.role);
+
+    router.push(destination);
+    router.refresh();
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -40,19 +74,107 @@ function LoginForm() {
       return;
     }
 
-    if (result.user) {
-      useAuthStore.getState().setUser(result.user);
-    } else {
-      await useAuthStore.getState().refresh();
+    if (result.mustChangePassword) {
+      setPendingUser(result.user ?? null);
+      setForceChange(true);
+      setLoading(false);
+      return;
     }
 
-    const destination =
-      redirectParam && redirectParam !== "/"
-        ? redirectParam
-        : homePathForRole(result.user?.role);
+    await finishLogin(result.user);
+  }
 
-    router.push(destination);
-    router.refresh();
+  async function onChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+
+    if (newPassword.length < 8) {
+      setError("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    if (newPassword === password) {
+      setError("Choose a password different from the temporary one.");
+      return;
+    }
+
+    setLoading(true);
+    const result = await changePassword(password, newPassword);
+    if (!result.success) {
+      setError(result.error ?? "Could not update password");
+      setLoading(false);
+      return;
+    }
+
+    await finishLogin(pendingUser ?? undefined);
+  }
+
+  if (forceChange) {
+    return (
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-xl p-6 sm:p-8">
+        <div className="mb-6">
+          <h2 className="text-lg font-black text-white uppercase tracking-wide flex items-center gap-2">
+            <KeyRound className="w-5 h-5 text-amber-400" />
+            Set a new password
+          </h2>
+          <p className="text-xs text-zinc-400 mt-1">
+            Your account was issued a temporary password. Choose a permanent one
+            before continuing.
+          </p>
+        </div>
+
+        {error && (
+          <div className="mb-4 bg-red-950/40 border border-red-800 text-red-300 rounded-xl p-3 flex items-start gap-2 text-xs">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={onChangePassword} className="space-y-4">
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
+              New password
+            </label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              minLength={8}
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
+              Confirm new password
+            </label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              minLength={8}
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <KeyRound className="w-4 h-4" />
+            )}
+            Save and continue
+          </button>
+        </form>
+      </div>
+    );
   }
 
   return (
@@ -147,17 +269,26 @@ function LoginForm() {
         <p className="text-center text-[11px] text-zinc-500 space-y-1">
           <span className="block">
             Marshal without a password?{" "}
-            <Link href="/claim" className="font-bold text-emerald-600 hover:underline">
+            <Link
+              href="/claim"
+              className="font-bold text-emerald-600 hover:underline"
+            >
               Claim your account
             </Link>
           </span>
           <span className="block">
             New driver?{" "}
-            <Link href="/register/driver" className="font-bold text-emerald-600 hover:underline">
+            <Link
+              href="/register/driver"
+              className="font-bold text-emerald-600 hover:underline"
+            >
               Self-register
             </Link>
             {" · "}
-            <Link href="/register/vehicle" className="font-bold text-emerald-600 hover:underline">
+            <Link
+              href="/register/vehicle"
+              className="font-bold text-emerald-600 hover:underline"
+            >
               Register vehicle
             </Link>
           </span>

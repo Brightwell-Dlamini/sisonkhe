@@ -16,7 +16,7 @@ import {
   generateTempPassword,
   generateUsername,
 } from "@/lib/operators/generators";
-import { nextReceiptNumber } from "@/lib/domain/serials";
+import { claimUsername, isUsernameTaken } from "@/lib/domain/usernames";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -94,6 +94,13 @@ export async function POST(request: NextRequest) {
 
     const operatorId = generateOperatorId();
     const username = await generateUniqueUsername(input.name);
+    if (await isUsernameTaken(admin, username)) {
+      return NextResponse.json(
+        { error: "Username collision — retry." },
+        { status: 409 }
+      );
+    }
+
     const tempPassword = generateTempPassword();
 
     const { data: created, error: createErr } =
@@ -106,6 +113,7 @@ export async function POST(request: NextRequest) {
           full_name: input.name,
           role: "operator",
           operator_id: operatorId,
+          must_change_password: true,
         },
       });
 
@@ -149,10 +157,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    await claimUsername(admin, username, createdAuthUserId, "operator");
+
     const cardId = `MCARD-${operatorId.toUpperCase()}`;
     const cardNumber = generateMasterCardNumber(operatorId);
     const cvvHash = generateCvvHash(operatorId);
-    // Money truth: start at 0 — fund via real top-up
     const initialBalance = 0;
 
     const { error: cardErr } = await admin.from("operator_master_cards").insert({
@@ -180,6 +189,7 @@ export async function POST(request: NextRequest) {
         username,
         password: tempPassword,
         email: input.email,
+        mustChangePassword: true,
       },
       masterCard: {
         cardNumber,
@@ -212,13 +222,20 @@ async function generateUniqueUsername(name: string): Promise<string> {
   const admin = createSupabaseAdminClient();
   const taken = new Set<string>();
   try {
-    const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    for (const u of data?.users ?? []) {
-      const uname = u.user_metadata?.username as string | undefined;
-      if (uname) taken.add(uname.toLowerCase());
+    const { data } = await admin.from("usernames").select("username").limit(5000);
+    for (const r of data ?? []) {
+      if (r.username) taken.add(String(r.username).toLowerCase());
     }
   } catch {
-    /* */
+    try {
+      const { data } = await admin.auth.admin.listUsers({ perPage: 200 });
+      for (const u of data?.users ?? []) {
+        const uname = u.user_metadata?.username as string | undefined;
+        if (uname) taken.add(uname.toLowerCase());
+      }
+    } catch {
+      /* */
+    }
   }
   return generateUsername(name, taken).toLowerCase();
 }
