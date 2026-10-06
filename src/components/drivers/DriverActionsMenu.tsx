@@ -6,7 +6,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Edit2, KeyRound, UserX } from "lucide-react";
+import { Edit2, KeyRound, UserX, UserPlus } from "lucide-react";
 import type { DriverRow } from "@/lib/drivers/queries";
 import { previewSuspendDriver } from "@/lib/intelligence/consequences";
 import { ConsequencePreviewDialog } from "@/components/intelligence/ConsequencePreviewDialog";
@@ -17,6 +17,7 @@ interface Props {
   onEdit: () => void;
   onDeactivate: () => void;
   onResetPassword: () => Promise<unknown>;
+  onIssueLogin?: () => Promise<unknown>;
 }
 
 export default function DriverActionsMenu({
@@ -24,9 +25,11 @@ export default function DriverActionsMenu({
   onEdit,
   onDeactivate,
   onResetPassword,
+  onIssueLogin,
 }: Props) {
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [issuing, setIssuing] = useState(false);
 
   const suspendPreview = useMemo(
     () =>
@@ -45,21 +48,39 @@ export default function DriverActionsMenu({
       icon: Edit2,
       onClick: onEdit,
     },
-    {
-      key: "reset-password",
-      label: resetting ? "Resetting…" : "Reset Password",
-      icon: KeyRound,
-      disabled: resetting || !driver.authUserId,
+  ];
+
+  if (!driver.authUserId && onIssueLogin) {
+    items.push({
+      key: "issue-login",
+      label: issuing ? "Issuing…" : "Issue login",
+      icon: UserPlus,
+      disabled: issuing,
       onClick: async () => {
-        setResetting(true);
+        setIssuing(true);
         try {
-          await onResetPassword();
+          await onIssueLogin();
         } finally {
-          setResetting(false);
+          setIssuing(false);
         }
       },
+    });
+  }
+
+  items.push({
+    key: "reset-password",
+    label: resetting ? "Resetting…" : "Reset Password",
+    icon: KeyRound,
+    disabled: resetting || !driver.authUserId,
+    onClick: async () => {
+      setResetting(true);
+      try {
+        await onResetPassword();
+      } finally {
+        setResetting(false);
+      }
     },
-  ];
+  });
 
   if (driver.status !== "Suspended") {
     items.push({

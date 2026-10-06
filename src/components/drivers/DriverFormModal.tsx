@@ -1,6 +1,9 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Create = provision login + profile (no vehicle).
+ * Edit = profile + staff assignment of vehicle.
  */
 
 "use client";
@@ -62,12 +65,13 @@ export default function DriverFormModal({
   });
 
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
-  const [vehiclesLoading, setVehiclesLoading] = useState(true);
+  const [vehiclesLoading, setVehiclesLoading] = useState(mode === "edit");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
+    if (mode !== "edit") return;
     let cancelled = false;
     (async () => {
       setVehiclesLoading(true);
@@ -104,7 +108,7 @@ export default function DriverFormModal({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mode]);
 
   const eligibleVehicles = useMemo(() => {
     return filterAssignableVehicles(
@@ -127,7 +131,12 @@ export default function DriverFormModal({
     setFieldErrors({});
     setLoading(true);
 
-    const result = await onSubmit(form);
+    const payload =
+      mode === "create"
+        ? { ...form, assignedVehicleReg: "" }
+        : form;
+
+    const result = await onSubmit(payload);
     setLoading(false);
 
     if (!result.success) {
@@ -142,12 +151,12 @@ export default function DriverFormModal({
         <div className="sticky top-0 z-10 bg-[#0F0F10] flex items-start justify-between p-5 border-b border-white/[0.06]">
           <div>
             <h2 className="text-sm font-black uppercase tracking-wide text-white">
-              {mode === "create" ? "Register Driver" : "Edit Driver"}
+              {mode === "create" ? "Add driver + issue login" : "Edit Driver"}
             </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
               {mode === "create"
-                ? "Credentials generated automatically. Only free vehicles appear below."
-                : "Vehicle reassignment uses the single assignment path."}
+                ? "Creates profile and login. Vehicle assignment is done after, on Edit."
+                : "Assign vehicle only here (or via staff assignment API)."}
             </p>
           </div>
           <button
@@ -186,7 +195,6 @@ export default function DriverFormModal({
                   required
                   value={form.fullName}
                   onChange={(e) => update("fullName", e.target.value)}
-                  placeholder="e.g. Sibusiso Dlamini"
                   className="input"
                 />
               </Field>
@@ -196,7 +204,6 @@ export default function DriverFormModal({
                   type="text"
                   value={form.nationalId}
                   onChange={(e) => update("nationalId", e.target.value)}
-                  placeholder="13 digits"
                   className="input font-mono"
                 />
               </Field>
@@ -207,7 +214,6 @@ export default function DriverFormModal({
                   required
                   value={form.phone}
                   onChange={(e) => update("phone", e.target.value)}
-                  placeholder="+268 7600 0000"
                   className="input font-mono"
                 />
               </Field>
@@ -247,7 +253,7 @@ export default function DriverFormModal({
 
           <fieldset className="space-y-3">
             <legend className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
-              Driving Licence
+              Driving Licence & PDP
             </legend>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Licence Number">
@@ -266,44 +272,12 @@ export default function DriverFormModal({
                   className="input"
                 />
               </Field>
-            </div>
-          </fieldset>
-
-          <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
-              Professional Driving Permit (PDP)
-            </legend>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="PDP Number">
                 <input
                   type="text"
                   value={form.pdpNumber}
                   onChange={(e) => update("pdpNumber", e.target.value)}
                   className="input font-mono"
-                />
-              </Field>
-              <Field label="Issue Date">
-                <input
-                  type="date"
-                  value={form.pdpIssueDate ?? ""}
-                  onChange={(e) => update("pdpIssueDate", e.target.value)}
-                  className="input font-mono"
-                />
-              </Field>
-              <Field label="Expiry Date">
-                <input
-                  type="date"
-                  value={form.pdpExpiryDate ?? ""}
-                  onChange={(e) => update("pdpExpiryDate", e.target.value)}
-                  className="input font-mono"
-                />
-              </Field>
-              <Field label="Issuing Authority">
-                <input
-                  type="text"
-                  value={form.pdpIssuingAuthority}
-                  onChange={(e) => update("pdpIssuingAuthority", e.target.value)}
-                  className="input"
                 />
               </Field>
               <Field label="PDP Status">
@@ -317,87 +291,82 @@ export default function DriverFormModal({
                   <option>Suspended</option>
                 </select>
               </Field>
-            </div>
-          </fieldset>
-
-          <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
-              Emergency Contact
-            </legend>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Field label="Name">
+              <Field label="PDP Issue">
                 <input
-                  type="text"
-                  value={form.emergencyContactName}
-                  onChange={(e) => update("emergencyContactName", e.target.value)}
-                  className="input"
+                  type="date"
+                  value={form.pdpIssueDate ?? ""}
+                  onChange={(e) => update("pdpIssueDate", e.target.value)}
+                  className="input font-mono"
                 />
               </Field>
-              <Field label="Relationship">
+              <Field label="PDP Expiry">
                 <input
-                  type="text"
-                  value={form.emergencyContactRelation}
-                  onChange={(e) =>
-                    update("emergencyContactRelation", e.target.value)
-                  }
-                  className="input"
-                />
-              </Field>
-              <Field label="Phone">
-                <input
-                  type="tel"
-                  value={form.emergencyContactPhone}
-                  onChange={(e) => update("emergencyContactPhone", e.target.value)}
+                  type="date"
+                  value={form.pdpExpiryDate ?? ""}
+                  onChange={(e) => update("pdpExpiryDate", e.target.value)}
                   className="input font-mono"
                 />
               </Field>
             </div>
           </fieldset>
 
-          <fieldset className="space-y-3">
-            <legend className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
-              Assignment
-            </legend>
+          {mode === "edit" && (
+            <fieldset className="space-y-3">
+              <legend className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
+                Staff assignment
+              </legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Assigned vehicle">
+                  <select
+                    value={form.assignedVehicleReg ?? ""}
+                    onChange={(e) => update("assignedVehicleReg", e.target.value)}
+                    className="input font-mono"
+                    disabled={vehiclesLoading}
+                  >
+                    <option value="">— No vehicle —</option>
+                    {eligibleVehicles.map((v) => (
+                      <option
+                        key={v.registrationNumber}
+                        value={v.registrationNumber}
+                      >
+                        {vehicleOptionLabel(v)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-zinc-500">
+                    Staff only. Eligible free vehicles only.
+                  </p>
+                </Field>
+                <Field label="Status">
+                  <select
+                    value={form.status}
+                    onChange={(e) => update("status", e.target.value)}
+                    className="input"
+                  >
+                    <option>Active</option>
+                    <option>Suspended</option>
+                    <option>On Leave</option>
+                    <option>Off-Duty</option>
+                  </select>
+                </Field>
+              </div>
+            </fieldset>
+          )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Assigned vehicle">
-                <select
-                  value={form.assignedVehicleReg ?? ""}
-                  onChange={(e) => update("assignedVehicleReg", e.target.value)}
-                  className="input font-mono"
-                  disabled={vehiclesLoading}
-                >
-                  <option value="">— No vehicle —</option>
-                  {eligibleVehicles.map((v) => (
-                    <option
-                      key={v.registrationNumber}
-                      value={v.registrationNumber}
-                    >
-                      {vehicleOptionLabel(v)}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-[10px] text-zinc-500">
-                  Only vehicles without another driver (and not Offline).
-                  {vehiclesLoading
-                    ? " Loading…"
-                    : ` ${eligibleVehicles.length} of ${vehicles.length} shown.`}
-                </p>
-              </Field>
-              <Field label="Status">
-                <select
-                  value={form.status}
-                  onChange={(e) => update("status", e.target.value)}
-                  className="input"
-                >
-                  <option>Active</option>
-                  <option>Suspended</option>
-                  <option>On Leave</option>
-                  <option>Off-Duty</option>
-                </select>
-              </Field>
-            </div>
-          </fieldset>
+          {mode === "create" && (
+            <Field label="Status">
+              <select
+                value={form.status}
+                onChange={(e) => update("status", e.target.value)}
+                className="input"
+              >
+                <option>Active</option>
+                <option>Suspended</option>
+                <option>On Leave</option>
+                <option>Off-Duty</option>
+              </select>
+            </Field>
+          )}
 
           <div className="flex gap-2 pt-2 sticky bottom-0 bg-[#0F0F10] pb-1">
             <button
@@ -413,7 +382,7 @@ export default function DriverFormModal({
               className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {mode === "create" ? "Register Driver" : "Save Changes"}
+              {mode === "create" ? "Create + issue login" : "Save Changes"}
             </button>
           </div>
         </form>

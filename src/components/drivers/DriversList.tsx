@@ -110,7 +110,9 @@ export default function DriversList() {
   };
 
   const handleCreate = async (input: CreateDriverRequest) => {
-    const result = await createDriver(input);
+    // Strip vehicle on create — assignment is staff action via edit / assignments API
+    const { assignedVehicleReg: _, ...rest } = input;
+    const result = await createDriver({ ...rest, assignedVehicleReg: "" });
     if (result.success && result.credentials) {
       setShowCreateModal(false);
       setCredentials({
@@ -153,6 +155,25 @@ export default function DriversList() {
       return result;
     }
     return result;
+  };
+
+  const handleIssueLogin = async (driver: DriverRow) => {
+    const res = await fetch(`/api/admin/drivers/${driver.id}/issue-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error ?? "Could not issue login");
+      return;
+    }
+    setCredentials({
+      fullName: driver.fullName,
+      username: data.credentials.username,
+      password: data.credentials.password,
+    });
+    void refresh();
   };
 
   return (
@@ -214,7 +235,7 @@ export default function DriversList() {
             className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm"
           >
             <Plus className="w-3.5 h-3.5" />
-            Register Driver
+            Add + issue login
           </button>
         </div>
       </div>
@@ -240,11 +261,11 @@ export default function DriversList() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 px-4">
             <div className="text-sm font-bold text-zinc-300">
-              {drivers.length === 0 ? "No drivers registered yet" : "No matching drivers"}
+              {drivers.length === 0 ? "No drivers yet" : "No matching drivers"}
             </div>
             <div className="text-xs text-zinc-500 mt-1">
               {drivers.length === 0
-                ? "Click 'Register Driver' to add the first one."
+                ? "Public portal collects data; admin issues login or adds + issues here."
                 : "Try a different search or filter."}
             </div>
           </div>
@@ -257,6 +278,7 @@ export default function DriversList() {
                   <th className="px-4 py-3">Contact</th>
                   <th className="px-4 py-3">Licence / PDP</th>
                   <th className="px-4 py-3">Vehicle</th>
+                  <th className="px-4 py-3">Login</th>
                   <th className="px-4 py-3">Signals</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 w-12"></th>
@@ -317,6 +339,17 @@ export default function DriversList() {
                         )}
                       </td>
                       <td className="px-4 py-3">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            d.authUserId
+                              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25"
+                              : "bg-white/[0.06] text-zinc-400 border border-white/[0.08]"
+                          }`}
+                        >
+                          {d.authUserId ? "Yes" : "None"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
                         <HealthChips signals={signals} />
                       </td>
                       <td className="px-4 py-3">
@@ -335,6 +368,7 @@ export default function DriversList() {
                           onEdit={() => setEditingDriver(d)}
                           onDeactivate={() => handleDeactivate(d)}
                           onResetPassword={() => handleResetPassword(d)}
+                          onIssueLogin={() => handleIssueLogin(d)}
                         />
                       </td>
                     </tr>
