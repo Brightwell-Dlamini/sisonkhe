@@ -63,7 +63,8 @@ export default function DriversList() {
       if (intelFilter === "unassigned" && d.assignedVehicleReg) return false;
       if (intelFilter === "pdp_expired") {
         const t = d.pdpExpiryDate ? new Date(d.pdpExpiryDate).getTime() : NaN;
-        if (!(Number.isFinite(t) && t <= now) && d.pdpStatus !== "Expired") return false;
+        if (!(Number.isFinite(t) && t <= now) && d.pdpStatus !== "Expired")
+          return false;
       }
       if (statusFilter !== "all" && d.status !== statusFilter) return false;
       if (healthOnly) {
@@ -106,15 +107,6 @@ export default function DriversList() {
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 4000);
-  };
-
-  const handleUpdate = async (id: string, input: Partial<CreateDriverRequest>) => {
-    const ok = await updateDriver(id, input);
-    if (ok) {
-      showToast("Driver updated");
-      setEditingDriver(null);
-    }
-    return ok;
   };
 
   const handleDeactivate = async (driver: DriverRow) => {
@@ -205,7 +197,9 @@ export default function DriversList() {
             disabled={loading}
             className="px-3 py-2 rounded-xl bg-white/[0.06] text-zinc-300 text-xs font-bold disabled:opacity-50 flex items-center gap-1.5"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
+            />
             Refresh
           </button>
           <button
@@ -242,7 +236,8 @@ export default function DriversList() {
               {drivers.length === 0 ? "No drivers yet" : "No matching drivers"}
             </div>
             <div className="text-xs text-zinc-500 mt-1">
-              Portal collects profiles at /register/driver. Use Issue login after they enrol.
+              Portal collects profiles at /register/driver. Use Issue login after
+              they enrol.
             </div>
           </div>
         ) : (
@@ -269,18 +264,25 @@ export default function DriversList() {
                     pdpStatus: d.pdpStatus,
                   });
                   return (
-                    <tr key={d.id} className="border-b border-white/[0.06] hover:bg-white/[0.03]">
+                    <tr
+                      key={d.id}
+                      className="border-b border-white/[0.06] hover:bg-white/[0.03]"
+                    >
                       <td className="px-4 py-3">
                         <div className="font-bold text-white">{d.fullName}</div>
                       </td>
                       <td className="px-4 py-3 text-zinc-400">
                         <div className="font-mono text-[11px]">{d.phone}</div>
                         {d.nationalId && (
-                          <div className="font-mono text-[10px] text-zinc-500">ID: {d.nationalId}</div>
+                          <div className="font-mono text-[10px] text-zinc-500">
+                            ID: {d.nationalId}
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-zinc-400">
-                        <div className="font-mono text-[11px]">{d.licenseNumber ?? "—"}</div>
+                        <div className="font-mono text-[11px]">
+                          {d.licenseNumber ?? "—"}
+                        </div>
                         {d.pdpStatus && (
                           <div className="text-[10px]">
                             PDP:{" "}
@@ -364,9 +366,13 @@ export default function DriversList() {
           mode="edit"
           driver={editingDriver}
           onClose={() => setEditingDriver(null)}
-          onSubmit={async (input) => {
-            const ok = await handleUpdate(editingDriver.id, input);
-            return { success: ok };
+          onSubmit={async (input: CreateDriverRequest) => {
+            const result = await updateDriver(editingDriver.id, input);
+            if (result.success) {
+              showToast("Driver updated");
+              setEditingDriver(null);
+            }
+            return result;
           }}
         />
       )}

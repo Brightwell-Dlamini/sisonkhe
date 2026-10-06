@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Plus,
   Search,
   Radio,
   Edit2,
@@ -120,18 +119,7 @@ export default function MarshalsList() {
     <div>
       <PageHeader
         title="Rank Marshals"
-        description="Field portal collects identity. Admin issues login and edits region/route/status."
-        actions={
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setShowForm(true);
-            }}
-            leadingIcon={Plus}
-          >
-            Add identity
-          </Button>
-        }
+        description="Field portal collects identity. Issue login, then assign region, terminal, and corridor."
       />
 
       <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-3 mb-4">
@@ -165,27 +153,19 @@ export default function MarshalsList() {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={Radio}
-          title={error ? "Could not load marshals" : search ? "No matches" : "No marshals yet"}
+          title={
+            error
+              ? "Could not load marshals"
+              : search
+                ? "No matches"
+                : "No marshals yet"
+          }
           description={
             error
               ? "Check the error above or try Refresh."
               : search
                 ? "Try a different search."
-                : "Field officers enrol via the marshal portal, or add identity here."
-          }
-          action={
-            !search && !error ? (
-              <Button
-                onClick={() => {
-                  setEditing(null);
-                  setShowForm(true);
-                }}
-                leadingIcon={Plus}
-                size="sm"
-              >
-                Add identity
-              </Button>
-            ) : undefined
+                : "Marshals enrol via the field portal, then you issue login and assign a rank post."
           }
         />
       ) : (
@@ -205,7 +185,9 @@ export default function MarshalsList() {
               {filtered.map((m) => (
                 <Tr key={m.id}>
                   <Td>
-                    <div className="text-xs font-bold text-white">{m.fullName}</div>
+                    <div className="text-xs font-bold text-white">
+                      {m.fullName}
+                    </div>
                     {m.staffNumber && (
                       <div className="font-mono text-[10px] text-zinc-500">
                         #{m.staffNumber}
@@ -265,7 +247,7 @@ export default function MarshalsList() {
                       />
                       <IconButton
                         icon={Edit2}
-                        label="Edit marshal"
+                        label="Assign rank post"
                         onClick={() => {
                           setEditing(m);
                           setShowForm(true);
@@ -280,10 +262,10 @@ export default function MarshalsList() {
         </div>
       )}
 
-      {showForm && (
+      {showForm && editing && (
         <MarshalFormModal
-          mode={editing ? "edit" : "create"}
-          marshal={editing ?? undefined}
+          mode="edit"
+          marshal={editing}
           onClose={() => {
             setShowForm(false);
             setEditing(null);
@@ -291,11 +273,7 @@ export default function MarshalsList() {
           onSaved={() => {
             setShowForm(false);
             setEditing(null);
-            toast.success(
-              editing
-                ? "Marshal updated"
-                : "Identity saved — issue login when ready"
-            );
+            toast.success("Rank post assigned");
             void refresh();
           }}
         />
@@ -317,12 +295,18 @@ export default function MarshalsList() {
             <p className="text-xs text-zinc-300">{issuedCreds.name}</p>
             <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4 space-y-2 font-mono text-sm">
               <div>
-                <span className="text-[10px] text-zinc-500 uppercase">Username</span>
+                <span className="text-[10px] text-zinc-500 uppercase">
+                  Username
+                </span>
                 <p className="text-white font-bold">{issuedCreds.username}</p>
               </div>
               <div>
-                <span className="text-[10px] text-zinc-500 uppercase">Temp password</span>
-                <p className="text-amber-300 font-bold">{issuedCreds.password}</p>
+                <span className="text-[10px] text-zinc-500 uppercase">
+                  Temp password
+                </span>
+                <p className="text-amber-300 font-bold">
+                  {issuedCreds.password}
+                </p>
               </div>
             </div>
             <p className="text-[11px] text-zinc-500">
