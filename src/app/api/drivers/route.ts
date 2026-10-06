@@ -1,24 +1,12 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * GET  /api/drivers  — list all drivers (staff only)
- * POST /api/drivers  — create a new driver (staff only)
- *
- * On create:
- *   1. Validates input
- *   2. Checks uniqueness (phone, national ID, licence)
- *   3. Validates vehicle assignment if provided
- *   4. Generates driver ID, username, and temp password
- *   5. Creates the auth user (synthetic email)
- *   6. Inserts the driver row
- *   7. Links the vehicle via assignment service
- *   8. Returns the generated credentials ONCE
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { requireServerRole } from "@/lib/auth/session";
+import { regionScopeOrThrow } from "@/lib/auth/permissions";
 import { createDriverSchema } from "@/lib/drivers/validation";
 import { listDrivers } from "@/lib/drivers/queries";
 import {
@@ -35,17 +23,18 @@ const ALLOWED_ROLES = ["super-admin", "admin", "fleet-manager"] as const;
 
 export async function GET() {
   try {
-    await requireServerRole([...ALLOWED_ROLES]);
-    const drivers = await listDrivers();
-    return NextResponse.json({ drivers });
+    const user = await requireServerRole([...ALLOWED_ROLES]);
+    const regionScope = regionScopeOrThrow(user);
+    const drivers = await listDrivers(regionScope);
+    return NextResponse.json({ drivers, regionScope });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     const status =
       message === "UNAUTHENTICATED"
         ? 401
-        : message === "FORBIDDEN"
-        ? 403
-        : 500;
+        : message === "FORBIDDEN" || message === "REGION_REQUIRED"
+          ? 403
+          : 500;
     console.error("[api/drivers] GET error:", err);
     return NextResponse.json({ error: message }, { status });
   }
@@ -55,7 +44,8 @@ export async function POST(request: NextRequest) {
   let createdAuthUserId: string | null = null;
 
   try {
-    await requireServerRole([...ALLOWED_ROLES]);
+    const user = await requireServerRole([...ALLOWED_ROLES]);
+    const regionScope = regionScopeOrThrow(user);
 
     const body = await request.json();
     const parsed = createDriverSchema.safeParse(body);
@@ -190,6 +180,7 @@ export async function POST(request: NextRequest) {
       avatar_seed: avatarSeed,
       profile_picture_url: input.profilePictureUrl || null,
       status: input.status,
+      region: regionScope ?? null,
     });
 
     if (insertErr) {
@@ -227,15 +218,14 @@ export async function POST(request: NextRequest) {
     const status =
       message === "UNAUTHENTICATED"
         ? 401
-        : message === "FORBIDDEN"
-        ? 403
-        : 500;
+        : message === "FORBIDDEN" || message === "REGION_REQUIRED"
+          ? 403
+          : 500;
 
     if (createdAuthUserId) {
       try {
         const admin = createSupabaseAdminClient();
         await admin.auth.admin.deleteUser(createdAuthUserId);
-        console.log("[api/drivers] rolled back auth user:", createdAuthUserId);
       } catch (rollbackErr) {
         console.error("[api/drivers] rollback failed:", rollbackErr);
       }
@@ -249,7 +239,6 @@ export async function POST(request: NextRequest) {
 async function generateUniqueUsername(fullName: string): Promise<string> {
   const admin = createSupabaseAdminClient();
   const taken = new Set<string>();
-
   try {
     const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
     for (const u of data?.users ?? []) {
@@ -259,6 +248,5 @@ async function generateUniqueUsername(fullName: string): Promise<string> {
   } catch (err) {
     console.warn("[api/drivers] could not preload usernames:", err);
   }
-
   return generateUsername(fullName, taken).toLowerCase();
 }

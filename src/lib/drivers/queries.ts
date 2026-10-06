@@ -5,6 +5,7 @@
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
+import { matchesRegion } from "../auth/region";
 
 export interface DriverRow {
   id: string;
@@ -14,7 +15,6 @@ export interface DriverRow {
   residentialAddress: string | null;
   dateOfBirth: string | null;
   gender: string | null;
-
   licenseNumber: string | null;
   licenseClass: string | null;
   pdpNumber: string | null;
@@ -22,21 +22,16 @@ export interface DriverRow {
   pdpExpiryDate: string | null;
   pdpIssuingAuthority: string | null;
   pdpStatus: string | null;
-
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
   emergencyContactRelation: string | null;
-
   assignedVehicleReg: string | null;
   authUserId: string | null;
-
   avatarSeed: string | null;
   profilePictureUrl: string | null;
-
   status: string;
-
-  username: string | null; // from auth.users.user_metadata
-
+  region: string | null;
+  username: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -48,7 +43,7 @@ const SELECT_COLUMNS = `
   emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
   assigned_vehicle_reg, auth_user_id,
   avatar_seed, profile_picture_url,
-  status,
+  status, region,
   created_at, updated_at
 `;
 
@@ -76,38 +71,43 @@ function mapRow(row: Record<string, unknown>, username: string | null = null): D
     avatarSeed: (row.avatar_seed as string | null) ?? null,
     profilePictureUrl: (row.profile_picture_url as string | null) ?? null,
     status: row.status as string,
+    region: (row.region as string | null) ?? null,
     username,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
 }
 
-/**
- * Fetch all drivers with their auth usernames joined in.
- * Username comes from auth.users.user_metadata.username.
- */
-export async function listDrivers(): Promise<DriverRow[]> {
+/** @param regionScope null = national (all regions) */
+export async function listDrivers(regionScope: string | null = null): Promise<DriverRow[]> {
   const admin = createSupabaseAdminClient();
 
-  const { data, error } = await admin
+  let query = admin
     .from("drivers")
     .select(SELECT_COLUMNS)
     .order("created_at", { ascending: false });
 
+  if (regionScope) {
+    query = query.ilike("region", regionScope);
+  }
+
+  const { data, error } = await query;
+
   if (error) throw new Error(`Failed to list drivers: ${error.message}`);
   if (!data) return [];
 
-  // Fetch usernames for those with auth_user_id
-  const authIds = data
+  // Soft filter in case DB region casing differs
+  const rows = regionScope
+    ? data.filter((d) => matchesRegion(regionScope, d.region as string | null))
+    : data;
+
+  const authIds = rows
     .map((d) => d.auth_user_id as string | null)
     .filter((id): id is string => !!id);
 
   const usernameMap = new Map<string, string>();
   if (authIds.length > 0) {
-    // listUsers paginates; perPage max is 1000. Our driver count is fine for now.
-    const { data: usersData } = await admin.auth.admin.listUsers({
-      perPage: 1000,
-    });
+    const { data: usersData } = await admin.auth.admin.listUsers({ perPage: 1000 });
     for (const u of usersData?.users ?? []) {
       if (authIds.includes(u.id)) {
         const uname = u.user_metadata?.username as string | undefined;
@@ -116,7 +116,7 @@ export async function listDrivers(): Promise<DriverRow[]> {
     }
   }
 
-  return data.map((row) => {
+  return rows.map((row) => {
     const authUserId = row.auth_user_id as string | null;
     const username = authUserId ? usernameMap.get(authUserId) ?? null : null;
     return mapRow(row, username);
@@ -125,7 +125,6 @@ export async function listDrivers(): Promise<DriverRow[]> {
 
 export async function getDriverById(id: string): Promise<DriverRow | null> {
   const admin = createSupabaseAdminClient();
-
   const { data, error } = await admin
     .from("drivers")
     .select(SELECT_COLUMNS)
