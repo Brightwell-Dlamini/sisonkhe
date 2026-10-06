@@ -5,6 +5,7 @@
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
+import { matchesRegion } from "../auth/region";
 
 export interface VehicleRow {
   registrationNumber: string;
@@ -15,39 +16,30 @@ export interface VehicleRow {
   classification: string;
   routeAssignmentId: string | null;
   loadingBay: string | null;
-
   ownerName: string | null;
   ownerPhone: string | null;
   ownerOperatorId: string | null;
-
   driverId: string | null;
-  driverName: string | null; // joined
-
+  driverName: string | null;
   status: string;
   currentQueuePosition: number;
-
   permitNumber: string | null;
   permitStatus: string | null;
   permitIssueDate: string | null;
   permitExpiryDate: string | null;
-
   cofNumber: string | null;
   cofIssueDate: string | null;
   cofExpiryDate: string | null;
   lastInspectionDate: string | null;
-
   association: string | null;
   insuranceExpiry: string | null;
   roadworthinessExpiry: string | null;
-
   isMidMonthAddition: boolean;
   registrationDate: string | null;
   monthRegistered: string | null;
   midMonthJoinDay: number | null;
   monthlySequenceBaseIndex: number | null;
-
   vehiclePhotoUrl: string | null;
-
   createdAt: string;
   updatedAt: string;
 }
@@ -102,13 +94,16 @@ function mapRow(
     midMonthJoinDay: (row.mid_month_join_day as number | null) ?? null,
     monthlySequenceBaseIndex:
       (row.monthly_sequence_base_index as number | null) ?? null,
-    vehiclePhotoUrl: null, // not in DB — placeholder
+    vehiclePhotoUrl: null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
 }
 
-export async function listVehicles(): Promise<VehicleRow[]> {
+/** @param regionScope null = national */
+export async function listVehicles(
+  regionScope: string | null = null
+): Promise<VehicleRow[]> {
   const admin = createSupabaseAdminClient();
 
   const { data, error } = await admin
@@ -119,8 +114,27 @@ export async function listVehicles(): Promise<VehicleRow[]> {
   if (error) throw new Error(`Failed to list vehicles: ${error.message}`);
   if (!data) return [];
 
-  // Join driver names
-  const driverIds = data
+  let rows = data;
+  if (regionScope) {
+    const { data: routes } = await admin
+      .from("routes")
+      .select("id, region_code")
+      .limit(2000);
+    const routeRegion = new Map<string, string>();
+    for (const r of routes ?? []) {
+      if (r.id && r.region_code) {
+        routeRegion.set(String(r.id), String(r.region_code));
+      }
+    }
+    rows = data.filter((v) => {
+      const rid = v.route_assignment_id
+        ? routeRegion.get(String(v.route_assignment_id))
+        : null;
+      return matchesRegion(regionScope, rid);
+    });
+  }
+
+  const driverIds = rows
     .map((v) => v.driver_id as string | null)
     .filter((id): id is string => !!id);
 
@@ -135,7 +149,7 @@ export async function listVehicles(): Promise<VehicleRow[]> {
     }
   }
 
-  return data.map((row) => {
+  return rows.map((row) => {
     const driverId = row.driver_id as string | null;
     return mapRow(row, driverId ? driverNames.get(driverId) ?? null : null);
   });

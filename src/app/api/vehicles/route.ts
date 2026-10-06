@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getServerSession, requireServerRole } from "@/lib/auth/session";
+import { regionScopeOrThrow } from "@/lib/auth/permissions";
 import { createVehicleSchema } from "@/lib/vehicles/validation";
 import { listVehicles } from "@/lib/vehicles/queries";
 import { assignDriverVehicle } from "@/lib/assignments/service";
@@ -35,9 +36,7 @@ function generateVIC(reg: string): string {
   }
 
   const digits =
-    digitsOnly.length > 0
-      ? digitsOnly.padStart(3, "0").slice(-3)
-      : "001";
+    digitsOnly.length > 0 ? digitsOnly.padStart(3, "0").slice(-3) : "001";
 
   return `${prefix}-${digits}`;
 }
@@ -100,13 +99,17 @@ export async function GET() {
       return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
     }
 
-    const vehicles = await listVehicles();
-    return NextResponse.json({ vehicles });
+    const regionScope = regionScopeOrThrow(session);
+    const vehicles = await listVehicles(regionScope);
+    return NextResponse.json({ vehicles, regionScope });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     const status =
-      message === "UNAUTHENTICATED" ? 401 :
-      message === "FORBIDDEN" ? 403 : 500;
+      message === "UNAUTHENTICATED"
+        ? 401
+        : message === "FORBIDDEN" || message === "REGION_REQUIRED"
+          ? 403
+          : 500;
     console.error("[api/vehicles] GET error:", err);
     return NextResponse.json({ error: message }, { status });
   }
@@ -208,7 +211,7 @@ export async function POST(request: NextRequest) {
           driverId: input.driverId || null,
           nationalId: input.driverNationalId || null,
           vehicleReg: input.registrationNumber,
-          force: true,
+          force: false,
         });
       } catch (linkErr) {
         console.warn("[api/vehicles] assignment failed (non-fatal):", linkErr);
@@ -231,30 +234,24 @@ export async function POST(request: NextRequest) {
     const p4 = String(1000 + (Math.floor(positiveHash / 100) % 9000));
     const cardNumber = `5342 ${p2} ${p3} ${p4}`;
 
-    const { error: cardErr } = await admin
-      .from("vehicle_virtual_cards")
-      .insert({
-        id: syntheticCardId,
-        card_number: cardNumber,
-        cvv_hash: "pending-hash",
-        expiry_date: "09/31",
-        vehicle_reg: input.registrationNumber,
-        vic,
-        cardholder_name: input.ownerName || "Fleet Operator",
-        status: "Active",
-        balance_szl: 1525.0,
-        registration_fee_paid: true,
-        registration_fee_amount: 450.0,
-        registration_fee_date: now.toISOString().split("T")[0],
-        registration_receipt_ref: regFeeReceipt,
-        card_tier: "Commercial Concession",
-        daily_spend_limit_szl: 1500.0,
-        qr_payload: null,
-      });
-
-    if (cardErr) {
-      console.warn("[api/vehicles] virtual card issue failed:", cardErr);
-    }
+    await admin.from("vehicle_virtual_cards").insert({
+      id: syntheticCardId,
+      card_number: cardNumber,
+      cvv_hash: "pending-hash",
+      expiry_date: "09/31",
+      vehicle_reg: input.registrationNumber,
+      vic,
+      cardholder_name: input.ownerName || "Fleet Operator",
+      status: "Active",
+      balance_szl: 1525.0,
+      registration_fee_paid: true,
+      registration_fee_amount: 450.0,
+      registration_fee_date: now.toISOString().split("T")[0],
+      registration_receipt_ref: regFeeReceipt,
+      card_tier: "Commercial Concession",
+      daily_spend_limit_szl: 1500.0,
+      qr_payload: null,
+    });
 
     return NextResponse.json({
       success: true,
@@ -264,8 +261,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     const status =
-      message === "UNAUTHENTICATED" ? 401 :
-      message === "FORBIDDEN" ? 403 : 500;
+      message === "UNAUTHENTICATED" ? 401 : message === "FORBIDDEN" ? 403 : 500;
     console.error("[api/vehicles] POST error:", err);
     return NextResponse.json({ error: message }, { status });
   }

@@ -5,10 +5,11 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, RefreshCw, Printer } from "lucide-react";
 import Link from "next/link";
 import { useRenewals } from "@/hooks/useRenewals";
+import { useDeepLinkFilter } from "@/hooks/useDeepLinkFilter";
 import type { RenewalRow } from "@/lib/renewals/queries";
 import PendingRenewalsTable from "./PendingRenewalsTable";
 import RenewalApprovalModal from "./RenewalApprovalModal";
@@ -30,7 +31,16 @@ const TABS: { id: Tab; label: string; status: RenewalRow["status"] }[] = [
 ];
 
 export default function AdminPermitsPage() {
+  const deep = useDeepLinkFilter();
   const [tab, setTab] = useState<Tab>("pending");
+
+  useEffect(() => {
+    if (deep.filter === "pending" || deep.filter === "expiring" || deep.filter === "expired") {
+      setTab("pending");
+    }
+    if (deep.filter === "approved") setTab("approved");
+  }, [deep.filter]);
+
   const status = TABS.find((t) => t.id === tab)!.status;
   const { renewals, loading, error, refresh, approveRenewal } = useRenewals(status);
 
@@ -38,15 +48,29 @@ export default function AdminPermitsPage() {
   const [active, setActive] = useState<RenewalRow | null>(null);
   const toast = useToast();
 
+  useEffect(() => {
+    if (deep.q) setSearch(deep.q);
+  }, [deep.q]);
+
+  useEffect(() => {
+    if (deep.renewal && renewals.length > 0) {
+      const match = renewals.find((r) => r.id === deep.renewal);
+      if (match) setActive(match);
+    }
+  }, [deep.renewal, renewals]);
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return renewals;
-    const q = search.toLowerCase();
-    return renewals.filter(
-      (r) =>
-        r.vehicleReg.toLowerCase().includes(q) ||
-        (r.operator ?? "").toLowerCase().includes(q) ||
-        (r.id ?? "").toLowerCase().includes(q)
-    );
+    let rows = renewals;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      rows = rows.filter(
+        (r) =>
+          r.vehicleReg.toLowerCase().includes(q) ||
+          (r.operator ?? "").toLowerCase().includes(q) ||
+          (r.id ?? "").toLowerCase().includes(q)
+      );
+    }
+    return rows;
   }, [renewals, search]);
 
   const handleApprove = async (
@@ -75,6 +99,13 @@ export default function AdminPermitsPage() {
           </Link>
         }
       />
+
+      {deep.filter && (
+        <div className="mb-3 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+          Deep link filter: {deep.filter}
+          {deep.q ? ` · search ${deep.q}` : ""}
+        </div>
+      )}
 
       <div className="flex items-center gap-1.5 bg-[#0F0F10] border border-white/[0.06] p-1 rounded-2xl w-fit mb-4">
         {TABS.map((t) => (
