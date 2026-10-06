@@ -77,9 +77,16 @@ export default function MarshalFormModal({
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-lg w-full max-h-[92vh] overflow-y-auto">
         <div className="flex items-start justify-between p-5 border-b border-white/[0.06]">
-          <h3 className="text-sm font-black uppercase tracking-wide text-white">
-            {mode === "edit" ? "Edit Marshal" : "Register Marshal"}
-          </h3>
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-wide text-white">
+              {mode === "edit" ? "Edit Marshal" : "Add marshal identity"}
+            </h3>
+            <p className="text-[11px] text-zinc-500 mt-1">
+              {mode === "edit"
+                ? "Ops fields: region, terminal, route, contact."
+                : "Identity only — no login. Use Issue login on the list after save."}
+            </p>
+          </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200">
             <X className="w-4 h-4" />
           </button>
@@ -204,7 +211,7 @@ export default function MarshalFormModal({
               className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {mode === "edit" ? "Save Changes" : "Register Marshal"}
+              {mode === "edit" ? "Save Changes" : "Save identity"}
             </button>
           </div>
         </form>

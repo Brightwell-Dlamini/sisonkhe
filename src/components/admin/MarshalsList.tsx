@@ -8,6 +8,8 @@ import {
   Edit2,
   Eye,
   RefreshCw,
+  KeyRound,
+  Loader2,
 } from "lucide-react";
 import type { MarshalRow } from "@/lib/admin/marshals";
 import {
@@ -37,6 +39,12 @@ export default function MarshalsList() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<MarshalRow | null>(null);
   const [viewingCard, setViewingCard] = useState<MarshalRow | null>(null);
+  const [issuingId, setIssuingId] = useState<string | null>(null);
+  const [issuedCreds, setIssuedCreds] = useState<{
+    name: string;
+    username: string;
+    password: string;
+  } | null>(null);
   const toast = useToast();
 
   const refresh = useCallback(async () => {
@@ -78,11 +86,41 @@ export default function MarshalsList() {
     );
   }, [marshals, search]);
 
+  async function issueLogin(m: MarshalRow) {
+    if (m.authUserId) {
+      toast.error("This marshal already has a login.");
+      return;
+    }
+    setIssuingId(m.id);
+    try {
+      const res = await fetch(`/api/admin/marshals/${m.id}/issue-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Could not issue login");
+        return;
+      }
+      setIssuedCreds({
+        name: m.fullName,
+        username: data.credentials.username,
+        password: data.credentials.password,
+      });
+      void refresh();
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setIssuingId(null);
+    }
+  }
+
   return (
     <div>
       <PageHeader
         title="Rank Marshals"
-        description="Register and manage rank marshals across all terminals."
+        description="Field portal collects identity. Admin issues login and edits region/route/status."
         actions={
           <Button
             onClick={() => {
@@ -91,7 +129,7 @@ export default function MarshalsList() {
             }}
             leadingIcon={Plus}
           >
-            Add Marshal
+            Add identity
           </Button>
         }
       />
@@ -133,7 +171,7 @@ export default function MarshalsList() {
               ? "Check the error above or try Refresh."
               : search
                 ? "Try a different search."
-                : "Add the first rank marshal."
+                : "Field officers enrol via the marshal portal, or add identity here."
           }
           action={
             !search && !error ? (
@@ -145,7 +183,7 @@ export default function MarshalsList() {
                 leadingIcon={Plus}
                 size="sm"
               >
-                Add Marshal
+                Add identity
               </Button>
             ) : undefined
           }
@@ -158,7 +196,7 @@ export default function MarshalsList() {
                 <Th>Marshal</Th>
                 <Th>Contact</Th>
                 <Th>Region / Terminal</Th>
-                <Th>Claimed</Th>
+                <Th>Login</Th>
                 <Th>Status</Th>
                 <Th className="text-right">Actions</Th>
               </Tr>
@@ -195,7 +233,7 @@ export default function MarshalsList() {
                       variant={m.authUserId ? "success" : "default"}
                       size="sm"
                     >
-                      {m.authUserId ? "Yes" : "No"}
+                      {m.authUserId ? "Issued" : "None"}
                     </Badge>
                   </Td>
                   <Td>
@@ -209,6 +247,17 @@ export default function MarshalsList() {
                   </Td>
                   <Td>
                     <div className="flex items-center justify-end gap-1">
+                      {!m.authUserId && (
+                        <IconButton
+                          icon={issuingId === m.id ? Loader2 : KeyRound}
+                          label="Issue login"
+                          onClick={() => void issueLogin(m)}
+                          disabled={issuingId === m.id}
+                          className={
+                            issuingId === m.id ? "[&_svg]:animate-spin" : ""
+                          }
+                        />
+                      )}
                       <IconButton
                         icon={Eye}
                         label="View card"
@@ -242,7 +291,11 @@ export default function MarshalsList() {
           onSaved={() => {
             setShowForm(false);
             setEditing(null);
-            toast.success(editing ? "Marshal updated" : "Marshal created");
+            toast.success(
+              editing
+                ? "Marshal updated"
+                : "Identity saved — issue login when ready"
+            );
             void refresh();
           }}
         />
@@ -253,6 +306,33 @@ export default function MarshalsList() {
           marshal={viewingCard}
           onClose={() => setViewingCard(null)}
         />
+      )}
+
+      {issuedCreds && (
+        <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0F0F10] border border-emerald-500/30 rounded-2xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-sm font-black uppercase text-emerald-400">
+              Login issued
+            </h3>
+            <p className="text-xs text-zinc-300">{issuedCreds.name}</p>
+            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4 space-y-2 font-mono text-sm">
+              <div>
+                <span className="text-[10px] text-zinc-500 uppercase">Username</span>
+                <p className="text-white font-bold">{issuedCreds.username}</p>
+              </div>
+              <div>
+                <span className="text-[10px] text-zinc-500 uppercase">Temp password</span>
+                <p className="text-amber-300 font-bold">{issuedCreds.password}</p>
+              </div>
+            </div>
+            <p className="text-[11px] text-zinc-500">
+              Share once. They must change password on first sign-in.
+            </p>
+            <Button onClick={() => setIssuedCreds(null)} className="w-full">
+              Done
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );
