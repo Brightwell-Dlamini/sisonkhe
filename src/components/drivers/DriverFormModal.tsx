@@ -5,11 +5,24 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, X, AlertCircle } from "lucide-react";
 import ImageUploadField from "@/components/common/ImageUploadField";
 import type { DriverRow } from "@/lib/drivers/queries";
 import type { CreateDriverRequest } from "@/hooks/useDrivers";
+import {
+  filterAssignableVehicles,
+  vehicleOptionLabel,
+} from "@/lib/domain/eligibility";
+
+type VehicleOption = {
+  registrationNumber: string;
+  driverId: string | null;
+  make?: string | null;
+  model?: string | null;
+  status?: string | null;
+  permitStatus?: string | null;
+};
 
 interface Props {
   mode: "create" | "edit";
@@ -20,7 +33,12 @@ interface Props {
   ) => Promise<{ success: boolean; error?: string; issues?: Record<string, string[]> }>;
 }
 
-export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Props) {
+export default function DriverFormModal({
+  mode,
+  driver,
+  onClose,
+  onSubmit,
+}: Props) {
   const [form, setForm] = useState<CreateDriverRequest>({
     fullName: driver?.fullName ?? "",
     nationalId: driver?.nationalId ?? "",
@@ -43,9 +61,58 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
     profilePictureUrl: driver?.profilePictureUrl ?? "",
   });
 
+  const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
+  const [vehiclesLoading, setVehiclesLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setVehiclesLoading(true);
+      try {
+        const res = await fetch("/api/vehicles", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled) {
+          setVehicles(
+            (data.vehicles ?? []).map(
+              (v: {
+                registrationNumber: string;
+                driverId?: string | null;
+                make?: string;
+                model?: string;
+                status?: string;
+                permitStatus?: string | null;
+              }) => ({
+                registrationNumber: v.registrationNumber,
+                driverId: v.driverId ?? null,
+                make: v.make,
+                model: v.model,
+                status: v.status,
+                permitStatus: v.permitStatus,
+              })
+            )
+          );
+        }
+      } catch {
+        if (!cancelled) setVehicles([]);
+      } finally {
+        if (!cancelled) setVehiclesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const eligibleVehicles = useMemo(() => {
+    return filterAssignableVehicles(
+      vehicles,
+      driver?.id ?? null,
+      form.assignedVehicleReg || driver?.assignedVehicleReg
+    );
+  }, [vehicles, driver?.id, form.assignedVehicleReg, driver?.assignedVehicleReg]);
 
   const update = <K extends keyof CreateDriverRequest>(
     key: K,
@@ -79,8 +146,8 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
             </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
               {mode === "create"
-                ? "Credentials will be generated automatically."
-                : "Update driver details. Vehicle reassignment syncs both records."}
+                ? "Credentials generated automatically. Only free vehicles appear below."
+                : "Vehicle reassignment uses the single assignment path."}
             </p>
           </div>
           <button
@@ -182,14 +249,12 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
             <legend className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
               Driving Licence
             </legend>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Licence Number">
                 <input
                   type="text"
                   value={form.licenseNumber}
                   onChange={(e) => update("licenseNumber", e.target.value)}
-                  placeholder="SZ-DL-00000"
                   className="input font-mono"
                 />
               </Field>
@@ -198,7 +263,6 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
                   type="text"
                   value={form.licenseClass}
                   onChange={(e) => update("licenseClass", e.target.value)}
-                  placeholder="Heavy Duty / PDP"
                   className="input"
                 />
               </Field>
@@ -209,7 +273,6 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
             <legend className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
               Professional Driving Permit (PDP)
             </legend>
-
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="PDP Number">
                 <input
@@ -261,7 +324,6 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
             <legend className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
               Emergency Contact
             </legend>
-
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="Name">
                 <input
@@ -275,7 +337,9 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
                 <input
                   type="text"
                   value={form.emergencyContactRelation}
-                  onChange={(e) => update("emergencyContactRelation", e.target.value)}
+                  onChange={(e) =>
+                    update("emergencyContactRelation", e.target.value)
+                  }
                   className="input"
                 />
               </Field>
@@ -296,14 +360,29 @@ export default function DriverFormModal({ mode, driver, onClose, onSubmit }: Pro
             </legend>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Vehicle number plate">
-                <input
-                  type="text"
-                  value={form.assignedVehicleReg}
-                  onChange={(e) => update("assignedVehicleReg", e.target.value.toUpperCase())}
-                  placeholder="e.g. HSD 101 BM"
+              <Field label="Assigned vehicle">
+                <select
+                  value={form.assignedVehicleReg ?? ""}
+                  onChange={(e) => update("assignedVehicleReg", e.target.value)}
                   className="input font-mono"
-                />
+                  disabled={vehiclesLoading}
+                >
+                  <option value="">— No vehicle —</option>
+                  {eligibleVehicles.map((v) => (
+                    <option
+                      key={v.registrationNumber}
+                      value={v.registrationNumber}
+                    >
+                      {vehicleOptionLabel(v)}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[10px] text-zinc-500">
+                  Only vehicles without another driver (and not Offline).
+                  {vehiclesLoading
+                    ? " Loading…"
+                    : ` ${eligibleVehicles.length} of ${vehicles.length} shown.`}
+                </p>
               </Field>
               <Field label="Status">
                 <select

@@ -1,10 +1,6 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * GET    /api/vehicles/[reg]  — fetch one
- * PATCH  /api/vehicles/[reg]  — update (driver assignment via single write path)
- * DELETE /api/vehicles/[reg]  — deactivate (soft) + unlink driver
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,6 +12,12 @@ import {
   assignDriverVehicle,
   unassignDriverVehicle,
 } from "@/lib/assignments/service";
+import {
+  canChangeRoute,
+  canChangeOperatorOwnership,
+} from "@/lib/domain/permitLifecycle";
+import { normalizePlate } from "@/lib/domain/identity";
+import { writeAudit } from "@/lib/domain/audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,6 +36,7 @@ function errorStatus(message: string): number {
     message.includes("already") ||
     message.includes("suspended") ||
     message.includes("PDP") ||
+    message.includes("Cannot") ||
     message.includes("force")
   )
     return 409;
@@ -44,27 +47,22 @@ export async function GET(_: NextRequest, { params }: Params) {
   try {
     await requireServerRole([...ALLOWED_ROLES]);
     const { reg } = await params;
-    const decoded = decodeURIComponent(reg);
-    const vehicle = await getVehicleByReg(decoded);
+    const vehicle = await getVehicleByReg(decodeURIComponent(reg));
     if (!vehicle) {
       return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
     }
     return NextResponse.json({ vehicle });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/vehicles/[reg]] GET error:", err);
-    return NextResponse.json(
-      { error: message },
-      { status: errorStatus(message) }
-    );
+    return NextResponse.json({ error: message }, { status: errorStatus(message) });
   }
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
-    await requireServerRole([...ALLOWED_ROLES]);
+    const session = await requireServerRole([...ALLOWED_ROLES]);
     const { reg } = await params;
-    const decoded = decodeURIComponent(reg).toUpperCase();
+    const decoded = normalizePlate(decodeURIComponent(reg));
 
     const body = await request.json();
     const parsed = updateVehicleSchema.safeParse(body);
@@ -84,7 +82,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const { data: current } = await admin
       .from("vehicles")
-      .select("driver_id")
+      .select("driver_id, status, route_assignment_id, owner_operator_id")
       .eq("registration_number", decoded)
       .maybeSingle();
 
@@ -93,10 +91,30 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
 
     const oldDriverId = current.driver_id as string | null;
+    const vehicleStatus = current.status as string | null;
     const driverChange = input.driverId !== undefined;
     const newDriverId = driverChange ? input.driverId || null : oldDriverId;
 
-    // Non-assignment fields only — never write driver_id here
+    if (
+      input.routeAssignmentId !== undefined &&
+      input.routeAssignmentId !== current.route_assignment_id
+    ) {
+      const gate = canChangeRoute(vehicleStatus);
+      if (!gate.allowed) {
+        return NextResponse.json({ error: gate.reason }, { status: 409 });
+      }
+    }
+
+    if (
+      input.ownerOperatorId !== undefined &&
+      input.ownerOperatorId !== current.owner_operator_id
+    ) {
+      const gate = canChangeOperatorOwnership(vehicleStatus, !!oldDriverId);
+      if (!gate.allowed) {
+        return NextResponse.json({ error: gate.reason }, { status: 409 });
+      }
+    }
+
     const patch: Record<string, unknown> = {};
     if (input.make !== undefined) patch.make = input.make;
     if (input.model !== undefined) patch.model = input.model;
@@ -150,7 +168,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         .eq("registration_number", decoded);
 
       if (updateErr) {
-        console.error("[api/vehicles/[reg]] update error:", updateErr);
         return NextResponse.json(
           { error: `Update failed: ${updateErr.message}` },
           { status: 500 }
@@ -158,7 +175,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }
     }
 
-    // Single source of truth for driver ↔ vehicle
     if (driverChange && newDriverId !== oldDriverId) {
       try {
         if (!newDriverId) {
@@ -194,30 +210,44 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       );
     }
 
+    await writeAudit(admin, {
+      action: "vehicle.update",
+      actorId: session.authUserId,
+      actorRole: session.role,
+      actorName: session.fullName,
+      entityType: "vehicle",
+      entityId: decoded,
+      summary: `Updated vehicle ${decoded}`,
+      after: patch,
+    });
+
     return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/vehicles/[reg]] PATCH error:", err);
-    return NextResponse.json(
-      { error: message },
-      { status: errorStatus(message) }
-    );
+    return NextResponse.json({ error: message }, { status: errorStatus(message) });
   }
 }
 
 export async function DELETE(_: NextRequest, { params }: Params) {
   try {
-    await requireServerRole([...ALLOWED_ROLES]);
+    const session = await requireServerRole([...ALLOWED_ROLES]);
     const { reg } = await params;
-    const decoded = decodeURIComponent(reg).toUpperCase();
+    const decoded = normalizePlate(decodeURIComponent(reg));
 
     const admin = createSupabaseAdminClient();
 
     const { data: vehicle } = await admin
       .from("vehicles")
-      .select("driver_id")
+      .select("driver_id, status")
       .eq("registration_number", decoded)
       .maybeSingle();
+
+    if (vehicle?.status === "Loading") {
+      return NextResponse.json(
+        { error: "Cannot deactivate while Loading. Reset to Waiting first." },
+        { status: 409 }
+      );
+    }
 
     if (vehicle?.driver_id) {
       await unassignDriverVehicle(admin, {
@@ -242,13 +272,19 @@ export async function DELETE(_: NextRequest, { params }: Params) {
       );
     }
 
+    await writeAudit(admin, {
+      action: "vehicle.deactivate",
+      actorId: session.authUserId,
+      actorRole: session.role,
+      actorName: session.fullName,
+      entityType: "vehicle",
+      entityId: decoded,
+      summary: `Deactivated vehicle ${decoded}`,
+    });
+
     return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/vehicles/[reg]] DELETE error:", err);
-    return NextResponse.json(
-      { error: message },
-      { status: errorStatus(message) }
-    );
+    return NextResponse.json({ error: message }, { status: errorStatus(message) });
   }
 }
