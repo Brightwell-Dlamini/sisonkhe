@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Single write path for driver ↔ vehicle.
- * Order: driver.assigned_vehicle_reg first, then vehicles.driver_id
- * (DB triggers often require the driver side to match before vehicle.driver_id is set).
+ * Prefer DB RPC assign_driver_vehicle_atomic (session-gated triggers).
+ * Falls back to direct writes only if RPC is missing.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -94,6 +94,26 @@ export async function resolveVehicle(admin: SupabaseClient, vehicleReg: string) 
   };
 }
 
+function mapRpcResult(raw: Record<string, unknown>): AssignmentResult {
+  return {
+    driverId: String(raw.driverId ?? raw.driver_id ?? ""),
+    driverName: String(raw.driverName ?? raw.driver_name ?? ""),
+    nationalId: (raw.nationalId ?? raw.national_id ?? null) as string | null,
+    vehicleReg: String(raw.vehicleReg ?? raw.vehicle_reg ?? ""),
+    vehicleMake: (raw.vehicleMake ?? raw.vehicle_make ?? null) as string | null,
+    vehicleModel: (raw.vehicleModel ?? raw.vehicle_model ?? null) as
+      | string
+      | null,
+    vic: (raw.vic ?? null) as string | null,
+    releasedDriverId: (raw.releasedDriverId ??
+      raw.released_driver_id ??
+      null) as string | null,
+    releasedVehicleReg: (raw.releasedVehicleReg ??
+      raw.released_vehicle_reg ??
+      null) as string | null,
+  };
+}
+
 export async function assignDriverVehicle(
   admin: SupabaseClient,
   keys: AssignmentKeys
@@ -168,125 +188,70 @@ export async function assignDriverVehicle(
     );
   }
 
-  let releasedDriverId: string | null = null;
-  let releasedVehicleReg: string | null = null;
-
-  // Clear previous occupant of this vehicle
-  if (vehicle.driver_id && vehicle.driver_id !== driver.id) {
-    if (!keys.force) {
-      throw Object.assign(
-        new Error(
-          `Vehicle ${canonicalPlate} is already linked to another driver. Unlink first or use force (staff transfer).`
-        ),
-        { status: 409 }
-      );
+  // Prefer atomic RPC (bypasses chicken-egg triggers)
+  const { data: rpcData, error: rpcErr } = await admin.rpc(
+    "assign_driver_vehicle_atomic",
+    {
+      p_driver_id: driver.id,
+      p_vehicle_reg: canonicalPlate,
+      p_force: !!keys.force,
     }
-    await admin
-      .from("drivers")
-      .update({ assigned_vehicle_reg: null })
-      .eq("id", vehicle.driver_id);
-    releasedDriverId = vehicle.driver_id as string;
+  );
+
+  if (!rpcErr && rpcData) {
+    return mapRpcResult(
+      typeof rpcData === "object" && !Array.isArray(rpcData)
+        ? (rpcData as Record<string, unknown>)
+        : {}
+    );
   }
 
-  // Clear previous vehicle of this driver
-  const prevReg = driver.assigned_vehicle_reg as string | null;
-  if (prevReg && !platesEqual(prevReg, canonicalPlate)) {
-    if (!keys.force && !eligibility.eligible) {
-      throw Object.assign(
-        new Error(
-          `Driver is on ${normalizePlate(prevReg)}. Confirm transfer (force) to move them to ${canonicalPlate}.`
-        ),
-        { status: 409 }
-      );
-    }
-    await admin
-      .from("vehicles")
-      .update({ driver_id: null })
-      .eq("registration_number", normalizePlate(prevReg));
-    releasedVehicleReg = normalizePlate(prevReg);
+  // If RPC missing (migration not applied), surface a clear error — do NOT
+  // attempt sequential writes (they always fail against the bidirectional guards).
+  if (
+    rpcErr &&
+    (rpcErr.message?.includes("Could not find the function") ||
+      rpcErr.message?.includes("function public.assign_driver_vehicle_atomic") ||
+      rpcErr.code === "PGRST202" ||
+      rpcErr.code === "42883")
+  ) {
+    throw Object.assign(
+      new Error(
+        "Assignment RPC is not installed. Run migration 20261012_assignment_atomic.sql on Supabase, then retry."
+      ),
+      { status: 503 }
+    );
   }
 
-  // CRITICAL ORDER for DB triggers:
-  // 1) drivers.assigned_vehicle_reg = plate
-  // 2) vehicles.driver_id = driver
-  const { error: dErr } = await admin
-    .from("drivers")
-    .update({ assigned_vehicle_reg: canonicalPlate })
-    .eq("id", driver.id);
-
-  if (dErr) {
-    throw Object.assign(new Error(`Could not update driver: ${dErr.message}`), {
-      status: 500,
-    });
+  if (rpcErr) {
+    const msg = rpcErr.message || "Assignment failed";
+    const status =
+      msg.includes("already") ||
+      msg.includes("force") ||
+      msg.includes("Suspended") ||
+      msg.includes("cannot be assigned")
+        ? 409
+        : 500;
+    throw Object.assign(new Error(msg), { status });
   }
 
-  const { error: vErr } = await admin
-    .from("vehicles")
-    .update({ driver_id: driver.id })
-    .eq("registration_number", canonicalPlate);
-
-  if (vErr) {
-    // Rollback driver side
-    await admin
-      .from("drivers")
-      .update({ assigned_vehicle_reg: prevReg })
-      .eq("id", driver.id);
-    if (releasedVehicleReg) {
-      await admin
-        .from("vehicles")
-        .update({ driver_id: driver.id })
-        .eq("registration_number", releasedVehicleReg);
-    }
-    throw Object.assign(new Error(`Could not update vehicle: ${vErr.message}`), {
-      status: 500,
-    });
-  }
-
-  // Clear any other vehicles still pointing at this driver (split-brain cleanup)
-  await admin
-    .from("vehicles")
-    .update({ driver_id: null })
-    .eq("driver_id", driver.id)
-    .neq("registration_number", canonicalPlate);
-
-  return {
-    driverId: driver.id as string,
-    driverName: driver.full_name as string,
-    nationalId: (driver.national_id as string | null) ?? null,
-    vehicleReg: canonicalPlate,
-    vehicleMake: (vehicle.make as string | null) ?? null,
-    vehicleModel: (vehicle.model as string | null) ?? null,
-    vic: (vehicle.vic as string | null) ?? null,
-    releasedDriverId,
-    releasedVehicleReg,
-  };
+  throw Object.assign(new Error("Assignment failed with empty RPC response"), {
+    status: 500,
+  });
 }
 
 export async function unassignDriverVehicle(
   admin: SupabaseClient,
   keys: Pick<AssignmentKeys, "driverId" | "nationalId" | "vehicleReg">
 ): Promise<{ driverId: string | null; vehicleReg: string | null }> {
-  let driverId: string | null = null;
-  let vehicleReg: string | null = null;
+  let driverId: string | null = keys.driverId?.trim() || null;
+  let vehicleReg: string | null = keys.vehicleReg
+    ? normalizePlate(keys.vehicleReg)
+    : null;
 
-  if (keys.vehicleReg?.trim()) {
-    const vehicle = await resolveVehicle(admin, keys.vehicleReg);
-    if (vehicle) {
-      vehicleReg = vehicle.registration_number as string;
-      driverId = (vehicle.driver_id as string | null) ?? null;
-    }
-  }
-
-  if (!driverId && (keys.driverId || keys.nationalId)) {
-    const driver = await resolveDriver(admin, keys);
-    if (driver) {
-      driverId = driver.id as string;
-      vehicleReg =
-        vehicleReg ||
-        ((driver.assigned_vehicle_reg as string | null)
-          ? normalizePlate(driver.assigned_vehicle_reg as string)
-          : null);
-    }
+  if (!driverId && keys.nationalId) {
+    const d = await resolveDriver(admin, { nationalId: keys.nationalId });
+    driverId = (d?.id as string) ?? null;
   }
 
   if (!driverId && !vehicleReg) {
@@ -296,22 +261,40 @@ export async function unassignDriverVehicle(
     );
   }
 
-  // Clear vehicle first, then driver (triggers often check vehicle.driver_id)
-  if (vehicleReg) {
-    await admin
-      .from("vehicles")
-      .update({ driver_id: null })
-      .eq("registration_number", vehicleReg);
+  const { data: rpcData, error: rpcErr } = await admin.rpc(
+    "unassign_driver_vehicle_atomic",
+    {
+      p_driver_id: driverId,
+      p_vehicle_reg: vehicleReg,
+    }
+  );
+
+  if (!rpcErr && rpcData) {
+    const row = rpcData as Record<string, unknown>;
+    return {
+      driverId: (row.driverId ?? row.driver_id ?? null) as string | null,
+      vehicleReg: (row.vehicleReg ?? row.vehicle_reg ?? null) as string | null,
+    };
   }
-  if (driverId) {
-    await admin
-      .from("drivers")
-      .update({ assigned_vehicle_reg: null })
-      .eq("id", driverId);
-    await admin
-      .from("vehicles")
-      .update({ driver_id: null })
-      .eq("driver_id", driverId);
+
+  if (
+    rpcErr &&
+    (rpcErr.message?.includes("Could not find the function") ||
+      rpcErr.code === "PGRST202" ||
+      rpcErr.code === "42883")
+  ) {
+    throw Object.assign(
+      new Error(
+        "Unassign RPC is not installed. Run migration 20261012_assignment_atomic.sql on Supabase, then retry."
+      ),
+      { status: 503 }
+    );
+  }
+
+  if (rpcErr) {
+    throw Object.assign(new Error(rpcErr.message || "Unassign failed"), {
+      status: 500,
+    });
   }
 
   return { driverId, vehicleReg };
