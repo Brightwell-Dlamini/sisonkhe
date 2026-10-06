@@ -15,6 +15,8 @@ import {
   generateUsername,
 } from "@/lib/drivers/generators";
 import { assignDriverVehicle } from "@/lib/assignments/service";
+import { normalizePlate } from "@/lib/domain/identity";
+import { writeAudit } from "@/lib/domain/audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,7 +37,6 @@ export async function GET() {
         : message === "FORBIDDEN" || message === "REGION_REQUIRED"
           ? 403
           : 500;
-    console.error("[api/drivers] GET error:", err);
     return NextResponse.json({ error: message }, { status });
   }
 }
@@ -62,6 +63,9 @@ export async function POST(request: NextRequest) {
 
     const input = parsed.data;
     const admin = createSupabaseAdminClient();
+    const plate = input.assignedVehicleReg
+      ? normalizePlate(input.assignedVehicleReg)
+      : null;
 
     if (input.phone) {
       const { data: phoneClash } = await admin
@@ -105,16 +109,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (input.assignedVehicleReg) {
+    if (plate) {
       const { data: vehicle } = await admin
         .from("vehicles")
         .select("registration_number, driver_id")
-        .eq("registration_number", input.assignedVehicleReg)
+        .eq("registration_number", plate)
         .maybeSingle();
 
       if (!vehicle) {
         return NextResponse.json(
-          { error: `Vehicle ${input.assignedVehicleReg} not found.` },
+          { error: `Vehicle ${plate} not found.` },
           { status: 404 }
         );
       }
@@ -139,7 +143,6 @@ export async function POST(request: NextRequest) {
       });
 
     if (createErr || !created.user) {
-      console.error("[api/drivers] createUser error:", createErr);
       return NextResponse.json(
         {
           error: `Could not create driver account: ${
@@ -157,6 +160,7 @@ export async function POST(request: NextRequest) {
       .replace(/[^a-z]/g, "")
       .slice(0, 12);
 
+    // Never set assigned_vehicle_reg here — assignment service owns both sides
     const { error: insertErr } = await admin.from("drivers").insert({
       id: driverId,
       full_name: input.fullName,
@@ -175,7 +179,7 @@ export async function POST(request: NextRequest) {
       emergency_contact_name: input.emergencyContactName || null,
       emergency_contact_phone: input.emergencyContactPhone || null,
       emergency_contact_relation: input.emergencyContactRelation || null,
-      assigned_vehicle_reg: input.assignedVehicleReg || null,
+      assigned_vehicle_reg: null,
       auth_user_id: createdAuthUserId,
       avatar_seed: avatarSeed,
       profile_picture_url: input.profilePictureUrl || null,
@@ -186,28 +190,43 @@ export async function POST(request: NextRequest) {
     if (insertErr) {
       await admin.auth.admin.deleteUser(createdAuthUserId);
       createdAuthUserId = null;
-      console.error("[api/drivers] insert error:", insertErr);
       return NextResponse.json(
         { error: `Could not create driver record: ${insertErr.message}` },
         { status: 500 }
       );
     }
 
-    if (input.assignedVehicleReg) {
+    let assignmentWarning: string | null = null;
+    if (plate) {
       try {
         await assignDriverVehicle(admin, {
           driverId,
-          vehicleReg: input.assignedVehicleReg,
-          force: true,
+          vehicleReg: plate,
+          force: false,
         });
       } catch (linkErr) {
-        console.warn("[api/drivers] assignment failed (non-fatal):", linkErr);
+        assignmentWarning =
+          linkErr instanceof Error
+            ? linkErr.message
+            : "Vehicle assignment failed — driver created unassigned.";
       }
     }
+
+    await writeAudit(admin, {
+      action: "driver.update",
+      actorId: user.authUserId,
+      actorRole: user.role,
+      actorName: user.fullName,
+      entityType: "driver",
+      entityId: driverId,
+      summary: `Registered driver ${input.fullName}`,
+      meta: assignmentWarning ? { assignmentWarning } : null,
+    });
 
     return NextResponse.json({
       success: true,
       driverId,
+      assignmentWarning,
       credentials: {
         username,
         password: tempPassword,
@@ -226,12 +245,11 @@ export async function POST(request: NextRequest) {
       try {
         const admin = createSupabaseAdminClient();
         await admin.auth.admin.deleteUser(createdAuthUserId);
-      } catch (rollbackErr) {
-        console.error("[api/drivers] rollback failed:", rollbackErr);
+      } catch {
+        /* */
       }
     }
 
-    console.error("[api/drivers] POST error:", err);
     return NextResponse.json({ error: message }, { status });
   }
 }
@@ -245,8 +263,8 @@ async function generateUniqueUsername(fullName: string): Promise<string> {
       const uname = u.user_metadata?.username as string | undefined;
       if (uname) taken.add(uname.toLowerCase());
     }
-  } catch (err) {
-    console.warn("[api/drivers] could not preload usernames:", err);
+  } catch {
+    /* */
   }
   return generateUsername(fullName, taken).toLowerCase();
 }

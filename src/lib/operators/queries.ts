@@ -5,6 +5,7 @@
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
+import { matchesRegion } from "../auth/region";
 
 export interface OperatorRow {
   id: string;
@@ -15,6 +16,7 @@ export interface OperatorRow {
   nationalId: string | null;
   taxNumber: string | null;
   association: string | null;
+  region: string | null;
   avatarUrl: string | null;
   bankAccountRef: string | null;
   operatorLicenseNumber: string | null;
@@ -34,11 +36,13 @@ export interface OperatorRow {
 
 const SELECT_COLUMNS = `
   id, name, company_name, phone, email, national_id, tax_number,
-  association, avatar_url, bank_account_ref, operator_license_number,
+  association, region, avatar_url, bank_account_ref, operator_license_number,
   auth_user_id, created_at, updated_at
 `;
 
-function mapRow(row: Record<string, unknown>): Omit<OperatorRow, "username" | "masterCard" | "vehicleCount"> {
+function mapRow(
+  row: Record<string, unknown>
+): Omit<OperatorRow, "username" | "masterCard" | "vehicleCount"> {
   return {
     id: row.id as string,
     name: row.name as string,
@@ -48,6 +52,7 @@ function mapRow(row: Record<string, unknown>): Omit<OperatorRow, "username" | "m
     nationalId: (row.national_id as string | null) ?? null,
     taxNumber: (row.tax_number as string | null) ?? null,
     association: (row.association as string | null) ?? null,
+    region: (row.region as string | null) ?? null,
     avatarUrl: (row.avatar_url as string | null) ?? null,
     bankAccountRef: (row.bank_account_ref as string | null) ?? null,
     operatorLicenseNumber: (row.operator_license_number as string | null) ?? null,
@@ -57,21 +62,73 @@ function mapRow(row: Record<string, unknown>): Omit<OperatorRow, "username" | "m
   };
 }
 
-export async function listOperators(): Promise<OperatorRow[]> {
+/** @param regionScope null = national */
+export async function listOperators(
+  regionScope: string | null = null
+): Promise<OperatorRow[]> {
   const admin = createSupabaseAdminClient();
 
-  const { data, error } = await admin
-    .from("fleet_operators")
-    .select(SELECT_COLUMNS)
-    .order("created_at", { ascending: false });
+  // region column may not exist yet — fall back to unscoped select
+  let data: Record<string, unknown>[] | null = null;
+  let error: { message: string } | null = null;
+
+  {
+    let q = admin
+      .from("fleet_operators")
+      .select(SELECT_COLUMNS)
+      .order("created_at", { ascending: false });
+    if (regionScope) q = q.ilike("region", regionScope);
+    const res = await q;
+    if (res.error && res.error.message.includes("region")) {
+      const fallback = await admin
+        .from("fleet_operators")
+        .select(
+          `id, name, company_name, phone, email, national_id, tax_number,
+           association, avatar_url, bank_account_ref, operator_license_number,
+           auth_user_id, created_at, updated_at`
+        )
+        .order("created_at", { ascending: false });
+      data = (fallback.data as Record<string, unknown>[] | null) ?? [];
+      error = fallback.error;
+    } else {
+      data = (res.data as Record<string, unknown>[] | null) ?? [];
+      error = res.error;
+    }
+  }
 
   if (error) throw new Error(`Failed to list operators: ${error.message}`);
   if (!data || data.length === 0) return [];
 
-  const operatorIds = data.map((o) => o.id as string);
+  let rows = data;
+  if (regionScope) {
+    rows = data.filter((d) =>
+      matchesRegion(regionScope, (d.region as string | null) ?? null)
+    );
+    // If no region column populated, include operators who own vehicles on regional routes
+    if (rows.length === 0) {
+      const { data: routes } = await admin
+        .from("routes")
+        .select("id")
+        .ilike("region_code", regionScope);
+      const routeIds = (routes ?? []).map((r) => r.id as string);
+      if (routeIds.length > 0) {
+        const { data: vehs } = await admin
+          .from("vehicles")
+          .select("owner_operator_id")
+          .in("route_assignment_id", routeIds);
+        const opIds = new Set(
+          (vehs ?? [])
+            .map((v) => v.owner_operator_id as string | null)
+            .filter((id): id is string => !!id)
+        );
+        rows = data.filter((d) => opIds.has(d.id as string));
+      }
+    }
+  }
 
-  // Fetch usernames for those with auth_user_id
-  const authIds = data
+  const operatorIds = rows.map((o) => o.id as string);
+
+  const authIds = rows
     .map((o) => o.auth_user_id as string | null)
     .filter((id): id is string => !!id);
 
@@ -87,12 +144,11 @@ export async function listOperators(): Promise<OperatorRow[]> {
           if (uname) usernameMap.set(u.id, uname);
         }
       }
-    } catch (err) {
-      console.warn("[operators] could not fetch usernames:", err);
+    } catch {
+      /* */
     }
   }
 
-  // Fetch master cards
   const { data: cards } = await admin
     .from("operator_master_cards")
     .select("id, card_number, balance_szl, status, card_tier, operator_id")
@@ -109,7 +165,6 @@ export async function listOperators(): Promise<OperatorRow[]> {
     });
   }
 
-  // Count vehicles per operator
   const { data: vehicles } = await admin
     .from("vehicles")
     .select("owner_operator_id")
@@ -121,7 +176,7 @@ export async function listOperators(): Promise<OperatorRow[]> {
     if (opId) vehicleCountMap.set(opId, (vehicleCountMap.get(opId) ?? 0) + 1);
   }
 
-  return data.map((row) => {
+  return rows.map((row) => {
     const base = mapRow(row);
     const authUserId = base.authUserId;
     return {
@@ -136,13 +191,28 @@ export async function listOperators(): Promise<OperatorRow[]> {
 export async function getOperatorById(id: string): Promise<OperatorRow | null> {
   const admin = createSupabaseAdminClient();
 
-  const { data, error } = await admin
+  let data: Record<string, unknown> | null = null;
+  const res = await admin
     .from("fleet_operators")
     .select(SELECT_COLUMNS)
     .eq("id", id)
     .maybeSingle();
 
-  if (error) throw new Error(`Failed to fetch operator: ${error.message}`);
+  if (res.error && res.error.message.includes("region")) {
+    const fb = await admin
+      .from("fleet_operators")
+      .select(
+        `id, name, company_name, phone, email, national_id, tax_number,
+         association, avatar_url, bank_account_ref, operator_license_number,
+         auth_user_id, created_at, updated_at`
+      )
+      .eq("id", id)
+      .maybeSingle();
+    data = fb.data as Record<string, unknown> | null;
+  } else {
+    data = res.data as Record<string, unknown> | null;
+  }
+
   if (!data) return null;
 
   const base = mapRow(data);
@@ -150,10 +220,13 @@ export async function getOperatorById(id: string): Promise<OperatorRow | null> {
   let username: string | null = null;
   if (base.authUserId) {
     try {
-      const { data: userData } = await admin.auth.admin.getUserById(base.authUserId);
-      username = (userData?.user?.user_metadata?.username as string | undefined) ?? null;
-    } catch (err) {
-      console.warn("[operators] could not fetch username:", err);
+      const { data: userData } = await admin.auth.admin.getUserById(
+        base.authUserId
+      );
+      username =
+        (userData?.user?.user_metadata?.username as string | undefined) ?? null;
+    } catch {
+      /* */
     }
   }
 
