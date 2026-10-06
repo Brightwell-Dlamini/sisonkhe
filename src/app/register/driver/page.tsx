@@ -2,15 +2,14 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Driver self-registration — institutional form design inspired by
- * the Marshal Registration portal.
+ * Driver public registration — identity collection only (marshal-portal style).
+ * No password. No vehicle link. Claim or admin issues login later.
  */
 
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Shield,
   User,
@@ -20,13 +19,8 @@ import {
   Calendar,
   Car,
   Heart,
-  Lock,
   Loader2,
   AlertCircle,
-  CheckCircle2,
-  Eye,
-  EyeOff,
-  ArrowRight,
   BadgeCheck,
 } from "lucide-react";
 
@@ -48,8 +42,6 @@ const emptyForm = {
   emergencyContactName: "",
   emergencyContactPhone: "",
   emergencyContactRelation: "",
-  password: "",
-  confirmPassword: "",
 };
 
 const GENDERS = ["Male", "Female", "Other"] as const;
@@ -60,14 +52,11 @@ const inputOk = `${inputBase} border-slate-300 hover:border-slate-400`;
 const inputErr = `${inputBase} border-red-400 ring-1 ring-red-300`;
 
 export default function RegisterDriverPage() {
-  const router = useRouter();
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [showPassword, setShowPassword] = useState(false);
   const [success, setSuccess] = useState<{
-    username: string;
     fullName: string;
     nationalId: string;
   } | null>(null);
@@ -95,7 +84,6 @@ export default function RegisterDriverPage() {
         return;
       }
       setSuccess({
-        username: data.username,
         fullName: data.fullName,
         nationalId: data.nationalId,
       });
@@ -114,52 +102,27 @@ export default function RegisterDriverPage() {
             <BadgeCheck className="w-8 h-8 text-emerald-400" />
           </div>
           <h1 className="text-xl sm:text-2xl font-black uppercase tracking-wider text-emerald-400">
-            Registration Confirmed
+            Profile recorded
           </h1>
           <p className="mt-2 text-sm text-slate-300">
-            Driver profile active in the national transport registry
+            No login was created. You will claim an account at rollout, or admin will issue credentials.
           </p>
         </div>
-        <div className="p-6 sm:p-8 space-y-5">
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5 space-y-3">
-            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-800">
-              Sign-in credentials
-            </p>
-            <div>
-              <span className="text-[11px] text-slate-500 uppercase font-bold">Username</span>
-              <p className="font-mono text-lg font-black text-slate-900">{success.username}</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-emerald-200/80">
-              <div>
-                <span className="text-[11px] text-slate-500 uppercase font-bold">Full name</span>
-                <p className="text-sm font-bold text-slate-800">{success.fullName}</p>
-              </div>
-              <div>
-                <span className="text-[11px] text-slate-500 uppercase font-bold">National ID</span>
-                <p className="font-mono text-sm font-bold text-slate-800">{success.nationalId}</p>
-              </div>
-            </div>
-            <p className="text-xs text-slate-600 pt-1">
-              Use the password you chose. Keep your username safe — you will need it to sign in.
+        <div className="p-6 sm:p-8 space-y-4">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5 space-y-2">
+            <p className="text-sm font-bold text-slate-900">{success.fullName}</p>
+            <p className="font-mono text-sm text-slate-700">{success.nationalId}</p>
+            <p className="text-xs text-slate-600 pt-2">
+              Keep your National ID and registered phone number — they are used to claim your account later.
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <button
-              type="button"
-              onClick={() => router.push("/login")}
-              className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black uppercase tracking-wider shadow-sm"
-            >
-              Sign in now
-              <ArrowRight className="w-4 h-4" />
-            </button>
-            <Link
-              href="/register/vehicle"
-              className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-black uppercase tracking-wider"
-            >
-              <Car className="w-4 h-4 text-amber-600" />
-              Register vehicle
-            </Link>
-          </div>
+          <Link
+            href="/register/vehicle"
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-black uppercase tracking-wider"
+          >
+            <Car className="w-4 h-4 text-amber-600" />
+            Record a vehicle (optional · no auto-link)
+          </Link>
         </div>
       </div>
     );
@@ -171,40 +134,28 @@ export default function RegisterDriverPage() {
         <div className="flex items-center gap-2">
           <Shield className="w-4 h-4 text-blue-700 shrink-0" />
           <span className="text-xs font-semibold text-blue-900">
-            Official driver enrolment · National ID links your vehicle later
+            Data collection only · Login is claimed later · Staff assign vehicles
           </span>
         </div>
-        <Link href="/register/vehicle" className="text-[11px] font-bold text-blue-700 hover:underline">
-          Already registered? Add vehicle →
-        </Link>
       </div>
 
       <form onSubmit={onSubmit} className="bg-white rounded-2xl shadow-xl border border-slate-200/90 overflow-hidden">
         <div className="bg-slate-900 text-white p-5 sm:p-7 border-b-4 border-amber-500">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-slate-800">
-            <div className="text-center sm:text-left flex items-center gap-3">
-              <div className="w-12 h-12 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                <User className="w-7 h-7" />
-              </div>
-              <div>
-                <h1 className="text-lg sm:text-xl font-black uppercase tracking-wider text-amber-400">
-                  Driver Self-Registration
-                </h1>
-                <div className="text-xs font-bold text-slate-300 uppercase tracking-widest">
-                  Sisonkhe In Transit · Kingdom of Eswatini
-                </div>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <User className="w-7 h-7" />
             </div>
-            <div className="bg-slate-800/90 border border-slate-700 rounded-xl px-4 py-2.5 text-center shrink-0">
-              <span className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                Account status
-              </span>
-              <span className="text-sm font-mono font-bold text-amber-400">ACTIVE ON SAVE</span>
+            <div>
+              <h1 className="text-lg sm:text-xl font-black uppercase tracking-wider text-amber-400">
+                Driver registration
+              </h1>
+              <div className="text-xs font-bold text-slate-300 uppercase tracking-widest">
+                Sisonkhe In Transit · Kingdom of Eswatini
+              </div>
             </div>
           </div>
-          <p className="mt-3 text-[11px] sm:text-xs text-slate-400 text-center sm:text-left">
-            Complete all required fields marked with *. Your National ID is the primary link to any
-            vehicle you register.
+          <p className="mt-3 text-[11px] sm:text-xs text-slate-400">
+            Same pattern as marshal enrolment: we store your profile. Account access is separate.
           </p>
         </div>
 
@@ -241,7 +192,7 @@ export default function RegisterDriverPage() {
                 </Field>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Date of birth" error={fieldErrors.dateOfBirth?.[0]}>
+                <Field label="Date of birth">
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input type="date" value={form.dateOfBirth} onChange={(e) => update("dateOfBirth", e.target.value)}
@@ -257,7 +208,7 @@ export default function RegisterDriverPage() {
                           className={`p-2.5 rounded-xl border text-xs font-bold transition ${
                             selected
                               ? "bg-slate-900 text-white border-slate-900 shadow-sm ring-2 ring-amber-500"
-                              : "bg-white text-slate-800 border-slate-200 hover:border-amber-300 hover:bg-amber-50/50"
+                              : "bg-white text-slate-800 border-slate-200 hover:border-amber-300"
                           }`}>{g}</button>
                       );
                     })}
@@ -281,7 +232,7 @@ export default function RegisterDriverPage() {
             </h2>
             <div className="bg-blue-50/40 border border-blue-100 rounded-2xl p-4 sm:p-5 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Licence number" error={fieldErrors.licenseNumber?.[0]}>
+                <Field label="Licence number">
                   <input value={form.licenseNumber} onChange={(e) => update("licenseNumber", e.target.value)} className={`${inputOk} font-mono`} />
                 </Field>
                 <Field label="Licence class">
@@ -300,12 +251,12 @@ export default function RegisterDriverPage() {
                 </Field>
               </div>
               <Field label="PDP issuing authority">
-                <input value={form.pdpIssuingAuthority} onChange={(e) => update("pdpIssuingAuthority", e.target.value)} className={inputOk} placeholder="e.g. RTB / Ministry" />
+                <input value={form.pdpIssuingAuthority} onChange={(e) => update("pdpIssuingAuthority", e.target.value)} className={inputOk} />
               </Field>
             </div>
           </section>
 
-          <section className="space-y-5 pb-6 border-b border-slate-200">
+          <section className="space-y-5">
             <h2 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
               <Heart className="w-4 h-4 text-rose-600" />
               <span>03 · Emergency contact</span>
@@ -325,43 +276,13 @@ export default function RegisterDriverPage() {
             </div>
           </section>
 
-          <section className="space-y-5">
-            <h2 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-              <Lock className="w-4 h-4 text-slate-700" />
-              <span>04 · Account password</span>
-            </h2>
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-4">
-              <p className="text-xs text-slate-600">
-                A username is generated from your full name after submission. Choose a strong password
-                (minimum 8 characters).
-              </p>
-              <Field label="Password" required error={fieldErrors.password?.[0]}>
-                <div className="relative">
-                  <input required type={showPassword ? "text" : "password"} value={form.password}
-                    onChange={(e) => update("password", e.target.value)}
-                    className={`${fieldErrors.password ? inputErr : inputOk} pr-11`} autoComplete="new-password" minLength={8} />
-                  <button type="button" onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-                    aria-label={showPassword ? "Hide password" : "Show password"}>
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </Field>
-              <Field label="Confirm password" required error={fieldErrors.confirmPassword?.[0]}>
-                <input required type={showPassword ? "text" : "password"} value={form.confirmPassword}
-                  onChange={(e) => update("confirmPassword", e.target.value)}
-                  className={fieldErrors.confirmPassword ? inputErr : inputOk} autoComplete="new-password" />
-              </Field>
-            </div>
-          </section>
-
           <button type="submit" disabled={loading}
-            className="w-full py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-slate-900/20">
-            {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Creating account…</>) : (<><CheckCircle2 className="w-4 h-4 text-amber-400" /> Submit driver registration</>)}
+            className="w-full py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg">
+            {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Saving profile…</>) : (<>Submit driver profile</>)}
           </button>
 
           <p className="text-center text-[11px] text-slate-500">
-            Already have an account?{" "}
+            Already claimed an account?{" "}
             <Link href="/login" className="font-bold text-amber-700 hover:underline">Sign in</Link>
           </p>
         </div>

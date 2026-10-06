@@ -2,25 +2,21 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Vehicle self-registration — institutional form design inspired by
- * the Marshal Registration portal. Links via driver National ID.
+ * Vehicle public registration — asset data only.
+ * No driver link. Staff assign driver/route/operator later.
  */
 
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Car,
-  IdCard,
-  User,
   FileText,
   ShieldCheck,
   Loader2,
   AlertCircle,
   CheckCircle2,
-  ArrowRight,
   BadgeCheck,
   Bus,
 } from "lucide-react";
@@ -33,7 +29,6 @@ const emptyForm = {
   model: "",
   seatingCapacity: "15",
   classification: "kombi",
-  driverNationalId: "",
   ownerName: "",
   ownerPhone: "",
   loadingBay: "",
@@ -60,7 +55,6 @@ const inputOk = `${inputBase} border-slate-300 hover:border-slate-400`;
 const inputErr = `${inputBase} border-red-400 ring-1 ring-red-300`;
 
 export default function RegisterVehiclePage() {
-  const router = useRouter();
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -68,8 +62,6 @@ export default function RegisterVehiclePage() {
   const [success, setSuccess] = useState<{
     registrationNumber: string;
     vic: string;
-    driverName: string;
-    driverNationalId: string;
   } | null>(null);
 
   function update(key: keyof typeof emptyForm, value: string) {
@@ -97,8 +89,6 @@ export default function RegisterVehiclePage() {
       setSuccess({
         registrationNumber: data.registrationNumber,
         vic: data.vic,
-        driverName: data.driverName,
-        driverNationalId: data.driverNationalId,
       });
     } catch {
       setError("Network error. Please try again.");
@@ -115,33 +105,15 @@ export default function RegisterVehiclePage() {
             <BadgeCheck className="w-8 h-8 text-emerald-400" />
           </div>
           <h1 className="text-xl sm:text-2xl font-black uppercase tracking-wider text-emerald-400">
-            Vehicle Registered
+            Vehicle recorded
           </h1>
           <p className="mt-2 text-sm text-slate-300">
-            Linked to {success.driverName} via National ID
+            No driver was linked. Staff will assign driver, route, and operator.
           </p>
         </div>
-        <div className="p-6 sm:p-8 space-y-5">
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5 space-y-3">
-            <p className="font-mono text-xl font-black text-slate-900 tracking-wide">
-              {success.registrationNumber}
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-emerald-200/80">
-              <div>
-                <span className="text-[11px] text-slate-500 uppercase font-bold">VIC</span>
-                <p className="font-mono text-sm font-bold text-slate-800">{success.vic}</p>
-              </div>
-              <div>
-                <span className="text-[11px] text-slate-500 uppercase font-bold">Driver National ID</span>
-                <p className="font-mono text-sm font-bold text-slate-800">{success.driverNationalId}</p>
-              </div>
-            </div>
-          </div>
-          <button type="button" onClick={() => router.push("/login")}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black uppercase tracking-wider shadow-sm">
-            Sign in to driver portal
-            <ArrowRight className="w-4 h-4" />
-          </button>
+        <div className="p-6 sm:p-8 space-y-3">
+          <p className="font-mono text-xl font-black text-slate-900">{success.registrationNumber}</p>
+          <p className="text-sm text-slate-600">VIC <span className="font-mono font-bold">{success.vic}</span></p>
         </div>
       </div>
     );
@@ -149,41 +121,26 @@ export default function RegisterVehiclePage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start gap-2.5 p-3 rounded-xl bg-amber-50 border border-amber-300">
-        <User className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-        <div className="text-xs text-amber-950 flex-1">
-          <span className="font-bold">Driver account required first.</span>{" "}
-          Register with the same National ID you will enter below.{" "}
-          <Link href="/register/driver" className="font-bold underline hover:no-underline">
-            Open driver registration
-          </Link>
-        </div>
+      <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-950">
+        <span className="font-bold">Asset registration only.</span>{" "}
+        This form does not assign a driver. Authorised staff link drivers in admin.
       </div>
 
       <form onSubmit={onSubmit} className="bg-white rounded-2xl shadow-xl border border-slate-200/90 overflow-hidden">
         <div className="bg-slate-900 text-white p-5 sm:p-7 border-b-4 border-amber-500">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-slate-800">
-            <div className="text-center sm:text-left flex items-center gap-3">
-              <div className="w-12 h-12 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                <Bus className="w-7 h-7" />
-              </div>
-              <div>
-                <h1 className="text-lg sm:text-xl font-black uppercase tracking-wider text-amber-400">
-                  Vehicle Self-Registration
-                </h1>
-                <div className="text-xs font-bold text-slate-300 uppercase tracking-widest">
-                  Fleet enrolment · Linked by National ID
-                </div>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <Bus className="w-7 h-7" />
             </div>
-            <div className="bg-slate-800/90 border border-slate-700 rounded-xl px-4 py-2.5 text-center shrink-0">
-              <span className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">Virtual card</span>
-              <span className="text-sm font-mono font-bold text-amber-400">AUTO-ISSUED</span>
+            <div>
+              <h1 className="text-lg sm:text-xl font-black uppercase tracking-wider text-amber-400">
+                Vehicle registration
+              </h1>
+              <div className="text-xs font-bold text-slate-300 uppercase tracking-widest">
+                Fleet data collection · No auto-linking
+              </div>
             </div>
           </div>
-          <p className="mt-3 text-[11px] sm:text-xs text-slate-400 text-center sm:text-left">
-            The driver National ID is the only link used — not the internal system driver ID.
-          </p>
         </div>
 
         <div className="p-5 sm:p-8 space-y-8">
@@ -216,7 +173,7 @@ export default function RegisterVehiclePage() {
                     className={fieldErrors.model ? inputErr : inputOk} placeholder="Quantum" />
                 </Field>
               </div>
-              <Field label="Classification" required error={fieldErrors.classification?.[0]}>
+              <Field label="Classification" required>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {CLASSES.map((c) => {
                     const selected = form.classification === c.value;
@@ -224,8 +181,8 @@ export default function RegisterVehiclePage() {
                       <button key={c.value} type="button" onClick={() => update("classification", c.value)}
                         className={`p-3 rounded-xl border text-left transition ${
                           selected
-                            ? "bg-slate-900 text-white border-slate-900 shadow-sm ring-2 ring-amber-500"
-                            : "bg-white text-slate-800 border-slate-200 hover:border-amber-300 hover:bg-amber-50/50"
+                            ? "bg-slate-900 text-white border-slate-900 ring-2 ring-amber-500"
+                            : "bg-white border-slate-200 hover:border-amber-300"
                         }`}>
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-xs">{c.label}</span>
@@ -244,29 +201,12 @@ export default function RegisterVehiclePage() {
                     className={`${fieldErrors.seatingCapacity ? inputErr : inputOk} font-mono`} />
                 </Field>
                 <Field label="Loading bay">
-                  <input value={form.loadingBay} onChange={(e) => update("loadingBay", e.target.value)} className={inputOk} placeholder="Optional" />
+                  <input value={form.loadingBay} onChange={(e) => update("loadingBay", e.target.value)} className={inputOk} />
                 </Field>
               </div>
-            </div>
-          </section>
-
-          <section className="space-y-5 pb-6 border-b border-slate-200">
-            <h2 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-              <IdCard className="w-4 h-4 text-blue-600" />
-              <span>02 · Driver link (National ID)</span>
-            </h2>
-            <div className="bg-blue-50/40 border border-blue-100 rounded-2xl p-4 sm:p-5 space-y-4">
-              <Field label="Driver National ID" required error={fieldErrors.driverNationalId?.[0]}>
-                <input required value={form.driverNationalId} onChange={(e) => update("driverNationalId", e.target.value)}
-                  className={`${fieldErrors.driverNationalId ? inputErr : inputOk} font-mono`}
-                  placeholder="Same ID used on driver registration" />
-              </Field>
-              <p className="text-[11px] text-slate-600">
-                We look up the driver by this ID and assign the vehicle both ways. Owner fields default to the driver profile if left blank.
-              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label="Owner name (optional)">
-                  <input value={form.ownerName} onChange={(e) => update("ownerName", e.target.value)} className={inputOk} placeholder="Defaults to driver name" />
+                  <input value={form.ownerName} onChange={(e) => update("ownerName", e.target.value)} className={inputOk} />
                 </Field>
                 <Field label="Owner phone (optional)">
                   <input value={form.ownerPhone} onChange={(e) => update("ownerPhone", e.target.value)} className={inputOk} />
@@ -278,7 +218,7 @@ export default function RegisterVehiclePage() {
           <section className="space-y-5">
             <h2 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
               <FileText className="w-4 h-4 text-emerald-600" />
-              <span>03 · Permits & fitness</span>
+              <span>02 · Permits & fitness</span>
               <span className="text-[10px] font-bold text-slate-400 normal-case tracking-normal ml-1">(optional)</span>
             </h2>
             <div className="bg-emerald-50/40 border border-emerald-100 rounded-2xl p-4 sm:p-5 space-y-4">
@@ -319,16 +259,9 @@ export default function RegisterVehiclePage() {
           </section>
 
           <button type="submit" disabled={loading}
-            className="w-full py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-slate-900/20">
-            {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Registering vehicle…</>) : (<><ShieldCheck className="w-4 h-4 text-amber-400" /> Submit vehicle registration</>)}
+            className="w-full py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2">
+            {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>) : (<><ShieldCheck className="w-4 h-4 text-amber-400" /> Submit vehicle record</>)}
           </button>
-
-          <p className="text-center text-[11px] text-slate-500">
-            Need a driver account?{" "}
-            <Link href="/register/driver" className="font-bold text-amber-700 hover:underline">Self-register as driver</Link>
-            {" · "}
-            <Link href="/login" className="font-bold text-amber-700 hover:underline">Sign in</Link>
-          </p>
         </div>
       </form>
     </div>
