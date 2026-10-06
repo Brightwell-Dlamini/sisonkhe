@@ -1,20 +1,15 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Next.js middleware.
- *
- * Responsibilities:
- *   1. Refresh Supabase session on every request
- *   2. Redirect unauthenticated users away from protected routes
- *   3. Redirect authenticated users away from /login and /claim
- *   4. Never interfere with PWA plumbing (sw.js, manifest, offline page)
  */
 
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSupabaseSession } from "./src/lib/supabase/middleware";
 
-/** Routes reachable without a session. Everything else requires auth. */
+/**
+ * Truly public routes. Assignment is NOT listed — public self-link must use
+ * /api/public/assignments (national-id only, rate-limited) if needed.
+ */
 const PUBLIC_ROUTES = [
   "/",
   "/login",
@@ -27,18 +22,15 @@ const PUBLIC_ROUTES = [
   "/api/auth/claim",
   "/api/auth/signin",
   "/api/register",
-  "/api/assignments",
+  "/api/public",
   "/api/health",
   "/api/fleet/status",
-  "/api/public",
   "/api/qr/verify",
-  // Webhooks must remain public (provider signatures verify authenticity)
   "/api/payments/webhooks",
 ];
 
 const AUTH_ROUTES = ["/login", "/claim"];
 
-/** Paths the middleware must never touch (PWA plumbing). */
 const PWA_BYPASS = new Set([
   "/sw.js",
   "/manifest.webmanifest",
@@ -48,7 +40,6 @@ const PWA_BYPASS = new Set([
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // PWA plumbing is served directly, no auth, no session refresh.
   if (PWA_BYPASS.has(pathname)) {
     return NextResponse.next();
   }
@@ -67,7 +58,6 @@ export async function middleware(request: NextRequest) {
   }
 
   if (!isPublic && !user) {
-    // API routes: return 401 JSON instead of HTML login redirect
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
         { error: "UNAUTHENTICATED" },

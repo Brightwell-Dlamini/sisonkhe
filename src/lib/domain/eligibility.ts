@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Pure domain rules — no I/O. 4000iq operational brain.
+ * Pure domain rules — no I/O.
  */
 
 import { normalizePlate, platesEqual } from "./identity";
@@ -23,6 +23,8 @@ export type VehicleEligibilityInput = {
   permitStatus?: string | null;
   permitExpiryDate?: string | null;
   cofExpiryDate?: string | null;
+  insuranceExpiry?: string | null;
+  roadworthinessExpiry?: string | null;
   ownerOperatorId?: string | null;
 };
 
@@ -106,7 +108,6 @@ export function driverAssignableToVehicle(
   return { eligible: true };
 }
 
-/** Vehicle free for a given driver (not held by someone else, not offline). */
 export function vehicleAssignableToDriver(
   vehicle: VehicleEligibilityInput,
   targetDriverId?: string | null
@@ -189,8 +190,6 @@ export function vehicleOptionLabel(v: {
   return mm ? `${base} · ${mm}` : base;
 }
 
-// ── Marshal ↔ route (one active marshal per route is soft; one route per marshal hard) ──
-
 export function marshalAssignableToRoute(
   marshal: { id: string; isActive?: boolean; assignedRouteId?: string | null },
   routeId: string | null | undefined,
@@ -218,13 +217,11 @@ export function marshalAssignableToRoute(
     return {
       eligible: true,
       warning:
-        "Another marshal is already on this route. Both can work the rank, but clarify primary."
+        "Another marshal is already on this route. Both can work the rank, but clarify primary.",
     };
   }
   return { eligible: true };
 }
-
-// ── Operator fleet ownership ──
 
 export function vehicleCanChangeOperator(
   vehicle: VehicleEligibilityInput,
@@ -260,6 +257,8 @@ export type DispatchGateInput = {
   permitStatus?: string | null;
   permitExpiryDate?: string | null;
   cofExpiryDate?: string | null;
+  insuranceExpiry?: string | null;
+  roadworthinessExpiry?: string | null;
   vehicleStatus?: string | null;
   printPending?: boolean;
 };
@@ -308,6 +307,20 @@ export function canDispatchLoad(input: DispatchGateInput): EligibilityResult {
     };
   }
 
+  if (isExpired(input.insuranceExpiry)) {
+    return {
+      eligible: false,
+      reason: "Insurance is expired. Cannot load.",
+    };
+  }
+
+  if (isExpired(input.roadworthinessExpiry)) {
+    return {
+      eligible: false,
+      reason: "Roadworthiness certificate is expired. Cannot load.",
+    };
+  }
+
   if (input.printPending) {
     return {
       eligible: false,
@@ -331,7 +344,6 @@ export function canDispatchDepart(input: DispatchGateInput): EligibilityResult {
   return canDispatchLoad(input);
 }
 
-/** Full rank status state machine — illegal jumps blocked. */
 export type RankStatus =
   | "Waiting"
   | "Loading"
@@ -349,10 +361,14 @@ export type RankAction =
   | "breakdown"
   | "reset_to_waiting";
 
+/**
+ * Rank law: depart / full_cabin only after Loading (or return from Delay into Loading first).
+ * Delayed may load again or reset — not skip straight to depart.
+ */
 const ALLOWED: Record<string, RankAction[]> = {
   Waiting: ["load", "delay", "breakdown"],
   Loading: ["depart", "full_cabin", "delay", "breakdown", "reset_to_waiting"],
-  Delayed: ["load", "depart", "full_cabin", "breakdown", "reset_to_waiting"],
+  Delayed: ["load", "breakdown", "reset_to_waiting"],
   Departed: ["reset_to_waiting"],
   Breakdown: ["reset_to_waiting"],
   Offline: [],
