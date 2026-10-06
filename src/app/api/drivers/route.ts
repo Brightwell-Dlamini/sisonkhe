@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const user = await requireServerRole([...ALLOWED_ROLES]);
-    const regionScope = regionScopeOrThrow(user);
+    regionScopeOrThrow(user);
 
     const body = await request.json();
     const parsed = createDriverSchema.safeParse(body);
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
       .replace(/[^a-z]/g, "")
       .slice(0, 12);
 
-    // Never set assigned_vehicle_reg here — assignment service owns both sides
+    // No drivers.region column on live DB — do not insert it
     const { error: insertErr } = await admin.from("drivers").insert({
       id: driverId,
       full_name: input.fullName,
@@ -184,7 +184,6 @@ export async function POST(request: NextRequest) {
       avatar_seed: avatarSeed,
       profile_picture_url: input.profilePictureUrl || null,
       status: input.status,
-      region: regionScope ?? null,
     });
 
     if (insertErr) {

@@ -1,11 +1,14 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Drivers table may not have a `region` column yet. Region scope is applied
+ * via assigned vehicle → route.region_code when regionScope is set.
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
-import { matchesRegion } from "../auth/region";
+import { normalizePlate } from "../domain/identity";
 
 export interface DriverRow {
   id: string;
@@ -30,12 +33,14 @@ export interface DriverRow {
   avatarSeed: string | null;
   profilePictureUrl: string | null;
   status: string;
+  /** Derived from vehicle route when available */
   region: string | null;
   username: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
+/** Columns that exist on live drivers table (no region). */
 const SELECT_COLUMNS = `
   id, full_name, national_id, phone, residential_address, date_of_birth, gender,
   license_number, license_class,
@@ -43,11 +48,15 @@ const SELECT_COLUMNS = `
   emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
   assigned_vehicle_reg, auth_user_id,
   avatar_seed, profile_picture_url,
-  status, region,
+  status,
   created_at, updated_at
 `;
 
-function mapRow(row: Record<string, unknown>, username: string | null = null): DriverRow {
+function mapRow(
+  row: Record<string, unknown>,
+  username: string | null = null,
+  region: string | null = null
+): DriverRow {
   return {
     id: row.id as string,
     fullName: row.full_name as string,
@@ -65,41 +74,118 @@ function mapRow(row: Record<string, unknown>, username: string | null = null): D
     pdpStatus: (row.pdp_status as string | null) ?? null,
     emergencyContactName: (row.emergency_contact_name as string | null) ?? null,
     emergencyContactPhone: (row.emergency_contact_phone as string | null) ?? null,
-    emergencyContactRelation: (row.emergency_contact_relation as string | null) ?? null,
+    emergencyContactRelation:
+      (row.emergency_contact_relation as string | null) ?? null,
     assignedVehicleReg: (row.assigned_vehicle_reg as string | null) ?? null,
     authUserId: (row.auth_user_id as string | null) ?? null,
     avatarSeed: (row.avatar_seed as string | null) ?? null,
     profilePictureUrl: (row.profile_picture_url as string | null) ?? null,
     status: row.status as string,
-    region: (row.region as string | null) ?? null,
+    region,
     username,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
 }
 
-/** @param regionScope null = national (all regions) */
-export async function listDrivers(regionScope: string | null = null): Promise<DriverRow[]> {
+async function plateToRegionMap(
+  plates: string[]
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (plates.length === 0) return map;
+  const admin = createSupabaseAdminClient();
+  const { data: vehicles } = await admin
+    .from("vehicles")
+    .select("registration_number, route_assignment_id")
+    .in("registration_number", plates);
+
+  const routeIds = [
+    ...new Set(
+      (vehicles ?? [])
+        .map((v) => v.route_assignment_id as string | null)
+        .filter((id): id is string => !!id)
+    ),
+  ];
+  if (routeIds.length === 0) return map;
+
+  const { data: routes } = await admin
+    .from("routes")
+    .select("id, region_code")
+    .in("id", routeIds);
+
+  const routeRegion = new Map<string, string>();
+  for (const r of routes ?? []) {
+    if (r.region_code) routeRegion.set(r.id as string, r.region_code as string);
+  }
+
+  for (const v of vehicles ?? []) {
+    const reg = normalizePlate(v.registration_number as string);
+    const rid = v.route_assignment_id as string | null;
+    if (rid && routeRegion.has(rid)) {
+      map.set(reg, routeRegion.get(rid)!);
+    }
+  }
+  return map;
+}
+
+async function platesInRegion(regionScope: string): Promise<Set<string>> {
+  const admin = createSupabaseAdminClient();
+  const { data: routes } = await admin
+    .from("routes")
+    .select("id")
+    .ilike("region_code", regionScope);
+  const routeIds = (routes ?? []).map((r) => r.id as string);
+  if (routeIds.length === 0) return new Set();
+
+  const { data: vehicles } = await admin
+    .from("vehicles")
+    .select("registration_number")
+    .in("route_assignment_id", routeIds);
+
+  return new Set(
+    (vehicles ?? []).map((v) =>
+      normalizePlate(v.registration_number as string)
+    )
+  );
+}
+
+/** @param regionScope null = national (all drivers) */
+export async function listDrivers(
+  regionScope: string | null = null
+): Promise<DriverRow[]> {
   const admin = createSupabaseAdminClient();
 
-  let query = admin
+  const { data, error } = await admin
     .from("drivers")
     .select(SELECT_COLUMNS)
     .order("created_at", { ascending: false });
 
+  if (error) throw new Error(`Failed to list drivers: ${error.message}`);
+  if (!data || data.length === 0) return [];
+
+  let rows = data as Record<string, unknown>[];
+
   if (regionScope) {
-    query = query.ilike("region", regionScope);
+    const allowedPlates = await platesInRegion(regionScope);
+    rows = rows.filter((d) => {
+      const plate = d.assigned_vehicle_reg
+        ? normalizePlate(d.assigned_vehicle_reg as string)
+        : null;
+      // Unassigned drivers visible to all rank admins so they can be assigned
+      if (!plate) return true;
+      return allowedPlates.has(plate);
+    });
   }
 
-  const { data, error } = await query;
+  const plates = rows
+    .map((d) =>
+      d.assigned_vehicle_reg
+        ? normalizePlate(d.assigned_vehicle_reg as string)
+        : null
+    )
+    .filter((p): p is string => !!p);
 
-  if (error) throw new Error(`Failed to list drivers: ${error.message}`);
-  if (!data) return [];
-
-  // Soft filter in case DB region casing differs
-  const rows = regionScope
-    ? data.filter((d) => matchesRegion(regionScope, d.region as string | null))
-    : data;
+  const regionByPlate = await plateToRegionMap(plates);
 
   const authIds = rows
     .map((d) => d.auth_user_id as string | null)
@@ -107,19 +193,29 @@ export async function listDrivers(regionScope: string | null = null): Promise<Dr
 
   const usernameMap = new Map<string, string>();
   if (authIds.length > 0) {
-    const { data: usersData } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    for (const u of usersData?.users ?? []) {
-      if (authIds.includes(u.id)) {
-        const uname = u.user_metadata?.username as string | undefined;
-        if (uname) usernameMap.set(u.id, uname);
+    try {
+      const { data: usersData } = await admin.auth.admin.listUsers({
+        perPage: 1000,
+      });
+      for (const u of usersData?.users ?? []) {
+        if (authIds.includes(u.id)) {
+          const uname = u.user_metadata?.username as string | undefined;
+          if (uname) usernameMap.set(u.id, uname);
+        }
       }
+    } catch {
+      /* */
     }
   }
 
   return rows.map((row) => {
     const authUserId = row.auth_user_id as string | null;
     const username = authUserId ? usernameMap.get(authUserId) ?? null : null;
-    return mapRow(row, username);
+    const plate = row.assigned_vehicle_reg
+      ? normalizePlate(row.assigned_vehicle_reg as string)
+      : null;
+    const region = plate ? regionByPlate.get(plate) ?? null : null;
+    return mapRow(row, username, region);
   });
 }
 
@@ -137,14 +233,30 @@ export async function getDriverById(id: string): Promise<DriverRow | null> {
   let username: string | null = null;
   const authUserId = data.auth_user_id as string | null;
   if (authUserId) {
-    const { data: userData } = await admin.auth.admin.getUserById(authUserId);
-    username = (userData?.user?.user_metadata?.username as string | undefined) ?? null;
+    try {
+      const { data: userData } = await admin.auth.admin.getUserById(authUserId);
+      username =
+        (userData?.user?.user_metadata?.username as string | undefined) ?? null;
+    } catch {
+      /* */
+    }
   }
 
-  return mapRow(data, username);
+  let region: string | null = null;
+  if (data.assigned_vehicle_reg) {
+    const m = await plateToRegionMap([
+      normalizePlate(data.assigned_vehicle_reg as string),
+    ]);
+    region =
+      m.get(normalizePlate(data.assigned_vehicle_reg as string)) ?? null;
+  }
+
+  return mapRow(data as Record<string, unknown>, username, region);
 }
 
-export async function getDriverByPhone(phone: string): Promise<DriverRow | null> {
+export async function getDriverByPhone(
+  phone: string
+): Promise<DriverRow | null> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("drivers")
@@ -153,5 +265,5 @@ export async function getDriverByPhone(phone: string): Promise<DriverRow | null>
     .maybeSingle();
 
   if (error) throw new Error(`Failed to fetch driver by phone: ${error.message}`);
-  return data ? mapRow(data) : null;
+  return data ? mapRow(data as Record<string, unknown>) : null;
 }
