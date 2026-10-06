@@ -2,18 +2,22 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Marshal dispatch transitions.
- * Domain gates: driver, permit, COF, PDP, print-pending.
+ * Marshal dispatch transitions — state machine + compliance gates.
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 import type { MarshalContext } from "./queries";
-import { canDispatchLoad, canDispatchDepart } from "@/lib/domain/eligibility";
+import {
+  canDispatchLoad,
+  canDispatchDepart,
+  canRankTransition,
+  type RankAction,
+} from "@/lib/domain/eligibility";
+import { normalizePlate } from "@/lib/domain/identity";
 
 const RANK_FEE_SZL = 25;
 const DOUBLE_CLICK_MS = 3_000;
-const DEPARTABLE_STATUSES = new Set(["Loading", "Waiting", "Delayed"]);
 
 export type DispatchAction =
   | "load"
@@ -53,22 +57,23 @@ async function authorizeVehicle(
   registrationNumber: string
 ): Promise<AuthVehicle | null> {
   const admin = createSupabaseAdminClient();
+  const plate = normalizePlate(registrationNumber);
 
   let { data: vehicle, error } = await admin
     .from("vehicles")
     .select(
       "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id, version, permit_status, permit_expiry_date, cof_expiry_date"
     )
-    .eq("registration_number", registrationNumber)
+    .eq("registration_number", plate)
     .maybeSingle();
 
-  if ((error || !vehicle) && registrationNumber) {
+  if ((error || !vehicle) && plate) {
     const { data: alt } = await admin
       .from("vehicles")
       .select(
         "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id, version, permit_status, permit_expiry_date, cof_expiry_date"
       )
-      .ilike("registration_number", registrationNumber)
+      .ilike("registration_number", plate)
       .limit(1)
       .maybeSingle();
     vehicle = alt;
@@ -284,6 +289,11 @@ export async function applyDispatchAction(
     return { success: false, error: "Vehicle not found or not under your authority." };
   }
 
+  const transition = canRankTransition(vehicle.status, action as RankAction);
+  if (!transition.eligible) {
+    return { success: false, error: transition.reason };
+  }
+
   const reg = vehicle.reg;
   const admin = createSupabaseAdminClient();
   const nowIso = new Date().toISOString();
@@ -310,15 +320,6 @@ export async function applyDispatchAction(
 
     case "full_cabin":
     case "depart": {
-      if (!DEPARTABLE_STATUSES.has(vehicle.status)) {
-        return {
-          success: false,
-          error:
-            vehicle.status === "Departed"
-              ? "Already departed. Use Return to Queue, then Load, before departing again."
-              : `Cannot depart from status "${vehicle.status}". Load the vehicle first.`,
-        };
-      }
       const gate = canDispatchDepart(gatePayload(vehicle));
       if (!gate.eligible) return { success: false, error: gate.reason };
 

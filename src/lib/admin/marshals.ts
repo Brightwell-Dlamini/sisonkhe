@@ -1,19 +1,12 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Marshal admin queries. Full CRUD + card issuance.
- *
- * Schema notes (verified 2026-10-05 against live DB):
- *   - NO `phone` column. Use `cell_no`.
- *   - NO `badge_number` column.
- *   - NO `profile_picture_url` column. Use `photo_storage_path` / `photo_data_url`.
- *   - `created_at` / `updated_at` are BIGINT (client-managed, ms since epoch).
- *   - `server_created_at` / `server_updated_at` are TIMESTAMPTZ (server-managed).
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
+import { matchesRegion } from "../auth/region";
+import { marshalAssignableToRoute } from "@/lib/domain/eligibility";
 
 export interface MarshalRow {
   id: string;
@@ -21,21 +14,21 @@ export interface MarshalRow {
   firstName: string;
   surname: string;
   fullName: string;
-  phone: string | null; // alias of cellNo for UI convenience
+  phone: string | null;
   cellNo: string | null;
   homeTelNo: string | null;
   whatsappNo: string | null;
   idNumber: string | null;
   region: string;
-  terminalName: string; // alias of position
+  terminalName: string;
   assignedRouteId: string | null;
   terminalId: string | null;
-  badgeNumber: string | null; // always null — no column
+  badgeNumber: string | null;
   position: string | null;
   isActive: boolean;
   authUserId: string | null;
-  profilePictureUrl: string | null; // from photo_storage_path
-  createdAt: string; // ISO — derived from server_created_at (bigint)
+  profilePictureUrl: string | null;
+  createdAt: string;
 }
 
 const SELECT_COLUMNS = `
@@ -71,7 +64,7 @@ function mapMarshal(row: Record<string, unknown>): MarshalRow {
     terminalName: (row.position as string) ?? "Terminal",
     assignedRouteId: (row.assigned_route_id as string | null) ?? null,
     terminalId: (row.terminal_id as string | null) ?? null,
-    badgeNumber: null, // no column exists
+    badgeNumber: null,
     position: (row.position as string | null) ?? null,
     isActive: (row.is_active as boolean) ?? true,
     authUserId: (row.auth_user_id as string | null) ?? null,
@@ -80,18 +73,30 @@ function mapMarshal(row: Record<string, unknown>): MarshalRow {
   };
 }
 
-export async function listMarshals(): Promise<MarshalRow[]> {
+/** @param regionScope null = national */
+export async function listMarshals(
+  regionScope: string | null = null
+): Promise<MarshalRow[]> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from("marshals")
     .select(SELECT_COLUMNS)
     .order("server_created_at", { ascending: false });
+
+  if (regionScope) {
+    query = query.ilike("region", regionScope);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("[admin/marshals] list error:", error);
     throw new Error(`Failed to list marshals: ${error.message}`);
   }
-  return (data ?? []).map(mapMarshal);
+
+  const rows = (data ?? []).map(mapMarshal);
+  if (!regionScope) return rows;
+  return rows.filter((m) => matchesRegion(regionScope, m.region));
 }
 
 export async function getMarshalById(id: string): Promise<MarshalRow | null> {
@@ -112,7 +117,7 @@ export async function getMarshalById(id: string): Promise<MarshalRow | null> {
 export interface CreateMarshalInput {
   firstName: string;
   surname: string;
-  phone: string; // mapped to cell_no
+  phone: string;
   cellNo?: string;
   homeTelNo?: string;
   whatsappNo?: string;
@@ -138,7 +143,6 @@ export async function createMarshal(input: CreateMarshalInput): Promise<{
   error?: string;
 }> {
   const admin = createSupabaseAdminClient();
-
   const cellNo = input.cellNo || input.phone;
 
   if (input.idNumber) {
@@ -160,6 +164,16 @@ export async function createMarshal(input: CreateMarshalInput): Promise<{
       .maybeSingle();
     if (existing) {
       return { success: false, error: "A marshal with that cell number already exists." };
+    }
+  }
+
+  if (input.assignedRouteId) {
+    const check = marshalAssignableToRoute(
+      { id: "new", isActive: true, assignedRouteId: null },
+      input.assignedRouteId
+    );
+    if (!check.eligible) {
+      return { success: false, error: check.reason };
     }
   }
 
@@ -192,7 +206,6 @@ export async function createMarshal(input: CreateMarshalInput): Promise<{
       assigned_route_id: input.assignedRouteId ?? null,
       terminal_id: input.terminalId ?? null,
       is_active: true,
-      // BIGINT columns — client-managed for offline sync
       created_at: now,
       updated_at: now,
       synced_at: now,
@@ -214,6 +227,24 @@ export async function updateMarshal(
   input: Partial<CreateMarshalInput & { isActive: boolean }>
 ): Promise<{ success: boolean; error?: string }> {
   const admin = createSupabaseAdminClient();
+
+  if (input.assignedRouteId !== undefined && input.assignedRouteId) {
+    const existing = await getMarshalById(id);
+    if (existing) {
+      const check = marshalAssignableToRoute(
+        {
+          id,
+          isActive: input.isActive ?? existing.isActive,
+          assignedRouteId: existing.assignedRouteId,
+        },
+        input.assignedRouteId
+      );
+      if (!check.eligible) {
+        return { success: false, error: check.reason };
+      }
+    }
+  }
+
   const patch: Record<string, unknown> = {};
 
   if (input.firstName !== undefined) patch.first_name = input.firstName;
@@ -234,8 +265,10 @@ export async function updateMarshal(
   if (input.maritalStatus !== undefined) patch.marital_status = input.maritalStatus;
   if (input.numberOfKids !== undefined) patch.number_of_kids = input.numberOfKids;
   if (input.nextOfKinFullName !== undefined) patch.next_of_kin_full_name = input.nextOfKinFullName;
-  if (input.nextOfKinRelationship !== undefined) patch.next_of_kin_relationship = input.nextOfKinRelationship;
-  if (input.nextOfKinContactNumber !== undefined) patch.next_of_kin_contact_number = input.nextOfKinContactNumber;
+  if (input.nextOfKinRelationship !== undefined)
+    patch.next_of_kin_relationship = input.nextOfKinRelationship;
+  if (input.nextOfKinContactNumber !== undefined)
+    patch.next_of_kin_contact_number = input.nextOfKinContactNumber;
   if (input.isActive !== undefined) patch.is_active = input.isActive;
 
   patch.updated_at = Date.now();
@@ -250,12 +283,15 @@ export async function updateMarshal(
   return { success: true };
 }
 
-export async function deactivateMarshal(id: string): Promise<{ success: boolean; error?: string }> {
+export async function deactivateMarshal(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
   const admin = createSupabaseAdminClient();
   const { error } = await admin
     .from("marshals")
     .update({
       is_active: false,
+      assigned_route_id: null,
       updated_at: Date.now(),
       synced_at: Date.now(),
       sync_status: "synced",
