@@ -1,11 +1,6 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Marshal account claim flow.
- *
- * Step 1 (PUT): Verify identity by national ID + phone.
- * Step 2 (POST): Set username + password, create auth user, link to marshal.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -15,9 +10,19 @@ import {
 } from "@/lib/supabase/server";
 import { looseAdmin, rpcRow } from "@/lib/supabase/rpc";
 import { resolveUserRole } from "@/lib/auth/roles";
+import { rateLimit } from "@/lib/domain/rateLimit";
+import { isUsernameTaken, claimUsername } from "@/lib/domain/usernames";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+function clientIp(request: NextRequest): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown"
+  );
+}
 
 async function tryLinkMarshal(
   admin: ReturnType<typeof createSupabaseAdminClient>,
@@ -38,12 +43,6 @@ async function tryLinkMarshal(
       p_auth_user_id: authUserId,
     });
     if (!error && data === true) return { ok: true, method: "rpc:id+phone" };
-    if (error) {
-      console.warn(
-        "[claim] link_marshal_auth(id,phone,uid) failed:",
-        error.message
-      );
-    }
   }
 
   {
@@ -52,12 +51,6 @@ async function tryLinkMarshal(
       p_auth_user_id: authUserId,
     });
     if (!error && data === true) return { ok: true, method: "rpc:marshal_id" };
-    if (error) {
-      console.warn(
-        "[claim] link_marshal_auth(marshal_id,uid) failed:",
-        error.message
-      );
-    }
   }
 
   {
@@ -72,7 +65,6 @@ async function tryLinkMarshal(
       return { ok: true, method: "update:id" };
     }
     if (error) {
-      console.error("[claim] UPDATE by id failed:", error);
       const { data: rows2, error: err2 } = await loose
         .from("marshals")
         .update({ auth_user_id: authUserId })
@@ -98,6 +90,14 @@ async function tryLinkMarshal(
 
 export async function PUT(request: NextRequest) {
   try {
+    const rl = rateLimit(`claim:${clientIp(request)}`, 15, 15 * 60_000);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Too many attempts. Try again later." },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const idNumber = String(body.idNumber ?? "").trim().replace(/\s+/g, "");
     const phone = String(body.phone ?? "").trim();
@@ -116,12 +116,8 @@ export async function PUT(request: NextRequest) {
     );
 
     if (error) {
-      console.error("[api/auth/claim] verify rpc error:", error);
       return NextResponse.json(
-        {
-          error: "Verification service unavailable.",
-          detail: error.message,
-        },
+        { error: "Verification service unavailable." },
         { status: 500 }
       );
     }
@@ -170,6 +166,14 @@ export async function POST(request: NextRequest) {
   let createdAuthUserId: string | null = null;
 
   try {
+    const rl = rateLimit(`claim-post:${clientIp(request)}`, 10, 15 * 60_000);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Too many attempts. Try again later." },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const idNumber = String(body.idNumber ?? "").trim().replace(/\s+/g, "");
     const phone = String(body.phone ?? "").trim();
@@ -209,12 +213,8 @@ export async function POST(request: NextRequest) {
     );
 
     if (verifyErr) {
-      console.error("[api/auth/claim] re-verify error:", verifyErr);
       return NextResponse.json(
-        {
-          error: "Verification service unavailable.",
-          detail: verifyErr.message,
-        },
+        { error: "Verification service unavailable." },
         { status: 500 }
       );
     }
@@ -239,24 +239,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: existingUsers, error: listErr } =
-      await admin.auth.admin.listUsers({ perPage: 1000 });
-
-    if (listErr) {
-      console.error("[api/auth/claim] list users error:", listErr);
-      return NextResponse.json(
-        {
-          error: "Could not verify username availability.",
-          detail: listErr.message,
-        },
-        { status: 500 }
-      );
-    }
-
-    const usernameTaken = existingUsers?.users.some(
-      (u) => (u.user_metadata?.username ?? "") === username
-    );
-    if (usernameTaken) {
+    if (await isUsernameTaken(admin, username)) {
       return NextResponse.json(
         { error: "That username is already taken. Please choose another." },
         { status: 409 }
@@ -275,11 +258,11 @@ export async function POST(request: NextRequest) {
           full_name: match.full_name,
           role: "marshal",
           marshal_id: match.marshal_id,
+          must_change_password: false,
         },
       });
 
     if (createErr || !created.user) {
-      console.error("[api/auth/claim] create user error:", createErr);
       const msg = createErr?.message ?? "Could not create account.";
       if (
         msg.toLowerCase().includes("already") ||
@@ -288,14 +271,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "An auth account already exists for this marshal (possibly from a failed earlier claim). Ask a supervisor to delete the orphan auth user, or sign in if you already set a password.",
-            detail: msg,
+              "An auth account already exists for this marshal. Ask a supervisor to reset, or sign in.",
           },
           { status: 409 }
         );
       }
       return NextResponse.json(
-        { error: "Could not create account. Please try again.", detail: msg },
+        { error: "Could not create account. Please try again." },
         { status: 500 }
       );
     }
@@ -310,24 +292,22 @@ export async function POST(request: NextRequest) {
     });
 
     if (!linkResult.ok) {
-      console.error("[api/auth/claim] link failed:", linkResult);
       try {
         await admin.auth.admin.deleteUser(createdAuthUserId);
       } catch {
-        /* best-effort */
+        /* */
       }
       createdAuthUserId = null;
       return NextResponse.json(
         {
           error:
             "Could not link account to marshal record. Please contact your supervisor.",
-          detail: linkResult.error,
         },
         { status: 500 }
       );
     }
 
-    console.log("[api/auth/claim] linked via", linkResult.method);
+    await claimUsername(admin, username, created.user.id, "marshal");
 
     const supabase = await createSupabaseServerClient();
     const { data: signIn, error: signInErr } =
@@ -363,14 +343,11 @@ export async function POST(request: NextRequest) {
         const admin = createSupabaseAdminClient();
         await admin.auth.admin.deleteUser(createdAuthUserId);
       } catch {
-        /* best-effort cleanup */
+        /* */
       }
     }
     return NextResponse.json(
-      {
-        error: "Internal server error",
-        detail: err instanceof Error ? err.message : String(err),
-      },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

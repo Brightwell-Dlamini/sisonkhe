@@ -10,6 +10,7 @@ import {
 } from "@/lib/supabase/server";
 import { looseAdmin, rpcRow } from "@/lib/supabase/rpc";
 import { resolveUserRole } from "@/lib/auth/roles";
+import { rateLimit } from "@/lib/domain/rateLimit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,11 +31,25 @@ function looksLikePhone(s: string): boolean {
 
 type AuthLookup = { auth_user_id?: string; email?: string };
 
+const GENERIC_AUTH_ERROR = "Invalid credentials";
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const identifier = String(body.identifier ?? "").trim();
     const password = String(body.password ?? "");
+
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      request.headers.get("x-real-ip") ||
+      "unknown";
+    const rl = rateLimit(`signin:${ip}`, 20, 15 * 60_000);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Too many sign-in attempts. Try again later." },
+        { status: 429 }
+      );
+    }
 
     if (!identifier || !password) {
       return NextResponse.json(
@@ -92,11 +107,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Same message whether user missing or password wrong (no account enumeration)
     if (!targetAuthUserId || !targetEmail) {
-      return NextResponse.json(
-        { error: "No account found for that identifier" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
     }
 
     const supabase = await createSupabaseServerClient();
@@ -107,10 +120,7 @@ export async function POST(request: NextRequest) {
       });
 
     if (signInErr || !signIn.user) {
-      return NextResponse.json(
-        { error: "Invalid credentials" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
     }
 
     const resolved = await resolveUserRole(
@@ -130,6 +140,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const mustChangePassword = Boolean(
+      signIn.user.user_metadata?.must_change_password
+    );
+
     try {
       if (resolved.role === "marshal" && resolved.marshalId) {
         await looseAdmin(admin)
@@ -148,7 +162,10 @@ export async function POST(request: NextRequest) {
       console.warn("[signin] last_login update failed:", updateErr);
     }
 
-    return NextResponse.json({ user: resolved });
+    return NextResponse.json({
+      user: resolved,
+      mustChangePassword,
+    });
   } catch (err) {
     console.error("[api/auth/signin] error:", err);
     return NextResponse.json(
