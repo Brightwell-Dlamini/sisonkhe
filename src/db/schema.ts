@@ -161,6 +161,7 @@ export const vehicles = pgTable(
   "vehicles",
   {
     registrationNumber: text("registration_number").primaryKey(),
+    registrationSource: text("registration_source").notNull().default("staff"),
     vic: text("vic").unique(),
     make: text("make").notNull(),
     model: text("model").notNull(),

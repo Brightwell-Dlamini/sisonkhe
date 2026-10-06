@@ -86,10 +86,16 @@
 │   │   │   │   ├── config
 │   │   │   │   │   └── rank-fee
 │   │   │   │   │       └── route.ts
+│   │   │   │   ├── drivers
+│   │   │   │   │   └── [id]
+│   │   │   │   │       └── issue-login
+│   │   │   │   │           └── route.ts
 │   │   │   │   ├── intelligence
 │   │   │   │   │   └── route.ts
 │   │   │   │   ├── marshals
 │   │   │   │   │   ├── [id]
+│   │   │   │   │   │   ├── issue-login
+│   │   │   │   │   │   │   └── route.ts
 │   │   │   │   │   │   └── route.ts
 │   │   │   │   │   └── route.ts
 │   │   │   │   ├── reports
@@ -115,6 +121,8 @@
 │   │   │   │   ├── change-password
 │   │   │   │   │   └── route.ts
 │   │   │   │   ├── claim
+│   │   │   │   │   ├── driver
+│   │   │   │   │   │   └── route.ts
 │   │   │   │   │   └── route.ts
 │   │   │   │   ├── me
 │   │   │   │   │   └── route.ts
@@ -271,6 +279,10 @@
 │   │   │   │   │   ├── [id]
 │   │   │   │   │   │   └── route.ts
 │   │   │   │   │   └── route.ts
+│   │   │   │   ├── invariants
+│   │   │   │   │   ├── cron
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
 │   │   │   │   ├── security
 │   │   │   │   │   ├── ip-lists
 │   │   │   │   │   │   └── route.ts
@@ -355,6 +367,9 @@
 │   │   │       └── page.tsx
 │   │   ├── staff
 │   │   │   └── page.tsx
+│   │   ├── super
+│   │   │   └── invariants
+│   │   │       └── page.tsx
 │   │   └── verify
 │   │       ├── layout.tsx
 │   │       └── page.tsx
@@ -512,6 +527,7 @@
 │   │   │   ├── AnalyticsPanel.tsx
 │   │   │   ├── AssistantPanel.tsx
 │   │   │   ├── ErrorHub.tsx
+│   │   │   ├── InvariantsPanel.tsx
 │   │   │   ├── RecoveryPanel.tsx
 │   │   │   ├── SecurityCentre.tsx
 │   │   │   ├── StoragePanel.tsx
@@ -589,6 +605,7 @@
 │   │   ├── auth
 │   │   │   ├── client.ts
 │   │   │   ├── permissions.ts
+│   │   │   ├── provision.ts
 │   │   │   ├── region.ts
 │   │   │   ├── roles.ts
 │   │   │   └── session.ts
@@ -628,6 +645,9 @@
 │   │   │   ├── index.ts
 │   │   │   ├── rules.ts
 │   │   │   ├── snapshot.ts
+│   │   │   └── types.ts
+│   │   ├── invariants
+│   │   │   ├── runner.ts
 │   │   │   └── types.ts
 │   │   ├── ledger
 │   │   │   ├── csv.ts
@@ -732,10 +752,23 @@
 │       ├── 20261006_usernames.sql
 │       ├── 20261007_driver_signals.sql
 │       ├── 20261007_role_hardening.sql
-│       └── 20261008_role_hardening.sql
+│       ├── 20261008_role_hardening.sql
+│       ├── 20261009_invariant_violations.sql
+│       ├── 20261010_invariant_rls.sql
+│       ├── 20261011_identity_hardening.sql
+│       ├── 20261012_invariant_run_idempotent.sql
+│       ├── 20261013_invariant_last_seen.sql
+│       ├── 20261014_identity_lifecycle.sql
+│       ├── 20261015_identity_lifecycle.sql
+│       ├── 20261015_money_chain_hardening.sql
+│       ├── 20261016_dedupe_unassigned_driver.sql
+│       ├── 20261017_operational_integrity.sql
+│       ├── 20261018_authority_lattice.sql
+│       ├── 20261019_authority_lattice_fixes.sql
+│       └── 20261020_authority_invariant_refinement.sql
 ├── tree.txt
 ├── tsconfig.json
 ├── vercel.json
 └── vitest.config.ts
 
-243 directories, 496 files
+253 directories, 519 files

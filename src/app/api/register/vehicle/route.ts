@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
 
     const { error: insertErr } = await admin.from("vehicles").insert({
       registration_number: plate,
+      registration_source: "public",
       vic,
       make: input.make,
       model: input.model,
