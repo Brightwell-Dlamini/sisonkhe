@@ -127,9 +127,13 @@
 │   │   │   │   │   ├── route.ts
 │   │   │   │   │   └── topup
 │   │   │   │   │       └── route.ts
+│   │   │   │   ├── message
+│   │   │   │   │   └── route.ts
 │   │   │   │   ├── photo
 │   │   │   │   │   └── route.ts
 │   │   │   │   ├── roster
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── signal
 │   │   │   │   │   └── route.ts
 │   │   │   │   ├── status
 │   │   │   │   │   └── route.ts
@@ -402,6 +406,7 @@
 │   │   │   ├── DriverDashboard.tsx
 │   │   │   ├── DriverHeader.tsx
 │   │   │   ├── DriverRosterView.tsx
+│   │   │   ├── DriverSignalPanel.tsx
 │   │   │   ├── DriverSummaryCards.tsx
 │   │   │   ├── DriverTripsList.tsx
 │   │   │   ├── DriverVehicleCard.tsx
@@ -546,6 +551,7 @@
 │   │   ├── useDriverCard.ts
 │   │   ├── useDriverMessages.ts
 │   │   ├── useDriverRoster.ts
+│   │   ├── useDriverSignal.ts
 │   │   ├── useDrivers.ts
 │   │   ├── useDriverSummary.ts
 │   │   ├── useInspectorTickets.ts
@@ -589,6 +595,7 @@
 │   │   ├── domain
 │   │   │   ├── audit.ts
 │   │   │   ├── compliance.ts
+│   │   │   ├── driverSignal.ts
 │   │   │   ├── eligibility.ts
 │   │   │   ├── identity.ts
 │   │   │   ├── ids.ts
@@ -597,10 +604,10 @@
 │   │   │   ├── rankFee.ts
 │   │   │   ├── rateLimit.ts
 │   │   │   ├── serials.ts
-│   │   │   ├── __tests__
-│   │   │   │   └── rankMachine.test.ts
+│   │   │   ├── ulid.ts
 │   │   │   ├── usernames.ts
-│   │   │   └── vehicleCard.ts
+│   │   │   ├── vehicleCard.ts
+│   │   │   └── vehicleStatus.ts
 │   │   ├── driver
 │   │   │   ├── notifications.ts
 │   │   │   ├── queries.ts
@@ -722,10 +729,13 @@
 │       ├── 20261006_intelligence_infra.sql
 │       ├── 20261006_operator_region.sql
 │       ├── 20261006_plate_key.sql
-│       └── 20261006_usernames.sql
+│       ├── 20261006_usernames.sql
+│       ├── 20261007_driver_signals.sql
+│       ├── 20261007_role_hardening.sql
+│       └── 20261008_role_hardening.sql
 ├── tree.txt
 ├── tsconfig.json
 ├── vercel.json
 └── vitest.config.ts
 
-242 directories, 487 files
+243 directories, 496 files
