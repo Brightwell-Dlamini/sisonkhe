@@ -14,7 +14,10 @@ interface UseDriversResult {
   error: string | null;
   refresh: () => Promise<void>;
   createDriver: (input: CreateDriverRequest) => Promise<CreateDriverResponse>;
-  updateDriver: (id: string, input: Partial<CreateDriverRequest>) => Promise<boolean>;
+  updateDriver: (
+    id: string,
+    input: Partial<CreateDriverRequest>
+  ) => Promise<CreateDriverResponse>;
   deactivateDriver: (id: string) => Promise<boolean>;
   resetPassword: (id: string) => Promise<ResetPasswordResponse>;
 }
@@ -119,18 +122,31 @@ export function useDrivers(): UseDriversResult {
   );
 
   const updateDriver = useCallback(
-    async (id: string, input: Partial<CreateDriverRequest>): Promise<boolean> => {
+    async (
+      id: string,
+      input: Partial<CreateDriverRequest>
+    ): Promise<CreateDriverResponse> => {
       try {
         const res = await fetch(`/api/drivers/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(input),
         });
-        if (!res.ok) return false;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          return {
+            success: false,
+            error: (data as { error?: string }).error ?? "Failed to save",
+            issues: (data as { issues?: Record<string, string[]> }).issues,
+          };
+        }
         await refresh();
-        return true;
-      } catch {
-        return false;
+        return { success: true };
+      } catch (err) {
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : "Network error",
+        };
       }
     },
     [refresh]

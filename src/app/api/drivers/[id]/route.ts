@@ -27,12 +27,15 @@ interface Params {
 function errorStatus(message: string): number {
   if (message === "UNAUTHENTICATED") return 401;
   if (message === "FORBIDDEN") return 403;
-  if (message.includes("not found")) return 404;
+  if (message.includes("not found") || message.includes("not found."))
+    return 404;
   if (
     message.includes("already") ||
     message.includes("suspended") ||
     message.includes("PDP") ||
-    message.includes("cannot")
+    message.includes("cannot") ||
+    message.includes("not available") ||
+    message.includes("linked")
   )
     return 409;
   return 500;
@@ -49,7 +52,10 @@ export async function GET(_: NextRequest, { params }: Params) {
     return NextResponse.json({ driver });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: errorStatus(message) });
+    return NextResponse.json(
+      { error: message },
+      { status: errorStatus(message) }
+    );
   }
 }
 
@@ -74,7 +80,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const admin = createSupabaseAdminClient();
     const input = parsed.data;
 
-    // Never write assignment columns here — only via assignment service
     const patch: Record<string, unknown> = {};
 
     if (input.fullName !== undefined) patch.full_name = input.fullName;
@@ -132,7 +137,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     let unlinkedVehicle: string | null = null;
 
-    // Suspend → unlink via service only
     if (suspending && oldVehicle) {
       await unassignDriverVehicle(admin, {
         driverId: id,
@@ -141,7 +145,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       unlinkedVehicle = oldVehicle;
       await writeAudit(admin, {
         action: "assignment.unlink",
-        actorId: session.id,
+        actorId: session.authUserId,
         actorRole: session.role,
         actorName: session.fullName,
         entityType: "driver",
@@ -164,8 +168,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }
     }
 
-    // Assignment changes only via service
-    if (!suspending && newVehicleRaw !== undefined && newVehicleRaw !== oldVehicle) {
+    // Staff assignment always allowed to transfer (force) — UI already filters free vehicles
+    if (
+      !suspending &&
+      newVehicleRaw !== undefined &&
+      newVehicleRaw !== oldVehicle
+    ) {
       if (!newVehicleRaw && oldVehicle) {
         await unassignDriverVehicle(admin, {
           driverId: id,
@@ -174,7 +182,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         unlinkedVehicle = oldVehicle;
         await writeAudit(admin, {
           action: "assignment.unlink",
-          actorId: session.id,
+          actorId: session.authUserId,
           actorRole: session.role,
           actorName: session.fullName,
           entityType: "driver",
@@ -182,14 +190,25 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           summary: `Unlinked ${oldVehicle}`,
         });
       } else if (newVehicleRaw) {
-        await assignDriverVehicle(admin, {
-          driverId: id,
-          vehicleReg: newVehicleRaw,
-          force: false,
-        });
+        try {
+          await assignDriverVehicle(admin, {
+            driverId: id,
+            vehicleReg: newVehicleRaw,
+            force: true,
+          });
+        } catch (assignErr) {
+          const msg =
+            assignErr instanceof Error
+              ? assignErr.message
+              : "Assignment failed";
+          return NextResponse.json(
+            { error: msg },
+            { status: errorStatus(msg) }
+          );
+        }
         await writeAudit(admin, {
           action: "assignment.link",
-          actorId: session.id,
+          actorId: session.authUserId,
           actorRole: session.role,
           actorName: session.fullName,
           entityType: "driver",
@@ -203,7 +222,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (suspending) {
       await writeAudit(admin, {
         action: "driver.suspend",
-        actorId: session.id,
+        actorId: session.authUserId,
         actorRole: session.role,
         actorName: session.fullName,
         entityType: "driver",
@@ -214,7 +233,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     } else if (Object.keys(patch).length > 0) {
       await writeAudit(admin, {
         action: "driver.update",
-        actorId: session.id,
+        actorId: session.authUserId,
         actorRole: session.role,
         actorName: session.fullName,
         entityType: "driver",
@@ -235,12 +254,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           const { data: existing } = await admin.auth.admin.getUserById(
             updated.auth_user_id as string
           );
-          await admin.auth.admin.updateUserById(updated.auth_user_id as string, {
-            user_metadata: {
-              ...(existing?.user?.user_metadata ?? {}),
-              full_name: input.fullName,
-            },
-          });
+          await admin.auth.admin.updateUserById(
+            updated.auth_user_id as string,
+            {
+              user_metadata: {
+                ...(existing?.user?.user_metadata ?? {}),
+                full_name: input.fullName,
+              },
+            }
+          );
         } catch {
           /* non-fatal */
         }
@@ -254,7 +276,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[api/drivers/[id]] PATCH error:", err);
-    return NextResponse.json({ error: message }, { status: errorStatus(message) });
+    return NextResponse.json(
+      { error: message },
+      { status: errorStatus(message) }
+    );
   }
 }
 
@@ -295,7 +320,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
 
     await writeAudit(admin, {
       action: "driver.suspend",
-      actorId: session.id,
+      actorId: session.authUserId,
       actorRole: session.role,
       actorName: session.fullName,
       entityType: "driver",
@@ -310,6 +335,9 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: errorStatus(message) });
+    return NextResponse.json(
+      { error: message },
+      { status: errorStatus(message) }
+    );
   }
 }
