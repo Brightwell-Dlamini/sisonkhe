@@ -5,6 +5,10 @@ import { Plus, Search, Loader2, Edit2, Trash2 } from "lucide-react";
 import type { RouteRow } from "@/lib/admin/routes";
 import RouteFormModal from "./RouteFormModal";
 
+function routeLabel(origin: string, destination: string) {
+  return `${origin} to ${destination}`;
+}
+
 export default function RoutesList() {
   const [routes, setRoutes] = useState<RouteRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,8 +48,15 @@ export default function RoutesList() {
   };
 
   const handleDelete = async (route: RouteRow) => {
-    if (!confirm(`Delete route ${route.origin} \u2192 ${route.destination}?`)) return;
-    const res = await fetch(`/api/admin/routes/${route.id}`, { method: "DELETE" });
+    if (
+      !confirm(
+        `Delete corridor ${routeLabel(route.origin, route.destination)}?`
+      )
+    )
+      return;
+    const res = await fetch(`/api/admin/routes/${route.id}`, {
+      method: "DELETE",
+    });
     const data = await res.json();
     if (!res.ok) {
       alert(data.error ?? "Delete failed");
@@ -89,7 +100,7 @@ export default function RoutesList() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
           <input
             type="text"
-            placeholder="Search routes\u2026"
+            placeholder="Search routes…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl pl-10 pr-4 py-2 text-xs text-white"
@@ -107,7 +118,7 @@ export default function RoutesList() {
             <thead>
               <tr className="border-b border-white/[0.06] text-left text-[10px] font-black uppercase tracking-wider text-zinc-400 bg-white/[0.02]">
                 <th className="px-4 py-3">Region</th>
-                <th className="px-4 py-3">Route</th>
+                <th className="px-4 py-3">Corridor</th>
                 <th className="px-4 py-3 text-right">Distance</th>
                 <th className="px-4 py-3 text-right">Fare</th>
                 <th className="px-4 py-3">Start</th>
@@ -122,13 +133,17 @@ export default function RoutesList() {
                 >
                   <td className="px-4 py-3 text-zinc-300">{r.region}</td>
                   <td className="px-4 py-3 font-bold text-white">
-                    {r.origin} \u2192 {r.destination}
+                    {routeLabel(r.origin, r.destination)}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-zinc-400">{r.distanceKm} km</td>
+                  <td className="px-4 py-3 text-right font-mono text-zinc-400">
+                    {r.distanceKm} km
+                  </td>
                   <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
                     E{r.baseFareE.toFixed(2)}
                   </td>
-                  <td className="px-4 py-3 font-mono text-zinc-500 text-[11px]">{r.startTime ?? "\u2014"}</td>
+                  <td className="px-4 py-3 font-mono text-zinc-500 text-[11px]">
+                    {r.startTime ?? "—"}
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <button
