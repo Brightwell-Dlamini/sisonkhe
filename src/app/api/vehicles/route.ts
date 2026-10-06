@@ -10,6 +10,9 @@ import { regionScopeOrThrow } from "@/lib/auth/permissions";
 import { createVehicleSchema } from "@/lib/vehicles/validation";
 import { listVehicles } from "@/lib/vehicles/queries";
 import { assignDriverVehicle } from "@/lib/assignments/service";
+import { normalizePlate } from "@/lib/domain/identity";
+import { issueVehicleVirtualCard } from "@/lib/domain/vehicleCard";
+import { writeAudit } from "@/lib/domain/audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -117,7 +120,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireServerRole([...ADMIN_ROLES]);
+    const session = await requireServerRole([...ADMIN_ROLES]);
 
     const body = await request.json();
     const parsed = createVehicleSchema.safeParse(body);
@@ -134,16 +137,38 @@ export async function POST(request: NextRequest) {
 
     const input = parsed.data;
     const admin = createSupabaseAdminClient();
+    const plate = normalizePlate(input.registrationNumber);
 
     const { data: existing } = await admin
       .from("vehicles")
       .select("registration_number")
-      .eq("registration_number", input.registrationNumber)
+      .eq("registration_number", plate)
       .maybeSingle();
 
     if (existing) {
       return NextResponse.json(
-        { error: `Vehicle ${input.registrationNumber} is already registered.` },
+        { error: `Vehicle ${plate} is already registered.` },
+        { status: 409 }
+      );
+    }
+
+    // Compact-plate collision (HSD101BM vs HSD 101 BM)
+    const compact = plate.replace(/\s+/g, "");
+    const { data: allPlates } = await admin
+      .from("vehicles")
+      .select("registration_number")
+      .limit(8000);
+    const clash = (allPlates ?? []).find(
+      (r) =>
+        String(r.registration_number)
+          .toUpperCase()
+          .replace(/\s+/g, "") === compact
+    );
+    if (clash) {
+      return NextResponse.json(
+        {
+          error: `Plate conflicts with existing ${clash.registration_number}. Use the canonical plate already registered.`,
+        },
         { status: 409 }
       );
     }
@@ -162,10 +187,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const vic = input.vic || generateVIC(input.registrationNumber);
+    let vic = input.vic ? normalizePlate(input.vic).replace(/\s+/g, "-") : generateVIC(plate);
+
+    // VIC uniqueness
+    const { data: vicClash } = await admin
+      .from("vehicles")
+      .select("registration_number")
+      .eq("vic", vic)
+      .maybeSingle();
+    if (vicClash) {
+      vic = `${vic}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+    }
 
     const { error: insertErr } = await admin.from("vehicles").insert({
-      registration_number: input.registrationNumber,
+      registration_number: plate,
       vic,
       make: input.make,
       model: input.model,
@@ -205,58 +240,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let assignmentWarning: string | null = null;
     if (input.driverNationalId || input.driverId) {
       try {
         await assignDriverVehicle(admin, {
           driverId: input.driverId || null,
           nationalId: input.driverNationalId || null,
-          vehicleReg: input.registrationNumber,
+          vehicleReg: plate,
           force: false,
         });
       } catch (linkErr) {
-        console.warn("[api/vehicles] assignment failed (non-fatal):", linkErr);
+        assignmentWarning =
+          linkErr instanceof Error
+            ? linkErr.message
+            : "Driver assignment failed — vehicle created unassigned.";
       }
     }
 
-    const syntheticCardId = `VCARD-${input.registrationNumber.replace(/\s+/g, "-")}`;
-    const now = new Date();
-    const regFeeReceipt = `RCP-REG-2026-${Math.floor(100000 + Math.random() * 900000)}`;
-
-    const clean = input.registrationNumber.replace(/[^A-Z0-9]/gi, "").toUpperCase();
-    let hash = 0;
-    for (let i = 0; i < clean.length; i++) {
-      hash = (hash << 5) - hash + clean.charCodeAt(i);
-      hash |= 0;
-    }
-    const positiveHash = Math.abs(hash);
-    const p2 = String(1000 + (positiveHash % 9000));
-    const p3 = String(1000 + (Math.floor(positiveHash / 10) % 9000));
-    const p4 = String(1000 + (Math.floor(positiveHash / 100) % 9000));
-    const cardNumber = `5342 ${p2} ${p3} ${p4}`;
-
-    await admin.from("vehicle_virtual_cards").insert({
-      id: syntheticCardId,
-      card_number: cardNumber,
-      cvv_hash: "pending-hash",
-      expiry_date: "09/31",
-      vehicle_reg: input.registrationNumber,
+    // Money truth: balance 0, fee unpaid until settlement
+    await issueVehicleVirtualCard(admin, {
+      registrationNumber: plate,
       vic,
-      cardholder_name: input.ownerName || "Fleet Operator",
-      status: "Active",
-      balance_szl: 1525.0,
-      registration_fee_paid: true,
-      registration_fee_amount: 450.0,
-      registration_fee_date: now.toISOString().split("T")[0],
-      registration_receipt_ref: regFeeReceipt,
-      card_tier: "Commercial Concession",
-      daily_spend_limit_szl: 1500.0,
-      qr_payload: null,
+      cardholderName: input.ownerName || "Fleet Operator",
+      registrationFeePaid: false,
+      registrationFeeAmount: 450,
+    });
+
+    await writeAudit(admin, {
+      action: "vehicle.create",
+      actorId: session.id,
+      actorRole: session.role,
+      actorName: session.fullName,
+      entityType: "vehicle",
+      entityId: plate,
+      summary: `Registered vehicle ${plate} (VIC ${vic})`,
+      after: { plate, vic, routeAssignmentId: input.routeAssignmentId ?? null },
+      meta: assignmentWarning ? { assignmentWarning } : null,
     });
 
     return NextResponse.json({
       success: true,
-      registrationNumber: input.registrationNumber,
+      registrationNumber: plate,
       vic,
+      assignmentWarning,
+      card: { balanceSzl: 0, registrationFeePaid: false },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

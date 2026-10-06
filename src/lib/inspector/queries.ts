@@ -1,12 +1,13 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Roadside enforcement queries — plate or VIC → compliance view.
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
+import { normalizePlate, plateKey } from "../domain/identity";
+import { nextTicketNumber } from "../domain/serials";
+import { writeAudit } from "../domain/audit";
 
 export interface InspectorVehicleView {
   registrationNumber: string;
@@ -35,11 +36,12 @@ export interface InspectorVehicleView {
   driverPdpStatus: string | null;
   driverPdpExpiry: string | null;
   driverStatus: string | null;
-
   permitValid: boolean;
   cofValid: boolean;
   insuranceValid: boolean;
+  roadworthyValid: boolean;
   driverPdpValid: boolean;
+  vehicleOperational: boolean;
   overallValid: boolean;
 }
 
@@ -50,15 +52,13 @@ export interface InspectorTicket {
   vehicleReg: string;
   officerName: string;
   officerBadge: string;
+  officerUserId: string | null;
   offenseType: string;
   amountSzl: number;
   location: string | null;
   status: string;
   notes: string | null;
-}
-
-function normalizeQuery(raw: string): string {
-  return raw.trim().toUpperCase().replace(/\s+/g, " ");
+  complianceSnapshot: Record<string, unknown> | null;
 }
 
 function isExpired(dateStr: string | null | undefined, now: number): boolean {
@@ -66,61 +66,50 @@ function isExpired(dateStr: string | null | undefined, now: number): boolean {
   return new Date(dateStr).getTime() <= now;
 }
 
-// ---------------------------------------------------------------------------
-// Vehicle lookup by plate OR VIC
-// ---------------------------------------------------------------------------
+const SELECT_COLS = `
+  registration_number, vic, make, model, classification, seating_capacity, status,
+  permit_number, permit_status, permit_expiry_date,
+  cof_number, cof_expiry_date, insurance_expiry, roadworthiness_expiry, last_inspection_date,
+  owner_name, owner_phone, association,
+  route_assignment_id, driver_id
+`;
 
 export async function lookupVehicleForInspector(
   query: string
 ): Promise<InspectorVehicleView | null> {
   const admin = createSupabaseAdminClient();
-  const q = normalizeQuery(query);
+  const q = normalizePlate(query);
   if (!q) return null;
+  const compact = plateKey(q);
 
-  const selectCols = `
-      registration_number, vic, make, model, classification, seating_capacity, status,
-      permit_number, permit_status, permit_expiry_date,
-      cof_number, cof_expiry_date, insurance_expiry, roadworthiness_expiry, last_inspection_date,
-      owner_name, owner_phone, association,
-      route_assignment_id, driver_id
-    `;
-
-  // 1) Exact plate
   let { data: v } = await admin
     .from("vehicles")
-    .select(selectCols)
+    .select(SELECT_COLS)
     .eq("registration_number", q)
     .maybeSingle();
 
-  // 2) VIC exact
   if (!v) {
     const byVic = await admin
       .from("vehicles")
-      .select(selectCols)
-      .eq("vic", q)
+      .select(SELECT_COLS)
+      .ilike("vic", q)
       .maybeSingle();
     v = byVic.data;
   }
 
-  // 3) Plate without spaces (e.g. HSD101BM)
-  if (!v) {
-    const compact = q.replace(/\s+/g, "");
-    if (compact !== q) {
-      const { data: all } = await admin
-        .from("vehicles")
-        .select(selectCols)
-        .limit(5000);
-      v =
-        (all ?? []).find(
-          (row) =>
-            String(row.registration_number ?? "")
-              .replace(/\s+/g, "")
-              .toUpperCase() === compact ||
-            String(row.vic ?? "")
-              .replace(/\s+/g, "")
-              .toUpperCase() === compact
-        ) ?? null;
-    }
+  // Indexed compact match via filter (not full table scan in app)
+  if (!v && compact) {
+    const { data: byCompact } = await admin
+      .from("vehicles")
+      .select(SELECT_COLS)
+      .filter("registration_number", "ilike", `%${compact.slice(0, 3)}%`)
+      .limit(50);
+    v =
+      (byCompact ?? []).find(
+        (row) =>
+          plateKey(String(row.registration_number)) === compact ||
+          plateKey(String(row.vic ?? "")) === compact
+      ) ?? null;
   }
 
   if (!v) return null;
@@ -151,9 +140,7 @@ export async function lookupVehicleForInspector(
   if (v.driver_id) {
     const { data: driver } = await admin
       .from("drivers")
-      .select(
-        "full_name, pdp_status, pdp_expiry_date, license_number, status"
-      )
+      .select("full_name, pdp_status, pdp_expiry_date, license_number, status")
       .eq("id", v.driver_id as string)
       .maybeSingle();
     if (driver) {
@@ -166,12 +153,17 @@ export async function lookupVehicleForInspector(
   }
 
   const now = Date.now();
+  const status = (v.status as string) ?? "";
+  const vehicleOperational =
+    status !== "Offline" && status !== "Breakdown" && status !== "Decommissioned";
+
   const permitValid =
     (v.permit_status === "Active" || v.permit_status === "Valid") &&
     !isExpired(v.permit_expiry_date as string | null, now);
   const cofValid = !isExpired(v.cof_expiry_date as string | null, now);
-  const insuranceValid = !isExpired(
-    v.insurance_expiry as string | null,
+  const insuranceValid = !isExpired(v.insurance_expiry as string | null, now);
+  const roadworthyValid = !isExpired(
+    v.roadworthiness_expiry as string | null,
     now
   );
   const driverPdpValid =
@@ -189,7 +181,7 @@ export async function lookupVehicleForInspector(
     model: (v.model as string) ?? "",
     classification: (v.classification as string) ?? "",
     seatingCapacity: Number(v.seating_capacity) || 0,
-    status: (v.status as string) ?? "",
+    status,
     permitNumber: (v.permit_number as string | null) ?? null,
     permitStatus: (v.permit_status as string | null) ?? null,
     permitExpiryDate: (v.permit_expiry_date as string | null) ?? null,
@@ -212,14 +204,18 @@ export async function lookupVehicleForInspector(
     permitValid,
     cofValid,
     insuranceValid,
+    roadworthyValid,
     driverPdpValid,
-    overallValid: permitValid && cofValid && insuranceValid && driverPdpValid,
+    vehicleOperational,
+    overallValid:
+      permitValid &&
+      cofValid &&
+      insuranceValid &&
+      roadworthyValid &&
+      driverPdpValid &&
+      vehicleOperational,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Tickets
-// ---------------------------------------------------------------------------
 
 export async function createTicket(
   input: {
@@ -229,15 +225,35 @@ export async function createTicket(
     location?: string;
     notes?: string;
   },
-  officer: { fullName: string; badgeNumber: string | null }
+  officer: {
+    fullName: string;
+    badgeNumber: string | null;
+    userId?: string | null;
+  }
 ): Promise<InspectorTicket> {
   const admin = createSupabaseAdminClient();
   const now = new Date();
-  const year = now.getFullYear();
-  const serial = Math.floor(1000 + Math.random() * 9000);
+  const plate = normalizePlate(input.vehicleReg);
 
-  const id = `tkt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  const ticketNumber = `REPS-${year}-${serial}`;
+  const compliance = await lookupVehicleForInspector(plate);
+  const id = `tkt_${Date.now()}_${plate.replace(/\s+/g, "").slice(0, 8)}`;
+  const ticketNumber = await nextTicketNumber(admin);
+
+  const snapshot = compliance
+    ? {
+        permitValid: compliance.permitValid,
+        cofValid: compliance.cofValid,
+        insuranceValid: compliance.insuranceValid,
+        roadworthyValid: compliance.roadworthyValid,
+        driverPdpValid: compliance.driverPdpValid,
+        overallValid: compliance.overallValid,
+        permitStatus: compliance.permitStatus,
+        permitExpiryDate: compliance.permitExpiryDate,
+        driverName: compliance.driverName,
+        driverStatus: compliance.driverStatus,
+        vehicleStatus: compliance.status,
+      }
+    : null;
 
   const { data, error } = await admin
     .from("traffic_tickets")
@@ -245,23 +261,81 @@ export async function createTicket(
       id,
       ticket_number: ticketNumber,
       timestamp: now.toISOString(),
-      vehicle_reg: input.vehicleReg.toUpperCase(),
+      vehicle_reg: plate,
       officer_name: officer.fullName,
       officer_badge: officer.badgeNumber ?? "UNKNOWN",
+      officer_user_id: officer.userId ?? null,
       offense_type: input.offenseType,
       amount_szl: input.amountSzl,
       location: input.location || null,
       status: "Issued",
       notes: input.notes || null,
+      compliance_snapshot: snapshot,
     })
     .select(
-      "id, ticket_number, timestamp, vehicle_reg, officer_name, officer_badge, offense_type, amount_szl, location, status, notes"
+      "id, ticket_number, timestamp, vehicle_reg, officer_name, officer_badge, officer_user_id, offense_type, amount_szl, location, status, notes, compliance_snapshot"
     )
     .single();
 
   if (error || !data) {
-    throw new Error(`Failed to create ticket: ${error?.message}`);
+    // Fallback without new columns
+    const { data: data2, error: err2 } = await admin
+      .from("traffic_tickets")
+      .insert({
+        id,
+        ticket_number: ticketNumber,
+        timestamp: now.toISOString(),
+        vehicle_reg: plate,
+        officer_name: officer.fullName,
+        officer_badge: officer.badgeNumber ?? "UNKNOWN",
+        offense_type: input.offenseType,
+        amount_szl: input.amountSzl,
+        location: input.location || null,
+        status: "Issued",
+        notes: input.notes || null,
+      })
+      .select(
+        "id, ticket_number, timestamp, vehicle_reg, officer_name, officer_badge, offense_type, amount_szl, location, status, notes"
+      )
+      .single();
+    if (err2 || !data2) {
+      throw new Error(`Failed to create ticket: ${error?.message ?? err2?.message}`);
+    }
+    await writeAudit(admin, {
+      action: "ticket.issue",
+      actorId: officer.userId,
+      actorName: officer.fullName,
+      entityType: "ticket",
+      entityId: id,
+      summary: `Ticket ${ticketNumber} on ${plate}: ${input.offenseType}`,
+      meta: { snapshot },
+    });
+    return {
+      id: data2.id as string,
+      ticketNumber: data2.ticket_number as string,
+      timestamp: data2.timestamp as string,
+      vehicleReg: data2.vehicle_reg as string,
+      officerName: data2.officer_name as string,
+      officerBadge: data2.officer_badge as string,
+      officerUserId: officer.userId ?? null,
+      offenseType: data2.offense_type as string,
+      amountSzl: Number(data2.amount_szl),
+      location: (data2.location as string | null) ?? null,
+      status: data2.status as string,
+      notes: (data2.notes as string | null) ?? null,
+      complianceSnapshot: snapshot,
+    };
   }
+
+  await writeAudit(admin, {
+    action: "ticket.issue",
+    actorId: officer.userId,
+    actorName: officer.fullName,
+    entityType: "ticket",
+    entityId: id,
+    summary: `Ticket ${ticketNumber} on ${plate}: ${input.offenseType}`,
+    meta: { snapshot },
+  });
 
   return {
     id: data.id as string,
@@ -270,31 +344,65 @@ export async function createTicket(
     vehicleReg: data.vehicle_reg as string,
     officerName: data.officer_name as string,
     officerBadge: data.officer_badge as string,
+    officerUserId: (data.officer_user_id as string | null) ?? null,
     offenseType: data.offense_type as string,
     amountSzl: Number(data.amount_szl),
     location: (data.location as string | null) ?? null,
     status: data.status as string,
     notes: (data.notes as string | null) ?? null,
+    complianceSnapshot:
+      (data.compliance_snapshot as Record<string, unknown> | null) ?? snapshot,
   };
 }
 
 export async function listTicketsForOfficer(
   officerName: string,
-  _region: string | null,
+  officerUserId: string | null,
   limit: number = 50
 ): Promise<InspectorTicket[]> {
   const admin = createSupabaseAdminClient();
 
-  const { data, error } = await admin
+  let query = admin
     .from("traffic_tickets")
     .select(
-      "id, ticket_number, timestamp, vehicle_reg, officer_name, officer_badge, offense_type, amount_szl, location, status, notes"
+      "id, ticket_number, timestamp, vehicle_reg, officer_name, officer_badge, officer_user_id, offense_type, amount_szl, location, status, notes, compliance_snapshot"
     )
-    .eq("officer_name", officerName)
     .order("timestamp", { ascending: false })
     .limit(limit);
 
-  if (error || !data) return [];
+  if (officerUserId) {
+    query = query.eq("officer_user_id", officerUserId);
+  } else {
+    query = query.eq("officer_name", officerName);
+  }
+
+  const { data, error } = await query;
+  if (error || !data) {
+    // Fallback without officer_user_id column
+    const { data: data2 } = await admin
+      .from("traffic_tickets")
+      .select(
+        "id, ticket_number, timestamp, vehicle_reg, officer_name, officer_badge, offense_type, amount_szl, location, status, notes"
+      )
+      .eq("officer_name", officerName)
+      .order("timestamp", { ascending: false })
+      .limit(limit);
+    return (data2 ?? []).map((t) => ({
+      id: t.id as string,
+      ticketNumber: t.ticket_number as string,
+      timestamp: t.timestamp as string,
+      vehicleReg: t.vehicle_reg as string,
+      officerName: t.officer_name as string,
+      officerBadge: t.officer_badge as string,
+      officerUserId: null,
+      offenseType: t.offense_type as string,
+      amountSzl: Number(t.amount_szl),
+      location: (t.location as string | null) ?? null,
+      status: t.status as string,
+      notes: (t.notes as string | null) ?? null,
+      complianceSnapshot: null,
+    }));
+  }
 
   return data.map((t) => ({
     id: t.id as string,
@@ -303,10 +411,13 @@ export async function listTicketsForOfficer(
     vehicleReg: t.vehicle_reg as string,
     officerName: t.officer_name as string,
     officerBadge: t.officer_badge as string,
+    officerUserId: (t.officer_user_id as string | null) ?? null,
     offenseType: t.offense_type as string,
     amountSzl: Number(t.amount_szl),
     location: (t.location as string | null) ?? null,
     status: t.status as string,
     notes: (t.notes as string | null) ?? null,
+    complianceSnapshot:
+      (t.compliance_snapshot as Record<string, unknown> | null) ?? null,
   }));
 }
