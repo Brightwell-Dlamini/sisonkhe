@@ -2,11 +2,10 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Pure domain rules — no I/O.
- *
- * One human cannot drive two kombis. Suspended drivers cannot be assigned.
- * Expired permit/PDP cannot load or depart. Print-pending blocks rank load.
+ * Pure domain rules — no I/O. 4000iq operational brain.
  */
+
+import { normalizePlate, platesEqual } from "./identity";
 
 export type DriverEligibilityInput = {
   id: string;
@@ -24,6 +23,7 @@ export type VehicleEligibilityInput = {
   permitStatus?: string | null;
   permitExpiryDate?: string | null;
   cofExpiryDate?: string | null;
+  ownerOperatorId?: string | null;
 };
 
 export type EligibilityResult = {
@@ -31,10 +31,6 @@ export type EligibilityResult = {
   reason?: string;
   warning?: string;
 };
-
-function normPlate(reg: string | null | undefined): string {
-  return (reg ?? "").trim().toUpperCase().replace(/\s+/g, " ");
-}
 
 function isExpired(dateStr: string | null | undefined, now = Date.now()): boolean {
   if (!dateStr) return false;
@@ -56,7 +52,10 @@ export function driverAssignableToVehicle(
 ): EligibilityResult {
   const status = (driver.status ?? "Active").trim();
   if (status === "Suspended") {
-    return { eligible: false, reason: `${driver.fullName} is suspended and cannot be assigned.` };
+    return {
+      eligible: false,
+      reason: `${driver.fullName} is suspended and cannot be assigned.`,
+    };
   }
   if (status === "On Leave" || status === "Off-Duty") {
     return {
@@ -65,10 +64,10 @@ export function driverAssignableToVehicle(
     };
   }
 
-  const assigned = normPlate(driver.assignedVehicleReg);
-  const target = normPlate(targetVehicleReg);
+  const assigned = normalizePlate(driver.assignedVehicleReg);
+  const target = normalizePlate(targetVehicleReg);
 
-  if (assigned && target && assigned !== target) {
+  if (assigned && target && !platesEqual(assigned, target)) {
     return {
       eligible: false,
       reason: `${driver.fullName} is already assigned to ${assigned}. Unlink or transfer first — one driver cannot operate two vehicles.`,
@@ -107,23 +106,150 @@ export function driverAssignableToVehicle(
   return { eligible: true };
 }
 
+/** Vehicle free for a given driver (not held by someone else, not offline). */
+export function vehicleAssignableToDriver(
+  vehicle: VehicleEligibilityInput,
+  targetDriverId?: string | null
+): EligibilityResult {
+  const st = (vehicle.status ?? "").trim();
+  if (st === "Offline" || st === "Decommissioned") {
+    return {
+      eligible: false,
+      reason: `${vehicle.registrationNumber} is ${st} and cannot take a driver.`,
+    };
+  }
+  if (
+    vehicle.driverId &&
+    targetDriverId &&
+    vehicle.driverId !== targetDriverId
+  ) {
+    return {
+      eligible: false,
+      reason: `${vehicle.registrationNumber} already has a driver. Unlink first.`,
+    };
+  }
+  if (vehicle.driverId && !targetDriverId) {
+    return {
+      eligible: false,
+      reason: `${vehicle.registrationNumber} already has a driver.`,
+    };
+  }
+  if (vehicle.permitStatus === "Suspended") {
+    return {
+      eligible: false,
+      reason: `${vehicle.registrationNumber} permit is suspended.`,
+    };
+  }
+  return { eligible: true };
+}
+
 export function filterAssignableDrivers<T extends DriverEligibilityInput>(
   drivers: T[],
   targetVehicleReg?: string | null,
   currentDriverId?: string | null
 ): T[] {
-  const target = normPlate(targetVehicleReg);
+  const target = normalizePlate(targetVehicleReg);
   return drivers.filter((d) => {
     if (currentDriverId && d.id === currentDriverId) return true;
-    if (target && normPlate(d.assignedVehicleReg) === target) return true;
+    if (target && platesEqual(d.assignedVehicleReg, target)) return true;
     return driverAssignableToVehicle(d, target || null).eligible;
   });
 }
 
+export function filterAssignableVehicles<
+  T extends VehicleEligibilityInput & { registrationNumber: string },
+>(
+  vehicles: T[],
+  targetDriverId?: string | null,
+  currentVehicleReg?: string | null
+): T[] {
+  const current = normalizePlate(currentVehicleReg);
+  return vehicles.filter((v) => {
+    if (current && platesEqual(v.registrationNumber, current)) return true;
+    if (targetDriverId && v.driverId === targetDriverId) return true;
+    return vehicleAssignableToDriver(v, targetDriverId).eligible;
+  });
+}
+
 export function driverOptionLabel(d: DriverEligibilityInput): string {
-  const plate = normPlate(d.assignedVehicleReg);
+  const plate = normalizePlate(d.assignedVehicleReg);
   if (plate) return `${d.fullName} · ${plate}`;
   return d.fullName;
+}
+
+export function vehicleOptionLabel(v: {
+  registrationNumber: string;
+  driverId?: string | null;
+  make?: string | null;
+  model?: string | null;
+}): string {
+  const base = v.registrationNumber;
+  const mm = [v.make, v.model].filter(Boolean).join(" ");
+  if (v.driverId) return `${base}${mm ? ` · ${mm}` : ""} · assigned`;
+  return mm ? `${base} · ${mm}` : base;
+}
+
+// ── Marshal ↔ route (one active marshal per route is soft; one route per marshal hard) ──
+
+export function marshalAssignableToRoute(
+  marshal: { id: string; isActive?: boolean; assignedRouteId?: string | null },
+  routeId: string | null | undefined,
+  routeAlreadyHasMarshalId?: string | null
+): EligibilityResult {
+  if (marshal.isActive === false) {
+    return { eligible: false, reason: "Inactive marshals cannot be assigned to a route." };
+  }
+  if (
+    marshal.assignedRouteId &&
+    routeId &&
+    marshal.assignedRouteId !== routeId
+  ) {
+    return {
+      eligible: false,
+      reason:
+        "Marshal is already assigned to another route. Reassign explicitly (clear first).",
+    };
+  }
+  if (
+    routeAlreadyHasMarshalId &&
+    routeId &&
+    routeAlreadyHasMarshalId !== marshal.id
+  ) {
+    return {
+      eligible: true,
+      warning:
+        "Another marshal is already on this route. Both can work the rank, but clarify primary."
+    };
+  }
+  return { eligible: true };
+}
+
+// ── Operator fleet ownership ──
+
+export function vehicleCanChangeOperator(
+  vehicle: VehicleEligibilityInput,
+  newOperatorId: string | null | undefined
+): EligibilityResult {
+  const current = vehicle.ownerOperatorId ?? null;
+  if (!newOperatorId || newOperatorId === current) return { eligible: true };
+  if (vehicle.driverId) {
+    return {
+      eligible: false,
+      reason:
+        "Unlink the driver before transferring vehicle ownership between operators.",
+    };
+  }
+  const st = (vehicle.status ?? "").trim();
+  if (st === "Loading" || st === "Departed") {
+    return {
+      eligible: false,
+      reason: `Vehicle is ${st}. Return to Waiting before ownership transfer.`,
+    };
+  }
+  return {
+    eligible: true,
+    warning: "Ownership transfer moves permit liability to the new operator.",
+  };
 }
 
 export type DispatchGateInput = {
@@ -203,4 +329,46 @@ export function canDispatchLoad(input: DispatchGateInput): EligibilityResult {
 
 export function canDispatchDepart(input: DispatchGateInput): EligibilityResult {
   return canDispatchLoad(input);
+}
+
+/** Full rank status state machine — illegal jumps blocked. */
+export type RankStatus =
+  | "Waiting"
+  | "Loading"
+  | "Delayed"
+  | "Departed"
+  | "Breakdown"
+  | "Offline"
+  | string;
+
+export type RankAction =
+  | "load"
+  | "full_cabin"
+  | "depart"
+  | "delay"
+  | "breakdown"
+  | "reset_to_waiting";
+
+const ALLOWED: Record<string, RankAction[]> = {
+  Waiting: ["load", "delay", "breakdown"],
+  Loading: ["depart", "full_cabin", "delay", "breakdown", "reset_to_waiting"],
+  Delayed: ["load", "depart", "full_cabin", "breakdown", "reset_to_waiting"],
+  Departed: ["reset_to_waiting"],
+  Breakdown: ["reset_to_waiting"],
+  Offline: [],
+};
+
+export function canRankTransition(
+  fromStatus: RankStatus,
+  action: RankAction
+): EligibilityResult {
+  const from = (fromStatus || "Waiting").trim();
+  const allowed = ALLOWED[from] ?? ["reset_to_waiting"];
+  if (!allowed.includes(action)) {
+    return {
+      eligible: false,
+      reason: `Illegal transition: cannot "${action}" from status "${from}". Allowed: ${allowed.join(", ") || "none"}.`,
+    };
+  }
+  return { eligible: true };
 }
