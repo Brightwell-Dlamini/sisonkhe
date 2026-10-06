@@ -2,8 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * POST /api/register/driver — public identity collection only.
- * No auth user. No password. No vehicle link.
+ * POST /api/register/driver — identity collection only (marshal-style fields).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -43,6 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     const input = parsed.data;
+    const fullName = `${input.firstName} ${input.surname}`.trim();
     const admin = createSupabaseAdminClient();
 
     {
@@ -94,14 +94,14 @@ export async function POST(request: NextRequest) {
     }
 
     const driverId = generateDriverId();
-    const avatarSeed = input.fullName
+    const avatarSeed = fullName
       .toLowerCase()
       .replace(/[^a-z]/g, "")
       .slice(0, 12);
 
     const { error: insertErr } = await admin.from("drivers").insert({
       id: driverId,
-      full_name: input.fullName,
+      full_name: fullName,
       national_id: input.nationalId,
       phone: input.phone,
       residential_address: input.residentialAddress || null,
@@ -120,7 +120,9 @@ export async function POST(request: NextRequest) {
       assigned_vehicle_reg: null,
       auth_user_id: null,
       avatar_seed: avatarSeed,
-      profile_picture_url: null,
+      profile_picture_url: input.profilePictureUrl?.startsWith("data:")
+        ? null
+        : input.profilePictureUrl || null,
       status: "Active",
     });
 
@@ -134,10 +136,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       driverId,
-      fullName: input.fullName,
+      fullName,
       nationalId: input.nationalId,
       message:
-        "Profile saved. No login was created. At rollout, claim your account with National ID + phone, or an admin will issue login credentials.",
+        "Profile saved. No login was created. Claim your account later or an admin will issue credentials.",
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
