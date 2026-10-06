@@ -1,18 +1,19 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * GET    /api/drivers/[id]  — fetch one driver
- * PATCH  /api/drivers/[id]  — update driver
- * DELETE /api/drivers/[id]  — deactivate (soft) + unlink vehicle
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { requireServerRole } from "@/lib/auth/session";
 import { updateDriverSchema } from "@/lib/drivers/validation";
-import { assignDriverVehicle, unassignDriverVehicle } from "@/lib/assignments/service";
+import {
+  assignDriverVehicle,
+  unassignDriverVehicle,
+} from "@/lib/assignments/service";
 import { getDriverById } from "@/lib/drivers/queries";
+import { normalizePlate } from "@/lib/domain/identity";
+import { writeAudit } from "@/lib/domain/audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,7 +28,12 @@ function errorStatus(message: string): number {
   if (message === "UNAUTHENTICATED") return 401;
   if (message === "FORBIDDEN") return 403;
   if (message.includes("not found")) return 404;
-  if (message.includes("already") || message.includes("suspended") || message.includes("PDP"))
+  if (
+    message.includes("already") ||
+    message.includes("suspended") ||
+    message.includes("PDP") ||
+    message.includes("cannot")
+  )
     return 409;
   return 500;
 }
@@ -43,14 +49,13 @@ export async function GET(_: NextRequest, { params }: Params) {
     return NextResponse.json({ driver });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/drivers/[id]] GET error:", err);
     return NextResponse.json({ error: message }, { status: errorStatus(message) });
   }
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
-    await requireServerRole([...ALLOWED_ROLES]);
+    const session = await requireServerRole([...ALLOWED_ROLES]);
     const { id } = await params;
 
     const body = await request.json();
@@ -67,8 +72,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
 
     const admin = createSupabaseAdminClient();
-    const patch: Record<string, unknown> = {};
     const input = parsed.data;
+
+    // Never write assignment columns here — only via assignment service
+    const patch: Record<string, unknown> = {};
 
     if (input.fullName !== undefined) patch.full_name = input.fullName;
     if (input.nationalId !== undefined)
@@ -98,19 +105,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       patch.emergency_contact_phone = input.emergencyContactPhone || null;
     if (input.emergencyContactRelation !== undefined)
       patch.emergency_contact_relation = input.emergencyContactRelation || null;
-    if (input.assignedVehicleReg !== undefined)
-      patch.assigned_vehicle_reg = input.assignedVehicleReg || null;
     if (input.status !== undefined) patch.status = input.status;
     if (input.profilePictureUrl !== undefined)
       patch.profile_picture_url = input.profilePictureUrl || null;
 
-    if (Object.keys(patch).length === 0) {
-      return NextResponse.json({ error: "No fields to update" }, { status: 400 });
-    }
-
     const { data: current } = await admin
       .from("drivers")
-      .select("assigned_vehicle_reg")
+      .select("assigned_vehicle_reg, status, full_name")
       .eq("id", id)
       .maybeSingle();
 
@@ -118,82 +119,137 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Driver not found" }, { status: 404 });
     }
 
-    const oldVehicle = current.assigned_vehicle_reg as string | null;
-    const newVehicle = patch.assigned_vehicle_reg as string | null | undefined;
+    const oldVehicle = (current.assigned_vehicle_reg as string | null)
+      ? normalizePlate(current.assigned_vehicle_reg as string)
+      : null;
+    const newVehicleRaw =
+      input.assignedVehicleReg !== undefined
+        ? input.assignedVehicleReg
+          ? normalizePlate(input.assignedVehicleReg)
+          : null
+        : undefined;
     const suspending = input.status === "Suspended";
 
-    // Suspended driver cannot keep a vehicle
+    let unlinkedVehicle: string | null = null;
+
+    // Suspend → unlink via service only
     if (suspending && oldVehicle) {
       await unassignDriverVehicle(admin, {
         driverId: id,
         vehicleReg: oldVehicle,
       });
-      patch.assigned_vehicle_reg = null;
+      unlinkedVehicle = oldVehicle;
+      await writeAudit(admin, {
+        action: "assignment.unlink",
+        actorId: session.id,
+        actorRole: session.role,
+        actorName: session.fullName,
+        entityType: "driver",
+        entityId: id,
+        summary: `Unlinked ${oldVehicle} on suspend of ${current.full_name}`,
+      });
     }
 
-    if (newVehicle && newVehicle !== oldVehicle && !suspending) {
-      const { data: vehicle } = await admin
-        .from("vehicles")
-        .select("registration_number, driver_id")
-        .eq("registration_number", newVehicle)
-        .maybeSingle();
+    if (Object.keys(patch).length > 0) {
+      const { error: updateErr } = await admin
+        .from("drivers")
+        .update(patch)
+        .eq("id", id);
 
-      if (!vehicle) {
+      if (updateErr) {
         return NextResponse.json(
-          { error: `Vehicle ${newVehicle} not found.` },
-          { status: 404 }
+          { error: `Update failed: ${updateErr.message}` },
+          { status: 500 }
         );
       }
     }
 
-    const { data: updated, error: updateErr } = await admin
-      .from("drivers")
-      .update(patch)
-      .eq("id", id)
-      .select()
-      .maybeSingle();
-
-    if (updateErr) {
-      return NextResponse.json(
-        { error: `Update failed: ${updateErr.message}` },
-        { status: 500 }
-      );
-    }
-    if (!updated) {
-      return NextResponse.json({ error: "Driver not found" }, { status: 404 });
-    }
-
-    if (!suspending && newVehicle !== undefined && newVehicle !== oldVehicle) {
-      if (!newVehicle && oldVehicle) {
-        await unassignDriverVehicle(admin, { driverId: id, vehicleReg: oldVehicle });
-      } else if (newVehicle) {
+    // Assignment changes only via service
+    if (!suspending && newVehicleRaw !== undefined && newVehicleRaw !== oldVehicle) {
+      if (!newVehicleRaw && oldVehicle) {
+        await unassignDriverVehicle(admin, {
+          driverId: id,
+          vehicleReg: oldVehicle,
+        });
+        unlinkedVehicle = oldVehicle;
+        await writeAudit(admin, {
+          action: "assignment.unlink",
+          actorId: session.id,
+          actorRole: session.role,
+          actorName: session.fullName,
+          entityType: "driver",
+          entityId: id,
+          summary: `Unlinked ${oldVehicle}`,
+        });
+      } else if (newVehicleRaw) {
         await assignDriverVehicle(admin, {
           driverId: id,
-          vehicleReg: newVehicle,
-          force: true,
+          vehicleReg: newVehicleRaw,
+          force: false,
+        });
+        await writeAudit(admin, {
+          action: "assignment.link",
+          actorId: session.id,
+          actorRole: session.role,
+          actorName: session.fullName,
+          entityType: "driver",
+          entityId: id,
+          summary: `Linked driver to ${newVehicleRaw}`,
+          after: { vehicleReg: newVehicleRaw },
         });
       }
     }
 
-    if (input.fullName !== undefined && updated.auth_user_id) {
-      try {
-        const { data: existing } = await admin.auth.admin.getUserById(
-          updated.auth_user_id
-        );
-        await admin.auth.admin.updateUserById(updated.auth_user_id, {
-          user_metadata: {
-            ...(existing?.user?.user_metadata ?? {}),
-            full_name: input.fullName,
-          },
-        });
-      } catch (metaErr) {
-        console.warn("[api/drivers/[id]] metadata sync failed:", metaErr);
+    if (suspending) {
+      await writeAudit(admin, {
+        action: "driver.suspend",
+        actorId: session.id,
+        actorRole: session.role,
+        actorName: session.fullName,
+        entityType: "driver",
+        entityId: id,
+        summary: `Suspended ${current.full_name}`,
+        before: { status: current.status, vehicle: oldVehicle },
+      });
+    } else if (Object.keys(patch).length > 0) {
+      await writeAudit(admin, {
+        action: "driver.update",
+        actorId: session.id,
+        actorRole: session.role,
+        actorName: session.fullName,
+        entityType: "driver",
+        entityId: id,
+        summary: `Updated driver profile`,
+        after: patch,
+      });
+    }
+
+    if (input.fullName !== undefined) {
+      const { data: updated } = await admin
+        .from("drivers")
+        .select("auth_user_id")
+        .eq("id", id)
+        .maybeSingle();
+      if (updated?.auth_user_id) {
+        try {
+          const { data: existing } = await admin.auth.admin.getUserById(
+            updated.auth_user_id as string
+          );
+          await admin.auth.admin.updateUserById(updated.auth_user_id as string, {
+            user_metadata: {
+              ...(existing?.user?.user_metadata ?? {}),
+              full_name: input.fullName,
+            },
+          });
+        } catch {
+          /* non-fatal */
+        }
       }
     }
 
     return NextResponse.json({
       success: true,
-      unlinkedVehicle: suspending ? oldVehicle : null,
+      unlinkedVehicle,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -204,14 +260,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
 export async function DELETE(_: NextRequest, { params }: Params) {
   try {
-    await requireServerRole([...ALLOWED_ROLES]);
+    const session = await requireServerRole([...ALLOWED_ROLES]);
     const { id } = await params;
 
     const admin = createSupabaseAdminClient();
 
     const { data: driverRow } = await admin
       .from("drivers")
-      .select("assigned_vehicle_reg")
+      .select("assigned_vehicle_reg, full_name")
       .eq("id", id)
       .maybeSingle();
 
@@ -232,18 +288,28 @@ export async function DELETE(_: NextRequest, { params }: Params) {
 
     if (error) {
       return NextResponse.json(
-        { error: `Deactivate failed: ${error.message}` },
+        { error: `Suspend failed: ${error.message}` },
         { status: 500 }
       );
     }
 
+    await writeAudit(admin, {
+      action: "driver.suspend",
+      actorId: session.id,
+      actorRole: session.role,
+      actorName: session.fullName,
+      entityType: "driver",
+      entityId: id,
+      summary: `Suspended (archive) ${driverRow?.full_name ?? id}`,
+    });
+
     return NextResponse.json({
       success: true,
+      action: "suspended",
       unlinkedVehicle: (driverRow?.assigned_vehicle_reg as string) ?? null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/drivers/[id]] DELETE error:", err);
     return NextResponse.json({ error: message }, { status: errorStatus(message) });
   }
 }

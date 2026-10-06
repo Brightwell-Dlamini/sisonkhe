@@ -1,8 +1,6 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Marshal dispatch transitions — state machine + compliance gates.
  */
 
 import "server-only";
@@ -15,8 +13,10 @@ import {
   type RankAction,
 } from "@/lib/domain/eligibility";
 import { normalizePlate } from "@/lib/domain/identity";
+import { getRankFeeConfig } from "@/lib/domain/rankFee";
+import { nextMarshalTxId } from "@/lib/domain/serials";
+import { writeAudit } from "@/lib/domain/audit";
 
-const RANK_FEE_SZL = 25;
 const DOUBLE_CLICK_MS = 3_000;
 
 export type DispatchAction =
@@ -33,6 +33,7 @@ export interface DispatchResult {
   rankFeeWritten?: boolean;
   newStatus?: string;
   warning?: string;
+  revenueEstimated?: boolean;
 }
 
 type AuthVehicle = {
@@ -59,7 +60,7 @@ async function authorizeVehicle(
   const admin = createSupabaseAdminClient();
   const plate = normalizePlate(registrationNumber);
 
-  let { data: vehicle, error } = await admin
+  let { data: vehicle } = await admin
     .from("vehicles")
     .select(
       "registration_number, route_assignment_id, status, current_queue_position, seating_capacity, driver_id, version, permit_status, permit_expiry_date, cof_expiry_date"
@@ -67,7 +68,7 @@ async function authorizeVehicle(
     .eq("registration_number", plate)
     .maybeSingle();
 
-  if ((error || !vehicle) && plate) {
+  if (!vehicle && plate) {
     const { data: alt } = await admin
       .from("vehicles")
       .select(
@@ -178,11 +179,13 @@ async function writeRankFee(
   triggerSource: string
 ): Promise<{ written: boolean; error?: string }> {
   const admin = createSupabaseAdminClient();
+  const feeCfg = await getRankFeeConfig(admin);
   const nowIso = new Date().toISOString();
   const date = nowIso.slice(0, 10);
   const month = nowIso.slice(0, 7);
   const sinceIso = new Date(Date.now() - DOUBLE_CLICK_MS).toISOString();
 
+  // Idempotency: same marshal + vehicle + second window
   const { data: recent } = await admin
     .from("marshal_transactions")
     .select("id")
@@ -192,8 +195,7 @@ async function writeRankFee(
     .limit(1);
   if (recent && recent.length > 0) return { written: false };
 
-  const safeReg = registrationNumber.replace(/\s+/g, "");
-  const txId = `mtx_${Date.now()}_${safeReg}`;
+  const txId = await nextMarshalTxId(admin, registrationNumber);
   const { error: txErr } = await admin.from("marshal_transactions").insert({
     id: txId,
     marshal_id: context.marshalId,
@@ -202,21 +204,21 @@ async function writeRankFee(
     month,
     vehicle_reg: registrationNumber,
     trigger_source: triggerSource,
-    amount_szl: RANK_FEE_SZL,
+    amount_szl: feeCfg.rankFee,
   });
   if (txErr) return { written: false, error: txErr.message };
 
   await admin.from("rank_fee_payments").insert({
-    id: `rfp_${Date.now()}_${safeReg}`,
+    id: `rfp_${txId}`,
     timestamp: nowIso,
     vehicle_reg: registrationNumber,
-    amount_szl: RANK_FEE_SZL,
+    amount_szl: feeCfg.rankFee,
     payment_method: "Cash",
     transaction_ref: txId,
     status: "Success",
-    allocation_operational: 20,
-    allocation_nrtc: 3.5,
-    allocation_maintenance: 1.5,
+    allocation_operational: feeCfg.splitOperational,
+    allocation_nrtc: feeCfg.splitNRTC,
+    allocation_maintenance: feeCfg.splitMaintenance,
   });
   return { written: true };
 }
@@ -228,7 +230,8 @@ async function recordTrip(
     seatingCapacity: number;
     driverId: string | null;
   },
-  nowIso: string
+  nowIso: string,
+  opts: { passengerCount: number | null; estimated: boolean }
 ): Promise<void> {
   if (!vehicle.routeId) return;
   const admin = createSupabaseAdminClient();
@@ -239,7 +242,11 @@ async function recordTrip(
     .eq("id", vehicle.routeId)
     .maybeSingle();
   const fare = Number(route?.base_fare_e ?? 0);
-  const passengers = Math.max(1, vehicle.seatingCapacity);
+  // Honest: if no headcount, use capacity but flag estimated
+  const passengers =
+    opts.passengerCount != null && opts.passengerCount > 0
+      ? opts.passengerCount
+      : Math.max(1, vehicle.seatingCapacity);
   await admin.from("trips").insert({
     id: `trip_${Date.now()}_${vehicle.reg.replace(/\s+/g, "")}`,
     date: now.toISOString().slice(0, 10),
@@ -250,7 +257,7 @@ async function recordTrip(
     driver_id: vehicle.driverId || "unassigned",
     passenger_count: passengers,
     trip_duration_minutes: null,
-    delay_reason: null,
+    delay_reason: opts.estimated ? "passenger_count_estimated" : null,
     status: "Completed",
     revenue_szl: fare * passengers,
   });
@@ -282,11 +289,15 @@ export async function applyDispatchAction(
   context: MarshalContext,
   registrationNumber: string,
   action: DispatchAction,
-  reason?: string
+  reason?: string,
+  passengerCount?: number | null
 ): Promise<DispatchResult> {
   const vehicle = await authorizeVehicle(context, registrationNumber);
   if (!vehicle) {
-    return { success: false, error: "Vehicle not found or not under your authority." };
+    return {
+      success: false,
+      error: "Vehicle not found or not under your authority.",
+    };
   }
 
   const transition = canRankTransition(vehicle.status, action as RankAction);
@@ -311,10 +322,23 @@ export async function applyDispatchAction(
       const payload = { status: "Loading", current_queue_position: newPosition };
       const { error } = await admin
         .from("vehicles")
-        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
-        .eq("registration_number", reg);
+        .update({
+          ...payload,
+          version: vehicle.version + 1,
+          updated_at: nowIso,
+        })
+        .eq("registration_number", reg)
+        .eq("version", vehicle.version);
       if (error) return { success: false, error: error.message };
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
+      await writeAudit(admin, {
+        action: "dispatch.load",
+        actorId: context.marshalId,
+        actorRole: "marshal",
+        entityType: "vehicle",
+        entityId: reg,
+        summary: `Load ${reg}`,
+      });
       return { success: true, newStatus: "Loading", warning: gate.warning };
     }
 
@@ -323,19 +347,33 @@ export async function applyDispatchAction(
       const gate = canDispatchDepart(gatePayload(vehicle));
       if (!gate.eligible) return { success: false, error: gate.reason };
 
-      const trigger = action === "full_cabin" ? "Full Cabin Button" : "Depart Button";
+      const trigger =
+        action === "full_cabin" ? "Full Cabin Button" : "Depart Button";
       const fee = await writeRankFee(context, reg, trigger);
-      if (fee.error) return { success: false, error: `Could not record rank fee: ${fee.error}` };
+      if (fee.error)
+        return {
+          success: false,
+          error: `Could not record rank fee: ${fee.error}`,
+        };
       if (!fee.written) {
-        return { success: true, newStatus: vehicle.status, rankFeeWritten: false };
+        return {
+          success: true,
+          newStatus: vehicle.status,
+          rankFeeWritten: false,
+        };
       }
 
       const oldPos = vehicle.currentQueuePosition;
       const payload = { status: "Departed", current_queue_position: 0 };
       const { error } = await admin
         .from("vehicles")
-        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
-        .eq("registration_number", reg);
+        .update({
+          ...payload,
+          version: vehicle.version + 1,
+          updated_at: nowIso,
+        })
+        .eq("registration_number", reg)
+        .eq("version", vehicle.version);
       if (error) return { success: false, error: error.message };
 
       if (oldPos > 0 && vehicle.routeId) {
@@ -348,13 +386,29 @@ export async function applyDispatchAction(
           /* best-effort */
         }
       }
-      await recordTrip({ ...vehicle, reg }, nowIso);
+      const estimated =
+        passengerCount == null || !(passengerCount > 0);
+      await recordTrip(
+        { ...vehicle, reg },
+        nowIso,
+        { passengerCount: passengerCount ?? null, estimated }
+      );
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
+      await writeAudit(admin, {
+        action: "dispatch.depart",
+        actorId: context.marshalId,
+        actorRole: "marshal",
+        entityType: "vehicle",
+        entityId: reg,
+        summary: `Depart ${reg}`,
+        meta: { estimatedPassengers: estimated },
+      });
       return {
         success: true,
         newStatus: "Departed",
         rankFeeWritten: true,
         warning: gate.warning,
+        revenueEstimated: estimated,
       };
     }
 
@@ -362,19 +416,22 @@ export async function applyDispatchAction(
       const payload = { status: "Delayed" };
       const { error } = await admin
         .from("vehicles")
-        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
+        .update({
+          ...payload,
+          version: vehicle.version + 1,
+          updated_at: nowIso,
+        })
         .eq("registration_number", reg);
       if (error) return { success: false, error: error.message };
-      if (reason) {
-        await admin.from("notifications").insert({
-          id: `notif_${Date.now()}`,
-          timestamp: nowIso,
-          type: "Push",
-          message: `Delay reported for ${reg}: ${reason}`,
-          status: "Sent",
-        });
-      }
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
+      await writeAudit(admin, {
+        action: "dispatch.delay",
+        actorId: context.marshalId,
+        actorRole: "marshal",
+        entityType: "vehicle",
+        entityId: reg,
+        summary: `Delay ${reg}${reason ? `: ${reason}` : ""}`,
+      });
       return { success: true, newStatus: "Delayed" };
     }
 
@@ -382,19 +439,22 @@ export async function applyDispatchAction(
       const payload = { status: "Breakdown", current_queue_position: 0 };
       const { error } = await admin
         .from("vehicles")
-        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
+        .update({
+          ...payload,
+          version: vehicle.version + 1,
+          updated_at: nowIso,
+        })
         .eq("registration_number", reg);
       if (error) return { success: false, error: error.message };
-      if (reason) {
-        await admin.from("notifications").insert({
-          id: `notif_${Date.now()}`,
-          timestamp: nowIso,
-          type: "Push",
-          message: `Breakdown reported for ${reg}: ${reason}`,
-          status: "Sent",
-        });
-      }
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
+      await writeAudit(admin, {
+        action: "dispatch.breakdown",
+        actorId: context.marshalId,
+        actorRole: "marshal",
+        entityType: "vehicle",
+        entityId: reg,
+        summary: `Breakdown ${reg}`,
+      });
       return { success: true, newStatus: "Breakdown" };
     }
 
@@ -402,10 +462,22 @@ export async function applyDispatchAction(
       const payload = { status: "Waiting", current_queue_position: 0 };
       const { error } = await admin
         .from("vehicles")
-        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
+        .update({
+          ...payload,
+          version: vehicle.version + 1,
+          updated_at: nowIso,
+        })
         .eq("registration_number", reg);
       if (error) return { success: false, error: error.message };
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
+      await writeAudit(admin, {
+        action: "dispatch.reset",
+        actorId: context.marshalId,
+        actorRole: "marshal",
+        entityType: "vehicle",
+        entityId: reg,
+        summary: `Reset ${reg} to Waiting`,
+      });
       return { success: true, newStatus: "Waiting" };
     }
 
