@@ -4,6 +4,9 @@
  *
  * Marshal dispatch. The ONLY writer of `vehicles.status` for the rank.
  * Uses the canonical VehicleStatus vocabulary from lib/domain/vehicleStatus.
+ *
+ * Phase 2: rank fee writing now goes through the atomic record_rank_fee()
+ * RPC. Fee + settlement are written in one transaction, or neither is.
  */
 
 import "server-only";
@@ -17,10 +20,7 @@ import {
 import { canDispatchLoad, canDispatchDepart } from "@/lib/domain/eligibility";
 import { normalizePlate } from "@/lib/domain/identity";
 import { getRankFeeConfig } from "@/lib/domain/rankFee";
-import { nextMarshalTxId } from "@/lib/domain/serials";
 import { writeAudit } from "@/lib/domain/audit";
-
-const IDEMPOTENCY_MS = 60_000;
 
 export type DispatchAction = MarshalAction;
 
@@ -182,6 +182,15 @@ async function countQueuedOnRoute(
   return count ?? 0;
 }
 
+/**
+ * Write a rank fee. Atomic — fee and settlement succeed together, or
+ * neither is written.
+ *
+ * Delegates to record_rank_fee() in Postgres, which:
+ *   - checks the 60-second idempotency window
+ *   - generates the transaction id from the serial sequence
+ *   - inserts marshal_transactions + rank_fee_payments in one transaction
+ */
 async function writeRankFee(
   context: MarshalContext,
   registrationNumber: string,
@@ -189,44 +198,26 @@ async function writeRankFee(
 ): Promise<{ written: boolean; error?: string }> {
   const admin = createSupabaseAdminClient();
   const feeCfg = await getRankFeeConfig(admin);
-  const nowIso = new Date().toISOString();
-  const date = nowIso.slice(0, 10);
-  const month = nowIso.slice(0, 7);
-  const sinceIso = new Date(Date.now() - IDEMPOTENCY_MS).toISOString();
 
-  const { data: recent } = await admin
-    .from("marshal_transactions")
-    .select("id")
-    .eq("vehicle_reg", registrationNumber)
-    .gte("timestamp", sinceIso)
-    .limit(1);
-  if (recent && recent.length > 0) return { written: false };
-
-  const txId = await nextMarshalTxId(admin, registrationNumber);
-  const { error: txErr } = await admin.from("marshal_transactions").insert({
-    id: txId,
-    marshal_id: context.marshalId,
-    timestamp: nowIso,
-    date,
-    month,
-    vehicle_reg: registrationNumber,
-    trigger_source: triggerSource,
-    amount_szl: feeCfg.rankFee,
+  const { data, error } = await admin.rpc("record_rank_fee", {
+    p_marshal_id: context.marshalId,
+    p_vehicle_reg: registrationNumber,
+    p_trigger_source: triggerSource,
+    p_amount_szl: feeCfg.rankFee,
+    p_allocation_operational: feeCfg.splitOperational,
+    p_allocation_nrtc: feeCfg.splitNRTC,
+    p_allocation_maintenance: feeCfg.splitMaintenance,
   });
-  if (txErr) return { written: false, error: txErr.message };
 
-  await admin.from("rank_fee_payments").insert({
-    id: `rfp_${txId}`,
-    timestamp: nowIso,
-    vehicle_reg: registrationNumber,
-    amount_szl: feeCfg.rankFee,
-    payment_method: "Rank Fee (Operational)",
-    transaction_ref: txId,
-    status: "Recorded",
-    allocation_operational: feeCfg.splitOperational,
-    allocation_nrtc: feeCfg.splitNRTC,
-    allocation_maintenance: feeCfg.splitMaintenance,
-  });
+  if (error) {
+    return { written: false, error: error.message };
+  }
+
+  const result = data as { written?: boolean; reason?: string; tx_id?: string } | null;
+  if (!result || result.written !== true) {
+    return { written: false };
+  }
+
   return { written: true };
 }
 

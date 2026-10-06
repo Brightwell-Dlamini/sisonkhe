@@ -3,9 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Phase 0 — Types for the invariant observation layer.
- *
- * These describe what run_all_invariant_checks() returns and what a
- * violation row looks like when read back.
+ * Phase 2 — Added labels for the extended money-chain invariants.
  */
 
 export interface InvariantRunSummary {
@@ -15,11 +13,15 @@ export interface InvariantRunSummary {
   identity: number;
   operational: number;
   total: number;
+  newly_inserted?: number;
+  auto_resolved?: number;
+  touched?: number;
 }
 
 export interface InvariantViolation {
   id: string;
   detected_at: string;
+  last_seen_at: string | null;
   invariant: string;
   entity_type: string | null;
   entity_id: string | null;
@@ -31,7 +33,6 @@ export interface InvariantViolation {
 export interface InvariantReport {
   summary: InvariantRunSummary | null;
   violations: InvariantViolation[];
-  /** Grouped by invariant, most-recent run only. */
   grouped: Array<{
     invariant: string;
     count: number;
@@ -42,26 +43,41 @@ export interface InvariantReport {
 /** Human-readable label for an invariant code. */
 export function invariantLabel(code: string): string {
   const map: Record<string, string> = {
+    // Money chain
     "money.trip_without_fee":
       "Trip recorded but no rank fee collected",
     "money.fee_without_trip":
       "Rank fee collected but no matching trip",
+    "money.fee_without_settlement":
+      "Rank fee recorded but no settlement row",
+    "money.settlement_without_fee":
+      "Settlement row with no matching rank fee",
     "money.intent_credit_count_mismatch":
       "Payment intent with wrong number of credits",
+    "money.reversal_double":
+      "A reversal row that is itself reversed",
+    "money.trip_unassigned_driver":
+      "Trip recorded with no driver",
 
-    "identity.active_marshal_without_auth":
-      "Active marshal has no login",
-    "identity.driver_without_auth":
-      "Driver has no login",
+    // Identity chain
+    "identity.claimed_marshal_without_auth":
+      "Marshal claimed but auth link missing",
+    "identity.claimed_driver_without_auth":
+      "Driver claimed but auth link missing",
+    "identity.claimed_operator_without_auth":
+      "Operator claimed but auth link missing",
     "identity.staff_without_auth":
       "Staff member has no login",
-    "identity.operator_without_auth":
-      "Operator has no login",
     "identity.auth_user_multi_role":
       "Login is claimed by more than one role",
     "identity.auth_user_orphan":
       "Login is claimed by no role",
+    "identity.auth_user_app_metadata_missing":
+      "Login is missing app_metadata.role",
+    "identity.auth_user_metadata_role_mismatch":
+      "Login's app_metadata.role disagrees with its role table",
 
+    // Operational integrity
     "ops.queue_position_collision":
       "Two vehicles share a queue position on the same route",
     "ops.multiple_active_marshals_on_route":
@@ -70,8 +86,6 @@ export function invariantLabel(code: string): string {
       "Driver and vehicle disagree about who is driving",
     "ops.vehicle_without_operator":
       "Vehicle has no operator",
-    "ops.trip_unassigned_driver":
-      "Trip was recorded with no driver",
   };
   return map[code] ?? code;
 }
