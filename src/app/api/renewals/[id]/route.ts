@@ -1,9 +1,6 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * GET   /api/renewals/[id]  — fetch one
- * PATCH /api/renewals/[id]  — approve or reject (staff only)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -24,7 +21,7 @@ interface Params {
 export async function GET(_: NextRequest, { params }: Params) {
   try {
     const session = await getServerSession();
-    if (!session || !VIEW_ROLES.includes(session.role as any)) {
+    if (!session || !VIEW_ROLES.includes(session.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -37,7 +34,6 @@ export async function GET(_: NextRequest, { params }: Params) {
     return NextResponse.json({ renewal });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/renewals/[id]] GET error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -80,17 +76,22 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         licensingOffice: parsed.data.licensingOffice || undefined,
         renewalNotes: parsed.data.renewalNotes || undefined,
       },
-      { fullName: session.fullName }
+      { fullName: session.fullName, authUserId: session.authUserId }
     );
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      note:
+        parsed.data.decision === "Approved"
+          ? "Approved. Print A4 + QR, then POST /api/print/permit/{reg} to unlock rank load."
+          : undefined,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/renewals/[id]] PATCH error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
