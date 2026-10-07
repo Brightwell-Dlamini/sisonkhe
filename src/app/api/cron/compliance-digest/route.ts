@@ -2,12 +2,12 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Daily compliance digest cron.
- * Authorization: Bearer $CRON_SECRET
+ * Daily compliance digest. Authorization: Bearer $CRON_SECRET
  */
 
-import { NextResponse } from "next/server";
 import { runComplianceDigest } from "@/lib/compliance/digest";
+import { AppError } from "@/lib/api/errors";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,22 +30,12 @@ function authorize(request: Request): boolean {
   return !!provided && timingSafeEqual(provided, expected);
 }
 
-export async function GET(request: Request) {
+export const GET = withApiHandler(async (request: Request) => {
   if (!process.env.CRON_SECRET) {
-    return NextResponse.json(
-      { error: "CRON_SECRET is not configured" },
-      { status: 500 }
-    );
+    throw AppError.internal("CRON_SECRET is not configured");
   }
-  if (!authorize(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!authorize(request)) throw AppError.unauthenticated();
 
-  try {
-    const summary = await runComplianceDigest();
-    return NextResponse.json({ ok: true, summary });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
-  }
-}
+  const summary = await runComplianceDigest();
+  return ok({ summary });
+});

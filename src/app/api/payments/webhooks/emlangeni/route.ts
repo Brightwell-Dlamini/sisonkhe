@@ -2,23 +2,22 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * e-Mlangeni webhook receiver.
+ * e-Mlangeni webhook. Always 200.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { applyProviderStatus } from "@/lib/payments/intent";
 import { emlangeniProvider } from "@/lib/payments/providers/emlangeni";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function POST(request: NextRequest) {
+export const POST = withApiHandler(async (request: NextRequest) => {
   try {
     const body = await request.json();
     const parsed = emlangeniProvider.parseWebhook?.(body);
-    if (!parsed) {
-      return NextResponse.json({ ok: true, ignored: true });
-    }
+    if (!parsed) return ok({ ignored: true });
 
     await applyProviderStatus(
       parsed.providerReference,
@@ -27,13 +26,11 @@ export async function POST(request: NextRequest) {
       parsed.rawPayload
     );
 
-    return NextResponse.json({ ok: true });
+    return ok({ received: true });
   } catch (err) {
     console.error("[webhook/emlangeni] error:", err);
-    return NextResponse.json({ ok: true });
+    return ok({ received: true });
   }
-}
+});
 
-export async function GET() {
-  return NextResponse.json({ status: "ok" });
-}
+export const GET = withApiHandler(async () => ok({ status: "ok" }));

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import {
   createSupabaseAdminClient,
   createSupabaseServerClient,
@@ -11,6 +11,8 @@ import {
 import { looseAdmin, rpcRow } from "@/lib/supabase/rpc";
 import { resolveUserRole } from "@/lib/auth/roles";
 import { rateLimitAsync } from "@/lib/domain/rateLimit";
+import { AppError } from "@/lib/api/errors";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -33,141 +35,121 @@ type AuthLookup = { auth_user_id?: string; email?: string };
 
 const GENERIC_AUTH_ERROR = "Invalid credentials";
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const identifier = String(body.identifier ?? "").trim();
-    const password = String(body.password ?? "");
+export const POST = withApiHandler(async (request: NextRequest) => {
+  const body = await request.json();
+  const identifier = String(body.identifier ?? "").trim();
+  const password = String(body.password ?? "");
 
-    const ip =
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      request.headers.get("x-real-ip") ||
-      "unknown";
-    const rl = await rateLimitAsync(`signin:${ip}`, 20, 15 * 60_000);
-    if (!rl.ok) {
-      return NextResponse.json(
-        { error: "Too many sign-in attempts. Try again later.", code: "RATE_LIMITED" },
-        {
-          status: 429,
-          headers: { "Retry-After": String(rl.retryAfterSec || 60) },
-        }
-      );
-    }
-
-    if (!identifier || !password) {
-      return NextResponse.json(
-        { error: "Identifier and password are required", code: "VALIDATION" },
-        { status: 400 }
-      );
-    }
-
-    const admin = createSupabaseAdminClient();
-    const rpc = looseAdmin(admin);
-
-    let targetAuthUserId: string | null = null;
-    let targetEmail: string | null = null;
-
-    if (looksLikeEmail(identifier)) {
-      const { data, error } = await rpc.rpc("find_auth_user_by_email", {
-        p_email: identifier.toLowerCase(),
-      });
-      if (error) console.error("[signin] find_by_email error:", error);
-      const row = rpcRow<AuthLookup>(data);
-      if (row?.auth_user_id && row.email) {
-        targetAuthUserId = row.auth_user_id;
-        targetEmail = row.email;
-      }
-    } else if (looksLikeNationalId(identifier)) {
-      const cleanId = identifier.replace(/\s+/g, "");
-      const { data, error } = await rpc.rpc("find_auth_user_by_national_id", {
-        p_national_id: cleanId,
-      });
-      if (error) console.error("[signin] find_by_id error:", error);
-      const row = rpcRow<AuthLookup>(data);
-      if (row?.auth_user_id && row.email) {
-        targetAuthUserId = row.auth_user_id;
-        targetEmail = row.email;
-      }
-    } else if (looksLikePhone(identifier)) {
-      const { data, error } = await rpc.rpc("find_auth_user_by_phone", {
-        p_phone: identifier,
-      });
-      if (error) console.error("[signin] find_by_phone error:", error);
-      const row = rpcRow<AuthLookup>(data);
-      if (row?.auth_user_id && row.email) {
-        targetAuthUserId = row.auth_user_id;
-        targetEmail = row.email;
-      }
-    } else {
-      const { data, error } = await rpc.rpc("find_auth_user_by_username", {
-        p_username: identifier,
-      });
-      if (error) console.error("[signin] find_by_username error:", error);
-      const row = rpcRow<AuthLookup>(data);
-      if (row?.auth_user_id && row.email) {
-        targetAuthUserId = row.auth_user_id;
-        targetEmail = row.email;
-      }
-    }
-
-    if (!targetAuthUserId || !targetEmail) {
-      return NextResponse.json({ error: GENERIC_AUTH_ERROR, code: "UNAUTHENTICATED" }, { status: 401 });
-    }
-
-    const supabase = await createSupabaseServerClient();
-    const { data: signIn, error: signInErr } =
-      await supabase.auth.signInWithPassword({
-        email: targetEmail,
-        password,
-      });
-
-    if (signInErr || !signIn.user) {
-      return NextResponse.json({ error: GENERIC_AUTH_ERROR, code: "UNAUTHENTICATED" }, { status: 401 });
-    }
-
-    const resolved = await resolveUserRole(
-      signIn.user.id,
-      signIn.user.email ?? null,
-      signIn.user.phone ?? null
-    );
-
-    if (!resolved) {
-      await supabase.auth.signOut();
-      return NextResponse.json(
-        {
-          error:
-            "Account has no assigned role. Please contact your administrator.",
-          code: "FORBIDDEN",
-        },
-        { status: 403 }
-      );
-    }
-
-    const mustChangePassword = Boolean(
-      signIn.user.user_metadata?.must_change_password
-    );
-
-    if (resolved.staffId) {
-      try {
-        await looseAdmin(admin)
-          .from("staff")
-          .update({ last_login_at: new Date().toISOString() })
-          .eq("id", resolved.staffId)
-          .select("id");
-      } catch (updateErr) {
-        console.warn("[signin] staff last_login update failed:", updateErr);
-      }
-    }
-
-    return NextResponse.json({
-      user: resolved,
-      mustChangePassword,
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown";
+  const rl = await rateLimitAsync(`signin:${ip}`, 20, 15 * 60_000);
+  if (!rl.ok) {
+    throw new AppError("RATE_LIMITED", "Too many sign-in attempts. Try again later.", {
+      details: { retryAfterSec: rl.retryAfterSec },
     });
-  } catch (err) {
-    console.error("[api/auth/signin] error:", err);
-    return NextResponse.json(
-      { error: "Internal server error", code: "INTERNAL" },
-      { status: 500 }
+  }
+
+  if (!identifier || !password) {
+    throw AppError.validation("Identifier and password are required");
+  }
+
+  const admin = createSupabaseAdminClient();
+  const rpc = looseAdmin(admin);
+
+  let targetAuthUserId: string | null = null;
+  let targetEmail: string | null = null;
+
+  if (looksLikeEmail(identifier)) {
+    const { data, error } = await rpc.rpc("find_auth_user_by_email", {
+      p_email: identifier.toLowerCase(),
+    });
+    if (error) console.error("[signin] find_by_email error:", error);
+    const row = rpcRow<AuthLookup>(data);
+    if (row?.auth_user_id && row.email) {
+      targetAuthUserId = row.auth_user_id;
+      targetEmail = row.email;
+    }
+  } else if (looksLikeNationalId(identifier)) {
+    const cleanId = identifier.replace(/\s+/g, "");
+    const { data, error } = await rpc.rpc("find_auth_user_by_national_id", {
+      p_national_id: cleanId,
+    });
+    if (error) console.error("[signin] find_by_id error:", error);
+    const row = rpcRow<AuthLookup>(data);
+    if (row?.auth_user_id && row.email) {
+      targetAuthUserId = row.auth_user_id;
+      targetEmail = row.email;
+    }
+  } else if (looksLikePhone(identifier)) {
+    const { data, error } = await rpc.rpc("find_auth_user_by_phone", {
+      p_phone: identifier,
+    });
+    if (error) console.error("[signin] find_by_phone error:", error);
+    const row = rpcRow<AuthLookup>(data);
+    if (row?.auth_user_id && row.email) {
+      targetAuthUserId = row.auth_user_id;
+      targetEmail = row.email;
+    }
+  } else {
+    const { data, error } = await rpc.rpc("find_auth_user_by_username", {
+      p_username: identifier,
+    });
+    if (error) console.error("[signin] find_by_username error:", error);
+    const row = rpcRow<AuthLookup>(data);
+    if (row?.auth_user_id && row.email) {
+      targetAuthUserId = row.auth_user_id;
+      targetEmail = row.email;
+    }
+  }
+
+  if (!targetAuthUserId || !targetEmail) {
+    throw AppError.unauthenticated(GENERIC_AUTH_ERROR);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: signIn, error: signInErr } =
+    await supabase.auth.signInWithPassword({
+      email: targetEmail,
+      password,
+    });
+
+  if (signInErr || !signIn.user) {
+    throw AppError.unauthenticated(GENERIC_AUTH_ERROR);
+  }
+
+  const resolved = await resolveUserRole(
+    signIn.user.id,
+    signIn.user.email ?? null,
+    signIn.user.phone ?? null
+  );
+
+  if (!resolved) {
+    await supabase.auth.signOut();
+    throw AppError.forbidden(
+      "Account has no assigned role. Please contact your administrator."
     );
   }
-}
+
+  const mustChangePassword = Boolean(
+    signIn.user.user_metadata?.must_change_password
+  );
+
+  if (resolved.staffId) {
+    try {
+      await looseAdmin(admin)
+        .from("staff")
+        .update({ last_login_at: new Date().toISOString() })
+        .eq("id", resolved.staffId)
+        .select("id");
+    } catch (updateErr) {
+      console.warn("[signin] staff last_login update failed:", updateErr);
+    }
+  }
+
+  return ok({
+    user: resolved,
+    mustChangePassword,
+  });
+});
