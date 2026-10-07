@@ -62,22 +62,23 @@ export async function getMarshalContext(
   };
 }
 
+async function routeIdsForMarshal(context: MarshalContext): Promise<string[]> {
+  const admin = createSupabaseAdminClient();
+  if (context.assignedRouteId) return [context.assignedRouteId];
+
+  // Case-insensitive region match (Hhohho vs HHOHHO vs hhohho)
+  const { data: routes } = await admin
+    .from("routes")
+    .select("id")
+    .ilike("region_code", context.region);
+  return (routes ?? []).map((r) => r.id as string);
+}
+
 export async function listVehiclesForMarshal(
   context: MarshalContext
 ): Promise<MarshalVehicle[]> {
   const admin = createSupabaseAdminClient();
-
-  let routeIds: string[] = [];
-  if (context.assignedRouteId) {
-    routeIds = [context.assignedRouteId];
-  } else {
-    const { data: routes } = await admin
-      .from("routes")
-      .select("id")
-      .eq("region_code", context.region);
-    routeIds = (routes ?? []).map((r) => r.id as string);
-  }
-
+  const routeIds = await routeIdsForMarshal(context);
   if (routeIds.length === 0) return [];
 
   const { data: vehicles, error } = await admin
@@ -91,6 +92,7 @@ export async function listVehiclesForMarshal(
     )
     .in("route_assignment_id", routeIds)
     .neq("status", "Offline")
+    .neq("status", "Archived")
     .order("current_queue_position", { ascending: true })
     .order("registration_number", { ascending: true });
 
@@ -101,7 +103,6 @@ export async function listVehiclesForMarshal(
 
   let vehicleList = vehicles ?? [];
 
-  // Soft auto-reset: departed > 6h → Waiting so queue is not stuck forever
   try {
     const regs = vehicleList.map((v) => v.registration_number as string);
     const n = await autoResetStaleDeparted(admin, regs);
@@ -117,6 +118,7 @@ export async function listVehiclesForMarshal(
         )
         .in("route_assignment_id", routeIds)
         .neq("status", "Offline")
+        .neq("status", "Archived")
         .order("current_queue_position", { ascending: true })
         .order("registration_number", { ascending: true });
       vehicleList = refreshed ?? vehicleList;
@@ -210,16 +212,7 @@ export async function getMarshalSummary(
   );
   const dispatchedToday = txToday?.length ?? 0;
 
-  let routeIds: string[] = [];
-  if (context.assignedRouteId) {
-    routeIds = [context.assignedRouteId];
-  } else {
-    const { data: routes } = await admin
-      .from("routes")
-      .select("id")
-      .eq("region_code", context.region);
-    routeIds = (routes ?? []).map((r) => r.id as string);
-  }
+  const routeIds = await routeIdsForMarshal(context);
 
   if (routeIds.length === 0) {
     return {
@@ -236,7 +229,8 @@ export async function getMarshalSummary(
     .from("vehicles")
     .select("status, current_queue_position")
     .in("route_assignment_id", routeIds)
-    .neq("status", "Offline");
+    .neq("status", "Offline")
+    .neq("status", "Archived");
 
   const vehicleList = vehicles ?? [];
   const activeQueueLength = vehicleList.filter(

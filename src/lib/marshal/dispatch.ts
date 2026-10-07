@@ -2,11 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Marshal dispatch. The ONLY writer of `vehicles.status` for the rank.
- * Uses the canonical VehicleStatus vocabulary from lib/domain/vehicleStatus.
- *
- * Phase 2: rank fee writing now goes through the atomic record_rank_fee()
- * RPC. Fee + settlement are written in one transaction, or neither is.
+ * Marshal dispatch. The ONLY writer of rank operational statuses.
  */
 
 import "server-only";
@@ -51,6 +47,10 @@ type AuthVehicle = {
   driverPdpExpiry: string | null;
   printPending: boolean;
 };
+
+function regionMatch(a: string | null | undefined, b: string | null | undefined) {
+  return (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
+}
 
 async function authorizeVehicle(
   context: MarshalContext,
@@ -97,7 +97,8 @@ async function authorizeVehicle(
         .select("region_code")
         .eq("id", routeId)
         .maybeSingle();
-      if (!route || route.region_code !== context.region) return null;
+      if (!route || !regionMatch(route.region_code as string, context.region))
+        return null;
     }
   }
 
@@ -122,13 +123,26 @@ async function authorizeVehicle(
   try {
     const { data: pendingPrint } = await admin
       .from("permit_renewal_requests")
-      .select("id")
+      .select("id, printed_at")
       .eq("vehicle_reg", vehicle.registration_number as string)
       .eq("status", "Approved")
-      .limit(1);
-    printPending = !!(pendingPrint && pendingPrint.length > 0);
+      .limit(5);
+    printPending = !!(pendingPrint ?? []).some(
+      (r) => !(r as { printed_at?: string | null }).printed_at
+    );
   } catch {
-    printPending = false;
+    // Column may not exist — fall back to any Approved row
+    try {
+      const { data: pendingPrint } = await admin
+        .from("permit_renewal_requests")
+        .select("id")
+        .eq("vehicle_reg", vehicle.registration_number as string)
+        .eq("status", "Approved")
+        .limit(1);
+      printPending = !!(pendingPrint && pendingPrint.length > 0);
+    } catch {
+      printPending = false;
+    }
   }
 
   return {
@@ -182,15 +196,6 @@ async function countQueuedOnRoute(
   return count ?? 0;
 }
 
-/**
- * Write a rank fee. Atomic — fee and settlement succeed together, or
- * neither is written.
- *
- * Delegates to record_rank_fee() in Postgres, which:
- *   - checks the 60-second idempotency window
- *   - generates the transaction id from the serial sequence
- *   - inserts marshal_transactions + rank_fee_payments in one transaction
- */
 async function writeRankFee(
   context: MarshalContext,
   registrationNumber: string,
@@ -213,7 +218,11 @@ async function writeRankFee(
     return { written: false, error: error.message };
   }
 
-  const result = data as { written?: boolean; reason?: string; tx_id?: string } | null;
+  const result = data as {
+    written?: boolean;
+    reason?: string;
+    tx_id?: string;
+  } | null;
   if (!result || result.written !== true) {
     return { written: false };
   }
@@ -246,6 +255,7 @@ async function recordTrip(
     : Math.max(1, vehicle.seatingCapacity);
   const revenue = hasCount ? fare * passengers : null;
 
+  // Never use sentinel "unassigned" — null is honest
   await admin.from("trips").insert({
     id: `trip_${Date.now()}_${vehicle.reg.replace(/\s+/g, "")}`,
     date: now.toISOString().slice(0, 10),
@@ -253,7 +263,7 @@ async function recordTrip(
     arrival_time: null,
     route_id: vehicle.routeId,
     vehicle_reg: vehicle.reg,
-    driver_id: vehicle.driverId || "unassigned",
+    driver_id: vehicle.driverId || null,
     passenger_count: passengers,
     trip_duration_minutes: null,
     delay_reason: opts.estimated ? "passenger_count_estimated" : null,
@@ -284,7 +294,6 @@ async function logSyncEvent(
   });
 }
 
-/** Mark any pending driver signals for this vehicle as consumed. */
 async function consumeDriverSignals(reg: string): Promise<void> {
   const admin = createSupabaseAdminClient();
   await admin
@@ -292,6 +301,48 @@ async function consumeDriverSignals(reg: string): Promise<void> {
     .update({ status: "consumed", consumed_at: new Date().toISOString() })
     .eq("vehicle_reg", reg)
     .eq("status", "pending");
+}
+
+async function optimisticUpdate(
+  reg: string,
+  version: number,
+  payload: Record<string, unknown>,
+  nowIso: string
+): Promise<{ ok: boolean; error?: string; conflict?: boolean }> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("vehicles")
+    .update({ ...payload, version: version + 1, updated_at: nowIso })
+    .eq("registration_number", reg)
+    .eq("version", version)
+    .select("registration_number")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) {
+    return {
+      ok: false,
+      conflict: true,
+      error: "Vehicle changed under you — refresh and try again.",
+    };
+  }
+  return { ok: true };
+}
+
+async function shiftQueue(
+  routeId: string | null,
+  fromPos: number
+): Promise<void> {
+  if (!routeId || fromPos <= 0) return;
+  const admin = createSupabaseAdminClient();
+  try {
+    await admin.rpc("shift_queue_forward", {
+      p_route_id: routeId,
+      p_from_position: fromPos,
+    });
+  } catch {
+    /* best-effort */
+  }
 }
 
 export async function applyDispatchAction(
@@ -303,7 +354,10 @@ export async function applyDispatchAction(
 ): Promise<DispatchResult> {
   const vehicle = await authorizeVehicle(context, registrationNumber);
   if (!vehicle) {
-    return { success: false, error: "Vehicle not found or not under your authority." };
+    return {
+      success: false,
+      error: "Vehicle not found or not under your authority.",
+    };
   }
 
   const transition = canMarshalTransition(vehicle.status, action);
@@ -323,15 +377,15 @@ export async function applyDispatchAction(
 
       let newPosition = vehicle.currentQueuePosition;
       if (newPosition < 1) {
-        newPosition = (await countQueuedOnRoute(vehicle.routeId ?? "", reg)) + 1;
+        newPosition =
+          (await countQueuedOnRoute(vehicle.routeId ?? "", reg)) + 1;
       }
-      const payload = { status: "Loading", current_queue_position: newPosition };
-      const { error } = await admin
-        .from("vehicles")
-        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
-        .eq("registration_number", reg)
-        .eq("version", vehicle.version);
-      if (error) return { success: false, error: error.message };
+      const payload = {
+        status: "Loading",
+        current_queue_position: newPosition,
+      };
+      const up = await optimisticUpdate(reg, vehicle.version, payload, nowIso);
+      if (!up.ok) return { success: false, error: up.error };
 
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
       await consumeDriverSignals(reg);
@@ -353,36 +407,14 @@ export async function applyDispatchAction(
 
       const oldPos = vehicle.currentQueuePosition;
       const payload = { status: "Departed", current_queue_position: 0 };
-      const { data: updated, error } = await admin
-        .from("vehicles")
-        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
-        .eq("registration_number", reg)
-        .eq("version", vehicle.version)
-        .select("registration_number")
-        .maybeSingle();
-
-      if (error) return { success: false, error: error.message };
-      if (!updated) {
-        return {
-          success: false,
-          error: "Vehicle changed under you — refresh and try again.",
-        };
-      }
+      const up = await optimisticUpdate(reg, vehicle.version, payload, nowIso);
+      if (!up.ok) return { success: false, error: up.error };
 
       const trigger =
         action === "full_cabin" ? "Full Cabin Button" : "Depart Button";
       const fee = await writeRankFee(context, reg, trigger);
 
-      if (oldPos > 0 && vehicle.routeId) {
-        try {
-          await admin.rpc("shift_queue_forward", {
-            p_route_id: vehicle.routeId,
-            p_from_position: oldPos,
-          });
-        } catch {
-          /* best-effort */
-        }
-      }
+      await shiftQueue(vehicle.routeId, oldPos);
 
       const estimated = passengerCount == null || !(passengerCount > 0);
       await recordTrip(
@@ -412,11 +444,8 @@ export async function applyDispatchAction(
 
     case "delay": {
       const payload = { status: "Delayed" as const };
-      const { error } = await admin
-        .from("vehicles")
-        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
-        .eq("registration_number", reg);
-      if (error) return { success: false, error: error.message };
+      const up = await optimisticUpdate(reg, vehicle.version, payload, nowIso);
+      if (!up.ok) return { success: false, error: up.error };
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
       await consumeDriverSignals(reg);
       await writeAudit(admin, {
@@ -431,12 +460,16 @@ export async function applyDispatchAction(
     }
 
     case "breakdown": {
-      const payload = { status: "Breakdown" as const, current_queue_position: 0 };
-      const { error } = await admin
-        .from("vehicles")
-        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
-        .eq("registration_number", reg);
-      if (error) return { success: false, error: error.message };
+      const oldPos = vehicle.currentQueuePosition;
+      const payload = {
+        status: "Breakdown" as const,
+        current_queue_position: 0,
+      };
+      const up = await optimisticUpdate(reg, vehicle.version, payload, nowIso);
+      if (!up.ok) return { success: false, error: up.error };
+
+      await shiftQueue(vehicle.routeId, oldPos);
+
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
       await consumeDriverSignals(reg);
       await writeAudit(admin, {
@@ -451,12 +484,12 @@ export async function applyDispatchAction(
     }
 
     case "reset_to_waiting": {
-      const payload = { status: "Waiting" as const, current_queue_position: 0 };
-      const { error } = await admin
-        .from("vehicles")
-        .update({ ...payload, version: vehicle.version + 1, updated_at: nowIso })
-        .eq("registration_number", reg);
-      if (error) return { success: false, error: error.message };
+      const payload = {
+        status: "Waiting" as const,
+        current_queue_position: 0,
+      };
+      const up = await optimisticUpdate(reg, vehicle.version, payload, nowIso);
+      if (!up.ok) return { success: false, error: up.error };
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
       await consumeDriverSignals(reg);
       await writeAudit(admin, {
