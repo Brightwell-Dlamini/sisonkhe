@@ -4,6 +4,9 @@
  *
  * Payment reconciliation helpers.
  * Surfaces unmatched intents, rank fees without settlement, and stale pending payments.
+ *
+ * Status vocabulary matches PaymentStatus: pending | processing | completed | failed | ...
+ * (Previously scanned for "succeeded" / "success" — those never matched.)
  */
 
 import "server-only";
@@ -51,10 +54,6 @@ function hoursSince(iso: string | null | undefined, now: Date): number | null {
   return (now.getTime() - t) / 3600000;
 }
 
-/**
- * Scan recent payment / rank-fee state for reconciliation gaps.
- * Best-effort: tables that do not exist are skipped.
- */
 export async function runPaymentReconciliation(opts?: {
   lookbackDays?: number;
   stalePendingHours?: number;
@@ -107,7 +106,9 @@ export async function runPaymentReconciliation(opts?: {
   try {
     const { data: intents, error } = await admin
       .from("payment_intents")
-      .select("id, status, amount_szl, provider, created_at, updated_at, vehicle_reg, purpose")
+      .select(
+        "id, status, amount_szl, provider_id, created_at, updated_at, target_entity_id, purpose, failure_reason, provider_payload"
+      )
       .gte("created_at", since)
       .limit(2000);
 
@@ -119,6 +120,10 @@ export async function runPaymentReconciliation(opts?: {
           (intent.updated_at as string) ?? (intent.created_at as string),
           now
         );
+        const payload = (intent.provider_payload as Record<string, unknown>) ?? {};
+        const creditFailed =
+          payload.credit_status === "failed" ||
+          String(intent.failure_reason ?? "").startsWith("CREDIT_FAILED");
 
         if (
           (status === "pending" || status === "processing") &&
@@ -129,8 +134,8 @@ export async function runPaymentReconciliation(opts?: {
             id: `intent-stale-${id}`,
             kind: "intent_pending_stale",
             severity: age >= 24 ? "high" : "medium",
-            title: `Stale payment intent ${id.slice(0, 12)}`,
-            detail: `${intent.provider ?? "provider"} · ${intent.purpose ?? "payment"} · pending ${age.toFixed(1)}h`,
+            title: `Stale payment intent ${id.slice(0, 16)}`,
+            detail: `${intent.provider_id ?? "provider"} · ${intent.purpose ?? "payment"} · pending ${age.toFixed(1)}h`,
             entityType: "payment_intent",
             entityId: id,
             amountSzl: Number(intent.amount_szl) || undefined,
@@ -139,21 +144,20 @@ export async function runPaymentReconciliation(opts?: {
           counts.intent_pending_stale += 1;
         }
 
-        if (status === "succeeded" || status === "success") {
+        // completed intents must have a payment_credits row
+        if (status === "completed" || creditFailed) {
           const { count } = await admin
-            .from("virtual_card_transactions")
+            .from("payment_credits")
             .select("id", { count: "exact", head: true })
-            .eq("direction", "CREDIT")
-            .gte("timestamp", intent.created_at as string)
-            .eq("amount_szl", intent.amount_szl as number);
+            .eq("intent_id", id);
 
           if ((count ?? 0) === 0) {
             issues.push({
               id: `intent-nocredit-${id}`,
               kind: "intent_success_no_credit",
               severity: "high",
-              title: `Succeeded intent without card credit`,
-              detail: `${intent.vehicle_reg ?? "—"} · ${intent.amount_szl} SZL · ${intent.provider ?? ""}`,
+              title: `Completed intent without card credit`,
+              detail: `${intent.target_entity_id ?? "—"} · ${intent.amount_szl} SZL · ${intent.provider_id ?? ""}${creditFailed ? " · credit_status=failed" : ""}`,
               entityType: "payment_intent",
               entityId: id,
               amountSzl: Number(intent.amount_szl) || undefined,

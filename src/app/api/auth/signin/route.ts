@@ -10,7 +10,7 @@ import {
 } from "@/lib/supabase/server";
 import { looseAdmin, rpcRow } from "@/lib/supabase/rpc";
 import { resolveUserRole } from "@/lib/auth/roles";
-import { rateLimit } from "@/lib/domain/rateLimit";
+import { rateLimitAsync } from "@/lib/domain/rateLimit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -43,17 +43,20 @@ export async function POST(request: NextRequest) {
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       request.headers.get("x-real-ip") ||
       "unknown";
-    const rl = rateLimit(`signin:${ip}`, 20, 15 * 60_000);
+    const rl = await rateLimitAsync(`signin:${ip}`, 20, 15 * 60_000);
     if (!rl.ok) {
       return NextResponse.json(
-        { error: "Too many sign-in attempts. Try again later." },
-        { status: 429 }
+        { error: "Too many sign-in attempts. Try again later.", code: "RATE_LIMITED" },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rl.retryAfterSec || 60) },
+        }
       );
     }
 
     if (!identifier || !password) {
       return NextResponse.json(
-        { error: "Identifier and password are required" },
+        { error: "Identifier and password are required", code: "VALIDATION" },
         { status: 400 }
       );
     }
@@ -107,9 +110,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Same message whether user missing or password wrong (no account enumeration)
     if (!targetAuthUserId || !targetEmail) {
-      return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
+      return NextResponse.json({ error: GENERIC_AUTH_ERROR, code: "UNAUTHENTICATED" }, { status: 401 });
     }
 
     const supabase = await createSupabaseServerClient();
@@ -120,7 +122,7 @@ export async function POST(request: NextRequest) {
       });
 
     if (signInErr || !signIn.user) {
-      return NextResponse.json({ error: GENERIC_AUTH_ERROR }, { status: 401 });
+      return NextResponse.json({ error: GENERIC_AUTH_ERROR, code: "UNAUTHENTICATED" }, { status: 401 });
     }
 
     const resolved = await resolveUserRole(
@@ -135,6 +137,7 @@ export async function POST(request: NextRequest) {
         {
           error:
             "Account has no assigned role. Please contact your administrator.",
+          code: "FORBIDDEN",
         },
         { status: 403 }
       );
@@ -144,9 +147,6 @@ export async function POST(request: NextRequest) {
       signIn.user.user_metadata?.must_change_password
     );
 
-        // last_login_at is a vanity field. staff uses timestamptz; marshals uses
-    // bigint epoch-ms (see 0009_fix_link_marshal_bigint_timestamps.sql).
-    // Do not touch marshals here — the portal owns that column.
     if (resolved.staffId) {
       try {
         await looseAdmin(admin)
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[api/auth/signin] error:", err);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", code: "INTERNAL" },
       { status: 500 }
     );
   }

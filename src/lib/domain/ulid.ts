@@ -2,15 +2,18 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * ULID-ish id: monotonic-ish, sortable, offline-safe.
- * Not spec-perfect ULID — good enough, zero deps, no crypto requirement.
+ * Sortable offline-safe ids. Crypto only — no Math.random.
  */
 
+import { randomBytes } from "crypto";
+
+/**
+ * Time-sortable id: prefix_timestamp36_randomHex.
+ * Not a strict ULID; zero deps, collision-resistant, lexicographically ordered by time.
+ */
 export function newId(prefix: string): string {
   const t = Date.now().toString(36);
-  const r =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID().slice(0, 8)
-      : Math.random().toString(36).slice(2, 10);
-  return `${prefix}_${t}_${r}`;
+  const r = randomBytes(6).toString("hex");
+  const clean = prefix.replace(/[^a-z0-9_]/gi, "").slice(0, 12) || "id";
+  return `${clean}_${t}_${r}`;
 }

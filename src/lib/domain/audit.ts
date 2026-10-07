@@ -9,12 +9,12 @@
  *     The primary operation has already committed; audit is a witness, not a gate.
  *   - The action vocabulary is a closed union. New actions require adding a
  *     literal here so the compiler catches drift.
- *   - ids are cryptographically random (no Math.random for anything
- *     that lands in an audit trail).
+ *   - ids are cryptographically random.
  */
 
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { newAuditId } from "./ids";
 
 export type AuditAction =
   // Assignments
@@ -65,6 +65,7 @@ export type AuditAction =
   | "payment.intent.created"
   | "payment.settled"
   | "payment.failed"
+  | "payment.credit_failed"
   | "card.topup"
   | "card.freeze"
   | "card.unfreeze"
@@ -90,25 +91,13 @@ export interface AuditEntry {
   meta?: Record<string, unknown> | null;
 }
 
-/**
- * Audit ids use crypto.randomUUID when available. Falls back to a
- * timestamp + Math.random for runtimes without crypto (edge, tests).
- * The fallback is best-effort; audit integrity is not a security boundary.
- */
-function auditId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `aud_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
-  }
-  return `aud_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
 export async function writeAudit(
   admin: SupabaseClient,
   entry: AuditEntry
 ): Promise<void> {
   try {
     const { error } = await admin.from("operational_audit").insert({
-      id: auditId(),
+      id: newAuditId(),
       timestamp: new Date().toISOString(),
       action: entry.action,
       actor_id: entry.actorId ?? null,
@@ -123,7 +112,6 @@ export async function writeAudit(
     });
 
     if (error) {
-      // Table missing? Column drift? Log and continue — audit is never a gate.
       console.warn("[audit] insert rejected (non-fatal):", {
         action: entry.action,
         entityType: entry.entityType,

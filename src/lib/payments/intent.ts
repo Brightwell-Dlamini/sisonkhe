@@ -6,22 +6,30 @@
  *
  * An intent is a request to move money. It has a provider, a status, and a
  * reference. When the provider confirms, we credit the target entity.
+ *
+ * Money rules:
+ * - Intent and client reference ids are cryptographic (never Date.now+Math.random).
+ * - creditTarget is idempotent via payment_credits.
+ * - If credit fails after status=completed, we mark credit_status=failed and
+ *   write an audit row so reconciliation and ops can recover — never silent.
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 import { getProvider } from "./providers";
+import {
+  newPaymentIntentId,
+  newClientReference,
+  newCreditId,
+  newCardTxId,
+} from "@/lib/domain/ids";
+import { writeAudit } from "@/lib/domain/audit";
 import type {
   PaymentIntent,
   PaymentPurpose,
   PaymentStatus,
   ProviderId,
-  PaymentIntentRow,
 } from "./types";
-
-// ---------------------------------------------------------------------------
-// Mapping
-// ---------------------------------------------------------------------------
 
 function mapRow(row: Record<string, unknown>): PaymentIntent {
   return {
@@ -47,10 +55,6 @@ function mapRow(row: Record<string, unknown>): PaymentIntent {
 
 const SELECT_COLUMNS =
   "id, provider_id, amount_szl, currency, status, purpose, target_entity_id, initiated_by, client_reference, provider_reference, provider_payload, redirect_url, instructions, created_at, updated_at, completed_at, failure_reason";
-
-// ---------------------------------------------------------------------------
-// Create
-// ---------------------------------------------------------------------------
 
 export interface CreateIntentInput {
   providerId: ProviderId;
@@ -83,12 +87,9 @@ export async function createIntent(
     );
   }
 
-  const clientReference =
-    input.clientReference ??
-    `pi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const id = `pi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const clientReference = input.clientReference ?? newClientReference();
+  const id = newPaymentIntentId();
 
-  // Insert initial intent row (pending)
   const { data: inserted, error: insertErr } = await admin
     .from("payment_intents")
     .insert({
@@ -110,7 +111,6 @@ export async function createIntent(
     throw new Error(`Failed to create intent: ${insertErr?.message}`);
   }
 
-  // Call provider
   try {
     const initiated = await provider.initiate({
       amountSzl: input.amountSzl,
@@ -123,7 +123,6 @@ export async function createIntent(
       description: input.description,
     });
 
-    // Update intent with provider response
     const { data: updated, error: updateErr } = await admin
       .from("payment_intents")
       .update({
@@ -144,7 +143,6 @@ export async function createIntent(
 
     const intent = mapRow(updated);
 
-    // If provider said "completed" immediately (manual), credit the target now
     if (intent.status === "completed") {
       await creditTarget(intent);
     }
@@ -153,7 +151,6 @@ export async function createIntent(
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
 
-    // Mark intent as failed
     await admin
       .from("payment_intents")
       .update({
@@ -188,10 +185,6 @@ export async function createIntent(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Read
-// ---------------------------------------------------------------------------
-
 export async function getIntent(id: string): Promise<PaymentIntent | null> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
@@ -220,15 +213,8 @@ export async function listIntentsForUser(
   return (data ?? []).map(mapRow);
 }
 
-// ---------------------------------------------------------------------------
-// Confirm
-// ---------------------------------------------------------------------------
-
 /**
  * Called by webhook handler or polling. Idempotent.
- *
- * If the intent is already terminal, no-op.
- * If we're moving into a terminal state, credit the target entity.
  */
 export async function applyProviderStatus(
   providerReference: string,
@@ -248,7 +234,6 @@ export async function applyProviderStatus(
 
   const current = mapRow(row);
 
-  // Already terminal — nothing to do
   if (
     current.status === "completed" ||
     current.status === "failed" ||
@@ -289,14 +274,14 @@ export async function applyProviderStatus(
   return { applied: true, intent };
 }
 
-// ---------------------------------------------------------------------------
-// Credit the target entity
-// ---------------------------------------------------------------------------
-
+/**
+ * Credit the target entity. Idempotent via payment_credits.
+ * On failure after completed intent: surface via audit + provider_payload flag
+ * so reconciliation can detect intent_success_no_credit.
+ */
 async function creditTarget(intent: PaymentIntent): Promise<void> {
   const admin = createSupabaseAdminClient();
 
-  // Prevent double-crediting (idempotency)
   const { data: existingCredit } = await admin
     .from("payment_credits")
     .select("id")
@@ -307,7 +292,6 @@ async function creditTarget(intent: PaymentIntent): Promise<void> {
 
   try {
     if (intent.purpose === "master_card_topup") {
-      // Credit operator master card
       const { data: card } = await admin
         .from("operator_master_cards")
         .select("id, balance_szl")
@@ -316,15 +300,17 @@ async function creditTarget(intent: PaymentIntent): Promise<void> {
 
       if (!card) throw new Error("Master card not found.");
 
-      await admin
+      const { error: balErr } = await admin
         .from("operator_master_cards")
         .update({
           balance_szl: Number(card.balance_szl) + intent.amountSzl,
         })
         .eq("id", card.id as string);
 
-      await admin.from("operator_card_transactions").insert({
-        id: `tx-${intent.id}`,
+      if (balErr) throw new Error(balErr.message);
+
+      const { error: txErr } = await admin.from("operator_card_transactions").insert({
+        id: newCardTxId(intent.id),
         card_id: card.id as string,
         timestamp: new Date().toISOString(),
         type: "MASTER_TOP_UP",
@@ -336,8 +322,9 @@ async function creditTarget(intent: PaymentIntent): Promise<void> {
         payment_method: intent.providerId,
         status: "Completed",
       });
+
+      if (txErr) throw new Error(txErr.message);
     } else if (intent.purpose === "vehicle_card_topup") {
-      // Credit vehicle virtual card
       const { data: card } = await admin
         .from("vehicle_virtual_cards")
         .select("id, balance_szl")
@@ -346,15 +333,17 @@ async function creditTarget(intent: PaymentIntent): Promise<void> {
 
       if (!card) throw new Error("Vehicle card not found.");
 
-      await admin
+      const { error: balErr } = await admin
         .from("vehicle_virtual_cards")
         .update({
           balance_szl: Number(card.balance_szl) + intent.amountSzl,
         })
         .eq("id", card.id as string);
 
-      await admin.from("virtual_card_transactions").insert({
-        id: `tx-${intent.id}`,
+      if (balErr) throw new Error(balErr.message);
+
+      const { error: txErr } = await admin.from("virtual_card_transactions").insert({
+        id: newCardTxId(intent.id),
         card_id: card.id as string,
         timestamp: new Date().toISOString(),
         type: "TOP_UP",
@@ -364,20 +353,61 @@ async function creditTarget(intent: PaymentIntent): Promise<void> {
         receipt_number: intent.clientReference,
         status: "Completed",
       });
-    } else {
-      // rank_fee, renewal_fee: handled elsewhere (ledger-only for now)
-    }
 
-    // Record the credit for idempotency
-    await admin.from("payment_credits").insert({
-      id: `cr-${intent.id}`,
+      if (txErr) throw new Error(txErr.message);
+    }
+    // rank_fee / renewal_fee: ledger-only paths handled elsewhere
+
+    const { error: creditErr } = await admin.from("payment_credits").insert({
+      id: newCreditId(intent.id),
       intent_id: intent.id,
       amount_szl: intent.amountSzl,
       created_at: new Date().toISOString(),
     });
+
+    if (creditErr) throw new Error(creditErr.message);
   } catch (err) {
-    console.error("[payments] creditTarget error:", err);
-    // We do NOT throw here — the intent is already marked completed.
-    // Manual reconciliation can fix any missing credit.
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[payments] creditTarget FAILED — intent completed without credit:", {
+      intentId: intent.id,
+      purpose: intent.purpose,
+      amount: intent.amountSzl,
+      target: intent.targetEntityId,
+      error: message,
+    });
+
+    // Persist failure signal on the intent so reconciliation can find it
+    try {
+      await admin
+        .from("payment_intents")
+        .update({
+          failure_reason: `CREDIT_FAILED: ${message}`,
+          provider_payload: {
+            ...intent.providerPayload,
+            credit_status: "failed",
+            credit_error: message,
+            credit_failed_at: new Date().toISOString(),
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", intent.id);
+    } catch (persistErr) {
+      console.error("[payments] could not persist credit failure flag:", persistErr);
+    }
+
+    await writeAudit(admin, {
+      action: "payment.credit_failed",
+      actorId: intent.initiatedBy,
+      actorRole: "system",
+      entityType: "payment_intent",
+      entityId: intent.id,
+      summary: `Credit failed for completed intent ${intent.id}: ${message}`,
+      meta: {
+        purpose: intent.purpose,
+        amountSzl: intent.amountSzl,
+        targetEntityId: intent.targetEntityId,
+        error: message,
+      },
+    });
   }
 }
