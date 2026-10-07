@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Invariant observation types + human labels.
- * Phase 5 — money stale/credit, compliance PDP, ops safety, authority.
  */
 
 export interface InvariantRunSummary {
@@ -45,7 +44,6 @@ export interface InvariantReport {
 /** Human-readable label for an invariant code. */
 export function invariantLabel(code: string): string {
   const map: Record<string, string> = {
-    // Money chain
     "money.trip_without_fee":
       "Trip recorded but no rank fee collected",
     "money.fee_without_trip":
@@ -66,8 +64,9 @@ export function invariantLabel(code: string): string {
       "A reversal row that is itself reversed",
     "money.trip_unassigned_driver":
       "Trip recorded with no driver",
+    "money.card_balance_drift":
+      "Card stored balance does not match transaction history",
 
-    // Identity chain
     "identity.claimed_marshal_without_auth":
       "Marshal claimed or active but auth link missing",
     "identity.claimed_driver_without_auth":
@@ -87,7 +86,6 @@ export function invariantLabel(code: string): string {
     "identity.username_orphan":
       "Username points at a deleted auth user",
 
-    // Operational integrity
     "ops.queue_position_collision":
       "Two vehicles share a queue position on the same route",
     "ops.multiple_active_marshals_on_route":
@@ -111,13 +109,11 @@ export function invariantLabel(code: string): string {
     "ops.open_renewal_while_active":
       "Open permit renewal while vehicle is mid-operation",
 
-    // Compliance
     "compliance.driver_pdp_expired":
       "Assigned driver has an expired PDP",
     "compliance.driver_pdp_missing":
       "Assigned driver has no PDP number on file",
 
-    // Authority lattice
     "authority.policy_gap":
       "RLS write policy is too permissive — no role, region, or ownership scope",
     "authority.rls_disabled":
