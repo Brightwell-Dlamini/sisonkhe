@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Sequential / deterministic document numbers — no Math.random for legal IDs.
+ * Sequential document numbers — prefer DB atomic next_system_sequence RPC.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -16,23 +16,21 @@ function pad(n: number, width: number): string {
 }
 
 /**
- * Next sequence value from system_sequences table.
- * Falls back to time-based unique id if table missing.
+ * Next sequence value. Prefer Postgres next_system_sequence (atomic).
+ * Fallback is still racy — deploy 20261013_system_sequences.sql.
  */
 export async function nextSequence(
   admin: SupabaseClient,
   name: string
 ): Promise<number> {
-  try {
-    const { data, error } = await admin.rpc("next_system_sequence", {
-      p_name: name,
-    });
-    if (!error && data != null) return Number(data);
-  } catch {
-    /* fall through */
+  const { data, error } = await admin.rpc("next_system_sequence", {
+    p_name: name,
+  });
+  if (!error && data != null) {
+    return Number(data);
   }
 
-  // Table-based fallback
+  // Racy fallback only if RPC missing
   try {
     const { data: row } = await admin
       .from("system_sequences")
@@ -42,20 +40,23 @@ export async function nextSequence(
 
     const next = Number(row?.value ?? 0) + 1;
     if (row) {
-      await admin
+      const { data: updated } = await admin
         .from("system_sequences")
         .update({ value: next, updated_at: new Date().toISOString() })
-        .eq("name", name);
-    } else {
-      await admin.from("system_sequences").insert({
-        name,
-        value: next,
-        updated_at: new Date().toISOString(),
-      });
+        .eq("name", name)
+        .eq("value", Number(row.value))
+        .select("value")
+        .maybeSingle();
+      if (updated?.value != null) return Number(updated.value);
+      // conflict — retry once via insert path
     }
+    await admin.from("system_sequences").upsert({
+      name,
+      value: next,
+      updated_at: new Date().toISOString(),
+    });
     return next;
   } catch {
-    // Last resort: monotonic-ish from clock (still better than pure random)
     return Date.now() % 10_000_000;
   }
 }
@@ -82,13 +83,12 @@ export async function nextMarshalTxId(
   return `mtx_${year()}_${pad(n, 8)}_${safe}`;
 }
 
-/** Issue a non-guessable-from-plate card number (still not a real network PAN). */
 export async function nextVirtualCardNumber(
   admin: SupabaseClient
 ): Promise<string> {
   const n = await nextSequence(admin, "vcard_pan");
   const p2 = pad((n % 9000) + 1000, 4);
-  const p3 = pad(((Math.floor(n / 9000) % 9000) + 1000), 4);
-  const p4 = pad(((Math.floor(n / 81_000_000) % 9000) + 1000), 4);
+  const p3 = pad((Math.floor(n / 9000) % 9000) + 1000, 4);
+  const p4 = pad((Math.floor(n / 81_000_000) % 9000) + 1000, 4);
   return `5342 ${p2} ${p3} ${p4}`;
 }

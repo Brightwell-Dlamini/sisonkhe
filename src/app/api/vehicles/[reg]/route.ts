@@ -38,9 +38,10 @@ function errorStatus(message: string): number {
     message.includes("PDP") ||
     message.includes("Cannot") ||
     message.includes("force") ||
-    message.includes("assignment")
+    message.includes("assignment") ||
+    message.includes("RPC is not installed")
   )
-    return 409;
+    return message.includes("RPC is not installed") ? 503 : 409;
   return 500;
 }
 
@@ -119,7 +120,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }
     }
 
-    // Never patch driver_id here — assignment service only
     const patch: Record<string, unknown> = {};
     if (input.make !== undefined) patch.make = input.make;
     if (input.model !== undefined) patch.model = input.model;
@@ -188,7 +188,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             driverId: oldDriverId,
           });
         } else {
-          // Staff UI may transfer — always force for admin roles
           await assignDriverVehicle(admin, {
             driverId: newDriverId,
             vehicleReg: decoded,
@@ -251,25 +250,37 @@ export async function DELETE(_: NextRequest, { params }: Params) {
       .eq("registration_number", decoded)
       .maybeSingle();
 
-    if (vehicle?.status === "Loading") {
+    if (!vehicle) {
+      return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
+    }
+
+    if (vehicle.status === "Loading" || vehicle.status === "Departed") {
       return NextResponse.json(
-        { error: "Cannot deactivate while Loading. Reset to Waiting first." },
+        {
+          error: `Cannot deactivate while ${vehicle.status}. Reset to Waiting first.`,
+        },
         { status: 409 }
       );
     }
 
-    if (vehicle?.driver_id) {
-      await unassignDriverVehicle(admin, {
-        vehicleReg: decoded,
-        driverId: vehicle.driver_id as string,
-      });
+    if (vehicle.driver_id) {
+      try {
+        await unassignDriverVehicle(admin, {
+          vehicleReg: decoded,
+          driverId: vehicle.driver_id as string,
+        });
+      } catch (unErr) {
+        const msg =
+          unErr instanceof Error ? unErr.message : "Unlink driver failed";
+        return NextResponse.json({ error: msg }, { status: errorStatus(msg) });
+      }
     }
 
+    // Status only — never write driver_id here (assignment guards / RPC own that)
     const { error } = await admin
       .from("vehicles")
       .update({
         status: "Offline",
-        driver_id: null,
         current_queue_position: 0,
       })
       .eq("registration_number", decoded);

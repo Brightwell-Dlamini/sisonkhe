@@ -7,6 +7,7 @@ import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 import type { ResolvedUser } from "../auth/roles";
 import { writeAudit } from "../domain/audit";
+import { normalizePlate, plateKey } from "../domain/identity";
 import { randomBytes } from "crypto";
 
 export interface RenewalRow {
@@ -64,7 +65,7 @@ export async function getVehicleRegsInScope(
     const { data: routes } = await admin
       .from("routes")
       .select("id")
-      .eq("region_code", user.region);
+      .ilike("region_code", user.region);
     const routeIds = (routes ?? []).map((r) => r.id as string);
     if (routeIds.length === 0) return [];
 
@@ -212,7 +213,7 @@ export async function createRenewalRequest(
     .from("permit_renewal_requests")
     .insert({
       id,
-      vehicle_reg: input.vehicleReg,
+      vehicle_reg: normalizePlate(input.vehicleReg),
       fleet_id: options.fleetId,
       current_permit_number: options.currentPermitNumber,
       current_expiry_date: options.currentExpiryDate,
@@ -277,7 +278,7 @@ export async function approveRenewal(
     return { success: false, error: "This request has already been processed." };
   }
 
-  const vehicleReg = request.vehicle_reg as string;
+  const vehicleReg = normalizePlate(request.vehicle_reg as string);
   const now = new Date();
   const today = now.toISOString().split("T")[0];
 
@@ -297,7 +298,8 @@ export async function approveRenewal(
       approved_by: approver.fullName,
       approval_date: today,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("status", "Pending Admin Approval");
 
   if (updateReqErr) {
     return { success: false, error: updateReqErr.message };
@@ -315,8 +317,6 @@ export async function approveRenewal(
     return { success: true };
   }
 
-  // Approved: write new permit data to vehicle, but status stays "Approved"
-  // until print marks "Printed" — rank load stays blocked.
   const { data: vehicle } = await admin
     .from("vehicles")
     .select("permit_number, permit_issue_date, permit_expiry_date")
@@ -346,7 +346,6 @@ export async function approveRenewal(
   if (input.cofIssueDate) vehiclePatch.cof_issue_date = input.cofIssueDate;
   if (input.cofExpiryDate) vehiclePatch.cof_expiry_date = input.cofExpiryDate;
   if (input.inspectionDate) vehiclePatch.last_inspection_date = input.inspectionDate;
-  // Keep permit Active numbers, but rank gate still sees renewalStatus=Approved
   vehiclePatch.permit_status = "Active";
 
   if (Object.keys(vehiclePatch).length > 0) {
@@ -376,15 +375,29 @@ export async function markRenewalPrinted(
   actor: { fullName: string; authUserId?: string }
 ): Promise<{ success: boolean; error?: string; marked?: number }> {
   const admin = createSupabaseAdminClient();
+  const plate = normalizePlate(vehicleReg);
+  const compact = plateKey(plate);
 
-  const { data: open, error } = await admin
+  let { data: open, error } = await admin
     .from("permit_renewal_requests")
-    .select("id")
-    .eq("vehicle_reg", vehicleReg)
+    .select("id, vehicle_reg")
+    .eq("vehicle_reg", plate)
     .eq("status", "Approved");
 
   if (error) {
     return { success: false, error: error.message };
+  }
+
+  // Compact-plate match if exact reg spacing differs
+  if ((!open || open.length === 0) && compact) {
+    const { data: candidates } = await admin
+      .from("permit_renewal_requests")
+      .select("id, vehicle_reg")
+      .eq("status", "Approved")
+      .limit(200);
+    open = (candidates ?? []).filter(
+      (r) => plateKey(String(r.vehicle_reg)) === compact
+    );
   }
 
   if (!open || open.length === 0) {
@@ -392,10 +405,23 @@ export async function markRenewalPrinted(
   }
 
   const ids = open.map((r) => r.id as string);
-  const { error: updErr } = await admin
+  const printedAt = new Date().toISOString();
+
+  let { error: updErr } = await admin
     .from("permit_renewal_requests")
-    .update({ status: "Printed" })
-    .in("id", ids);
+    .update({ status: "Printed", printed_at: printedAt })
+    .in("id", ids)
+    .eq("status", "Approved");
+
+  // Column may not exist yet — retry without printed_at
+  if (updErr?.message?.includes("printed_at")) {
+    const retry = await admin
+      .from("permit_renewal_requests")
+      .update({ status: "Printed" })
+      .in("id", ids)
+      .eq("status", "Approved");
+    updErr = retry.error;
+  }
 
   if (updErr) {
     return { success: false, error: updErr.message };
@@ -406,8 +432,8 @@ export async function markRenewalPrinted(
     actorId: actor.authUserId,
     actorName: actor.fullName,
     entityType: "vehicle",
-    entityId: vehicleReg,
-    summary: `Printed permit for ${vehicleReg} — rank load unlocked`,
+    entityId: plate,
+    summary: `Printed permit for ${plate} — rank load unlocked`,
     meta: { renewalIds: ids },
   });
 
