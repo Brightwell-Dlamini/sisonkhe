@@ -5,65 +5,57 @@
  * GET /api/assignments/resolve?nationalId=… | ?vehicleReg=…
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { requireServerRole } from "@/lib/auth/session";
 import { resolveDriver, resolveVehicle } from "@/lib/assignments/service";
+import { AppError } from "@/lib/api/errors";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const nationalId = searchParams.get("nationalId")?.trim() || "";
-    const driverId = searchParams.get("driverId")?.trim() || "";
-    const vehicleReg = searchParams.get("vehicleReg")?.trim() || "";
+export const GET = withApiHandler(async (request: NextRequest) => {
+  await requireServerRole(["super-admin", "admin", "fleet-manager"]);
 
-    if (!nationalId && !driverId && !vehicleReg) {
-      return NextResponse.json(
-        { error: "Provide nationalId, driverId, or vehicleReg" },
-        { status: 400 }
-      );
-    }
+  const { searchParams } = new URL(request.url);
+  const nationalId = searchParams.get("nationalId")?.trim() || "";
+  const driverId = searchParams.get("driverId")?.trim() || "";
+  const vehicleReg = searchParams.get("vehicleReg")?.trim() || "";
 
-    const admin = createSupabaseAdminClient();
-    const out: Record<string, unknown> = {};
-
-    if (nationalId || driverId) {
-      const driver = await resolveDriver(admin, { nationalId, driverId });
-      if (!driver) {
-        return NextResponse.json({ error: "Driver not found" }, { status: 404 });
-      }
-      out.driver = {
-        id: driver.id,
-        fullName: driver.full_name,
-        nationalId: driver.national_id,
-        phone: driver.phone,
-        assignedVehicleReg: driver.assigned_vehicle_reg,
-        status: driver.status,
-      };
-    }
-
-    if (vehicleReg) {
-      const vehicle = await resolveVehicle(admin, vehicleReg);
-      if (!vehicle) {
-        return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
-      }
-      out.vehicle = {
-        registrationNumber: vehicle.registration_number,
-        make: vehicle.make,
-        model: vehicle.model,
-        vic: vehicle.vic,
-        driverId: vehicle.driver_id,
-        status: vehicle.status,
-        ownerName: vehicle.owner_name,
-      };
-    }
-
-    return NextResponse.json(out);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/assignments/resolve]", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+  if (!nationalId && !driverId && !vehicleReg) {
+    throw AppError.validation("Provide nationalId, driverId, or vehicleReg");
   }
-}
+
+  const admin = createSupabaseAdminClient();
+  const out: Record<string, unknown> = {};
+
+  if (nationalId || driverId) {
+    const driver = await resolveDriver(admin, { nationalId, driverId });
+    if (!driver) throw AppError.notFound("Driver");
+    out.driver = {
+      id: driver.id,
+      fullName: driver.full_name,
+      nationalId: driver.national_id,
+      phone: driver.phone,
+      assignedVehicleReg: driver.assigned_vehicle_reg,
+      status: driver.status,
+    };
+  }
+
+  if (vehicleReg) {
+    const vehicle = await resolveVehicle(admin, vehicleReg);
+    if (!vehicle) throw AppError.notFound("Vehicle");
+    out.vehicle = {
+      registrationNumber: vehicle.registration_number,
+      make: vehicle.make,
+      model: vehicle.model,
+      vic: vehicle.vic,
+      driverId: vehicle.driver_id,
+      status: vehicle.status,
+      ownerName: vehicle.owner_name,
+    };
+  }
+
+  return ok(out);
+});

@@ -6,9 +6,7 @@
  *
  * Contract:
  *   - Never throws. If the audit table is unreachable, log and continue.
- *     The primary operation has already committed; audit is a witness, not a gate.
- *   - The action vocabulary is a closed union. New actions require adding a
- *     literal here so the compiler catches drift.
+ *   - Closed action vocabulary — new actions require a literal here.
  *   - ids are cryptographically random.
  */
 
@@ -17,51 +15,42 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { newAuditId } from "./ids";
 
 export type AuditAction =
-  // Assignments
   | "assignment.link"
   | "assignment.unlink"
-  // Drivers
   | "driver.create"
   | "driver.update"
   | "driver.suspend"
   | "driver.deactivate"
   | "driver.reset_password"
-  // Operators
+  | "driver.claim.success"
   | "operator.create"
   | "operator.update"
-  // Marshals
   | "marshal.create"
   | "marshal.update"
   | "marshal.deactivate"
   | "marshal.reset_password"
   | "marshal.claim.success"
   | "marshal.claim.link_failed"
-  // Staff
   | "staff.create"
   | "staff.update"
   | "staff.deactivate"
   | "staff.reset_password"
-  // Vehicles
   | "vehicle.create"
   | "vehicle.update"
   | "vehicle.deactivate"
   | "vehicle.transfer"
-  // Permits
   | "permit.submit"
   | "permit.approve"
   | "permit.reject"
   | "permit.print"
-  // Dispatch
   | "dispatch.load"
   | "dispatch.depart"
   | "dispatch.delay"
   | "dispatch.breakdown"
   | "dispatch.reset"
-  // Enforcement
   | "ticket.issue"
   | "ticket.paid"
   | "ticket.challenged"
-  // Financial
   | "payment.intent.created"
   | "payment.settled"
   | "payment.failed"
@@ -69,11 +58,9 @@ export type AuditAction =
   | "card.topup"
   | "card.freeze"
   | "card.unfreeze"
-  // Auth
   | "auth.signin"
   | "auth.signout"
   | "auth.password_changed"
-  // System
   | "system.snapshot"
   | "system.restore"
   | "system.config_changed";

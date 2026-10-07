@@ -3,18 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth/session";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
-  try {
-    const user = await getServerSession();
-    return NextResponse.json({ user });
-  } catch (err) {
-    console.error("[api/auth/me] error:", err);
-    return NextResponse.json({ user: null }, { status: 500 });
-  }
-}
+export const GET = withApiHandler(async () => {
+  const user = await getServerSession();
+  return ok({ user });
+});

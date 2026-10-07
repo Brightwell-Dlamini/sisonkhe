@@ -4,11 +4,13 @@
  *
  * Unified API response helpers.
  *
- * Every route should return through these so clients see a consistent envelope:
- *   success → { ok: true, data, meta? }
- *   failure → { ok: false, error, code, details? }
+ * Success:
+ *   { ok: true, data, ...dataFields, meta? }
+ *   Object payloads are also spread at the top level so older clients that
+ *   read `res.marshals` / `res.user` keep working during migration.
  *
- * List endpoints that paginate also include meta from buildPageMeta.
+ * Failure:
+ *   { ok: false, error, code, details? }
  */
 
 import { NextResponse } from "next/server";
@@ -19,7 +21,7 @@ export type ApiSuccess<T> = {
   ok: true;
   data: T;
   meta?: PageMeta & Record<string, unknown>;
-};
+} & (T extends Record<string, unknown> ? T : Record<string, never>);
 
 export type ApiFailure = {
   ok: false;
@@ -27,8 +29,6 @@ export type ApiFailure = {
   code: ErrorCode;
   details?: Record<string, unknown>;
 };
-
-export type ApiBody<T> = ApiSuccess<T> | ApiFailure;
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
@@ -40,11 +40,18 @@ export function ok<T>(
     headers?: HeadersInit;
   }
 ): NextResponse {
-  const body: ApiSuccess<T> = {
-    ok: true,
+  const spread =
+    data !== null && typeof data === "object" && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : {};
+
+  const body = {
+    ok: true as const,
     data,
+    ...spread,
     ...(init?.meta ? { meta: init.meta } : {}),
   };
+
   return NextResponse.json(body, {
     status: init?.status ?? 200,
     headers: { ...NO_STORE, ...init?.headers },
@@ -54,15 +61,22 @@ export function ok<T>(
 export function fail(err: unknown, headers?: HeadersInit): NextResponse {
   const appErr = AppError.fromUnknown(err);
   if (appErr.code === "INTERNAL") {
-    console.error("[api]", appErr.message, (appErr as Error & { cause?: unknown }).cause ?? "");
+    console.error(
+      "[api]",
+      appErr.message,
+      (appErr as Error & { cause?: unknown }).cause ?? ""
+    );
   }
-  return NextResponse.json(appErr.toJSON() as ApiFailure & { ok: false }, {
-    status: appErr.httpStatus,
-    headers: { ...NO_STORE, ...headers },
-  });
+  const json = appErr.toJSON();
+  return NextResponse.json(
+    { ok: false as const, ...json },
+    {
+      status: appErr.httpStatus,
+      headers: { ...NO_STORE, ...headers },
+    }
+  );
 }
 
-/** Convenience for paginated lists. */
 export function page<T>(
   items: T[],
   meta: PageMeta,
@@ -71,11 +85,6 @@ export function page<T>(
   return ok({ items, ...extra }, { meta });
 }
 
-/**
- * Wrap an async route handler so every thrown value becomes a typed ApiFailure.
- * Usage:
- *   export const GET = withApiHandler(async (req) => { ... return ok(data); });
- */
 export function withApiHandler<
   Args extends unknown[],
 >(
