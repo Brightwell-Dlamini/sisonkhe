@@ -15,23 +15,22 @@ interface Props {
   vehicle: DriverContext["vehicle"];
   marshal: DriverContext["marshal"];
   onMessageMarshal: () => void;
-  onEmitSignal: (kind: DriverSignalKind, note?: string) => Promise<{
-    ok: boolean;
-    queued?: boolean;
-    error?: string;
-  }>;
+  onEmitSignal: (
+    kind: DriverSignalKind,
+    note?: string
+  ) => Promise<{ ok: boolean; queued?: boolean; error?: string }>;
   online: boolean;
   pendingSignalCount: number;
   isAfter830PM?: boolean;
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  Waiting:   "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300",
-  Loading:   "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
-  Departed:  "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-  Delayed:   "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
-  Breakdown: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300",
-  Offline:   "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
+  Waiting: "bg-blue-950/60 text-blue-300",
+  Loading: "bg-emerald-950/60 text-emerald-300",
+  Departed: "bg-zinc-800 text-zinc-400",
+  Delayed: "bg-amber-950/60 text-amber-300",
+  Breakdown: "bg-red-950/60 text-red-300",
+  Offline: "bg-zinc-800 text-zinc-400",
 };
 
 export default function DriverVehicleCard({
@@ -60,10 +59,10 @@ export default function DriverVehicleCard({
   return (
     <div className="space-y-4">
       {isAfter830PM && (
-        <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl p-3 flex items-center gap-2 text-xs">
+        <div className="bg-purple-950/40 border border-purple-800 rounded-xl p-3 flex items-center gap-2 text-xs">
           <Moon className="w-4 h-4 text-purple-400" />
-          <span className="text-purple-900 dark:text-purple-200 font-bold">
-            After 8:30 PM — Queue advances to tomorrow's rotation.
+          <span className="text-purple-200 font-bold">
+            After 8:30 PM — Queue advances to tomorrow&apos;s rotation.
           </span>
         </div>
       )}
@@ -71,13 +70,13 @@ export default function DriverVehicleCard({
       <div
         className={`bg-[#0F0F10] border rounded-2xl p-5 ${
           isLead
-            ? "border-emerald-500 dark:border-emerald-500 ring-2 ring-emerald-500/20"
+            ? "border-emerald-500 ring-2 ring-emerald-500/20"
             : "border-white/[0.06]"
         }`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
-            <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-cyan-400 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-blue-950/60 text-cyan-400 flex items-center justify-center shrink-0">
               <Car className="w-6 h-6" />
             </div>
             <div>
@@ -95,7 +94,7 @@ export default function DriverVehicleCard({
                 </span>
               </div>
               <div className="text-xs text-zinc-500 mt-1">
-                {vehicle.seatingCapacity} seats • {vehicle.classification}
+                {vehicle.seatingCapacity} seats · {vehicle.classification}
               </div>
             </div>
           </div>
@@ -103,7 +102,7 @@ export default function DriverVehicleCard({
           <div className="text-right shrink-0">
             <span
               className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                STATUS_STYLES[vehicle.status] ?? ""
+                STATUS_STYLES[vehicle.status] ?? "bg-zinc-800 text-zinc-400"
               }`}
             >
               {vehicle.status}
@@ -121,7 +120,8 @@ export default function DriverVehicleCard({
             <div className="col-span-2 flex items-center gap-2">
               <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span className="text-zinc-300">
-                <strong>{vehicle.routeOrigin}</strong> → {vehicle.routeDestination}
+                <strong>{vehicle.routeOrigin}</strong> to{" "}
+                {vehicle.routeDestination}
               </span>
             </div>
           )}
@@ -134,16 +134,16 @@ export default function DriverVehicleCard({
         </div>
 
         {vehicle.currentQueuePosition > 0 && (
-          <div className="mt-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 flex items-center justify-between text-xs">
-            <span className="text-blue-800 dark:text-blue-200 font-bold">
+          <div className="mt-3 p-3 rounded-xl bg-blue-950/40 border border-blue-800 flex items-center justify-between text-xs">
+            <span className="text-blue-200 font-bold">
               Queue position: <strong>#{vehicle.currentQueuePosition}</strong>
             </span>
-            <span className="text-[10px] text-blue-700 dark:text-blue-300">
+            <span className="text-[10px] text-blue-300">
               {isLead
                 ? "Proceed to load"
                 : vehicle.currentQueuePosition === 2
-                ? "Next in line"
-                : "Waiting"}
+                  ? "Next in line"
+                  : "Waiting"}
             </span>
           </div>
         )}
@@ -154,13 +154,13 @@ export default function DriverVehicleCard({
               <ShieldCheck
                 className={`w-3.5 h-3.5 ${
                   vehicle.permitStatus === "Active"
-                    ? "text-emerald-600"
-                    : "text-amber-600"
+                    ? "text-emerald-500"
+                    : "text-amber-500"
                 }`}
               />
               <span className="text-zinc-500">
                 Permit:{" "}
-                <strong className="font-mono text-zinc-800 dark:text-zinc-200">
+                <strong className="font-mono text-zinc-200">
                   {vehicle.permitNumber}
                 </strong>
               </span>
@@ -168,8 +168,8 @@ export default function DriverVehicleCard({
             <span
               className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
                 vehicle.permitStatus === "Active"
-                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-                  : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                  ? "bg-emerald-950/60 text-emerald-300"
+                  : "bg-amber-950/60 text-amber-300"
               }`}
             >
               {vehicle.permitStatus}
@@ -193,6 +193,7 @@ export default function DriverVehicleCard({
               )}
             </div>
             <button
+              type="button"
               onClick={onMessageMarshal}
               className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
             >
@@ -208,6 +209,10 @@ export default function DriverVehicleCard({
             online={online}
             pendingCount={pendingSignalCount}
             currentVehicleStatus={vehicle.status}
+            currentQueuePosition={vehicle.currentQueuePosition}
+            routeOrigin={vehicle.routeOrigin}
+            routeDestination={vehicle.routeDestination}
+            hasVehicle
           />
         </div>
       </div>
