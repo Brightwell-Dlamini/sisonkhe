@@ -35,9 +35,10 @@ function errorStatus(message: string): number {
     message.includes("PDP") ||
     message.includes("cannot") ||
     message.includes("not available") ||
-    message.includes("linked")
+    message.includes("linked") ||
+    message.includes("RPC is not installed")
   )
-    return 409;
+    return message.includes("RPC is not installed") ? 503 : 409;
   return 500;
 }
 
@@ -80,6 +81,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const admin = createSupabaseAdminClient();
     const input = parsed.data;
 
+    // Never patch assigned_vehicle_reg here — assignment service only
     const patch: Record<string, unknown> = {};
 
     if (input.fullName !== undefined) patch.full_name = input.fullName;
@@ -138,11 +140,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     let unlinkedVehicle: string | null = null;
 
     if (suspending && oldVehicle) {
-      await unassignDriverVehicle(admin, {
-        driverId: id,
-        vehicleReg: oldVehicle,
-      });
-      unlinkedVehicle = oldVehicle;
+      try {
+        await unassignDriverVehicle(admin, {
+          driverId: id,
+          vehicleReg: oldVehicle,
+        });
+        unlinkedVehicle = oldVehicle;
+      } catch (unErr) {
+        const msg =
+          unErr instanceof Error ? unErr.message : "Unlink on suspend failed";
+        return NextResponse.json({ error: msg }, { status: errorStatus(msg) });
+      }
       await writeAudit(admin, {
         action: "assignment.unlink",
         actorId: session.authUserId,
@@ -168,17 +176,25 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }
     }
 
-    // Staff assignment always allowed to transfer (force) — UI already filters free vehicles
     if (
       !suspending &&
       newVehicleRaw !== undefined &&
       newVehicleRaw !== oldVehicle
     ) {
       if (!newVehicleRaw && oldVehicle) {
-        await unassignDriverVehicle(admin, {
-          driverId: id,
-          vehicleReg: oldVehicle,
-        });
+        try {
+          await unassignDriverVehicle(admin, {
+            driverId: id,
+            vehicleReg: oldVehicle,
+          });
+        } catch (unErr) {
+          const msg =
+            unErr instanceof Error ? unErr.message : "Unlink failed";
+          return NextResponse.json(
+            { error: msg },
+            { status: errorStatus(msg) }
+          );
+        }
         unlinkedVehicle = oldVehicle;
         await writeAudit(admin, {
           action: "assignment.unlink",
@@ -297,17 +313,23 @@ export async function DELETE(_: NextRequest, { params }: Params) {
       .maybeSingle();
 
     if (driverRow?.assigned_vehicle_reg) {
-      await unassignDriverVehicle(admin, {
-        driverId: id,
-        vehicleReg: driverRow.assigned_vehicle_reg as string,
-      });
+      try {
+        await unassignDriverVehicle(admin, {
+          driverId: id,
+          vehicleReg: driverRow.assigned_vehicle_reg as string,
+        });
+      } catch (unErr) {
+        const msg =
+          unErr instanceof Error ? unErr.message : "Unlink before suspend failed";
+        return NextResponse.json({ error: msg }, { status: errorStatus(msg) });
+      }
     }
 
+    // Status only — assignment already cleared by RPC (avoid trigger conflict)
     const { error } = await admin
       .from("drivers")
       .update({
         status: "Suspended",
-        assigned_vehicle_reg: null,
       })
       .eq("id", id);
 

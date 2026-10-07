@@ -152,7 +152,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Compact-plate collision (HSD101BM vs HSD 101 BM)
     const compact = plate.replace(/\s+/g, "");
     const { data: allPlates } = await admin
       .from("vehicles")
@@ -187,9 +186,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    let vic = input.vic ? normalizePlate(input.vic).replace(/\s+/g, "-") : generateVIC(plate);
+    let vic = input.vic
+      ? normalizePlate(input.vic).replace(/\s+/g, "-")
+      : generateVIC(plate);
 
-    // VIC uniqueness
     const { data: vicClash } = await admin
       .from("vehicles")
       .select("registration_number")
@@ -247,7 +247,7 @@ export async function POST(request: NextRequest) {
           driverId: input.driverId || null,
           nationalId: input.driverNationalId || null,
           vehicleReg: plate,
-          force: false,
+          force: true,
         });
       } catch (linkErr) {
         assignmentWarning =
@@ -257,7 +257,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Money truth: balance 0, fee unpaid until settlement
     await issueVehicleVirtualCard(admin, {
       registrationNumber: plate,
       vic,
@@ -268,7 +267,7 @@ export async function POST(request: NextRequest) {
 
     await writeAudit(admin, {
       action: "vehicle.create",
-      actorId: session.id,
+      actorId: session.authUserId,
       actorRole: session.role,
       actorName: session.fullName,
       entityType: "vehicle",

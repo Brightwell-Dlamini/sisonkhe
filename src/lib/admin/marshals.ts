@@ -47,7 +47,9 @@ function mapMarshal(row: Record<string, unknown>): MarshalRow {
   const createdAtBigint = row.created_at as number | null;
   const createdAtIso =
     serverCreatedAt ??
-    (createdAtBigint ? new Date(createdAtBigint).toISOString() : new Date().toISOString());
+    (createdAtBigint
+      ? new Date(createdAtBigint).toISOString()
+      : new Date().toISOString());
 
   return {
     id: row.id as string,
@@ -152,7 +154,10 @@ export async function createMarshal(input: CreateMarshalInput): Promise<{
       .eq("id_number", input.idNumber)
       .maybeSingle();
     if (existing) {
-      return { success: false, error: "A marshal with that National ID already exists." };
+      return {
+        success: false,
+        error: "A marshal with that National ID already exists.",
+      };
     }
   }
 
@@ -163,14 +168,25 @@ export async function createMarshal(input: CreateMarshalInput): Promise<{
       .eq("cell_no", cellNo)
       .maybeSingle();
     if (existing) {
-      return { success: false, error: "A marshal with that cell number already exists." };
+      return {
+        success: false,
+        error: "A marshal with that cell number already exists.",
+      };
     }
   }
 
   if (input.assignedRouteId) {
+    const { data: occupant } = await admin
+      .from("marshals")
+      .select("id")
+      .eq("assigned_route_id", input.assignedRouteId)
+      .eq("is_active", true)
+      .maybeSingle();
+
     const check = marshalAssignableToRoute(
       { id: "new", isActive: true, assignedRouteId: null },
-      input.assignedRouteId
+      input.assignedRouteId,
+      occupant?.id as string | null | undefined
     );
     if (!check.eligible) {
       return { success: false, error: check.reason };
@@ -231,13 +247,35 @@ export async function updateMarshal(
   if (input.assignedRouteId !== undefined && input.assignedRouteId) {
     const existing = await getMarshalById(id);
     if (existing) {
+      const { data: occupant } = await admin
+        .from("marshals")
+        .select("id")
+        .eq("assigned_route_id", input.assignedRouteId)
+        .eq("is_active", true)
+        .neq("id", id)
+        .maybeSingle();
+
+      // Explicit reassignment: clear the previous occupant of this corridor
+      if (occupant?.id) {
+        await admin
+          .from("marshals")
+          .update({
+            assigned_route_id: null,
+            updated_at: Date.now(),
+            synced_at: Date.now(),
+            sync_status: "synced",
+          })
+          .eq("id", occupant.id);
+      }
+
       const check = marshalAssignableToRoute(
         {
           id,
           isActive: input.isActive ?? existing.isActive,
           assignedRouteId: existing.assignedRouteId,
         },
-        input.assignedRouteId
+        input.assignedRouteId,
+        null
       );
       if (!check.eligible) {
         return { success: false, error: check.reason };
@@ -255,16 +293,21 @@ export async function updateMarshal(
   if (input.whatsappNo !== undefined) patch.whatsapp_no = input.whatsappNo;
   if (input.idNumber !== undefined) patch.id_number = input.idNumber;
   if (input.region !== undefined) patch.region = input.region;
-  if (input.assignedRouteId !== undefined) patch.assigned_route_id = input.assignedRouteId;
+  if (input.assignedRouteId !== undefined)
+    patch.assigned_route_id = input.assignedRouteId;
   if (input.terminalId !== undefined) patch.terminal_id = input.terminalId;
   if (input.terminalName !== undefined) patch.position = input.terminalName;
   else if (input.position !== undefined) patch.position = input.position;
-  if (input.residentialAddress !== undefined) patch.residential_address = input.residentialAddress;
+  if (input.residentialAddress !== undefined)
+    patch.residential_address = input.residentialAddress;
   if (input.chiefOfArea !== undefined) patch.chief_of_area = input.chiefOfArea;
   if (input.indvuna !== undefined) patch.indvuna = input.indvuna;
-  if (input.maritalStatus !== undefined) patch.marital_status = input.maritalStatus;
-  if (input.numberOfKids !== undefined) patch.number_of_kids = input.numberOfKids;
-  if (input.nextOfKinFullName !== undefined) patch.next_of_kin_full_name = input.nextOfKinFullName;
+  if (input.maritalStatus !== undefined)
+    patch.marital_status = input.maritalStatus;
+  if (input.numberOfKids !== undefined)
+    patch.number_of_kids = input.numberOfKids;
+  if (input.nextOfKinFullName !== undefined)
+    patch.next_of_kin_full_name = input.nextOfKinFullName;
   if (input.nextOfKinRelationship !== undefined)
     patch.next_of_kin_relationship = input.nextOfKinRelationship;
   if (input.nextOfKinContactNumber !== undefined)

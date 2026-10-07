@@ -34,7 +34,6 @@ interface Props {
   onSubmit: (
     input: CreateDriverRequest
   ) => Promise<{ success: boolean; error?: string; issues?: Record<string, string[]> }>;
-  /** Called after successful issue-login so parent can show credentials */
   onIssuedLogin?: (creds: {
     fullName: string;
     username: string;
@@ -51,7 +50,6 @@ export default function DriverFormModal({
   onIssuedLogin,
   onRefresh,
 }: Props) {
-  // ── CREATE = claim-style ──────────────────────────────────────────
   const [nationalId, setNationalId] = useState("");
   const [phone, setPhone] = useState("");
   const [verified, setVerified] = useState<{
@@ -64,7 +62,6 @@ export default function DriverFormModal({
   const [stepError, setStepError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // ── EDIT ──────────────────────────────────────────────────────────
   const [form, setForm] = useState<CreateDriverRequest>({
     fullName: driver?.fullName ?? "",
     nationalId: driver?.nationalId ?? "",
@@ -145,7 +142,6 @@ export default function DriverFormModal({
     setStepError(null);
     setBusy(true);
     try {
-      // Reuse public claim verify (PUT)
       const res = await fetch("/api/auth/claim/driver", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -153,9 +149,7 @@ export default function DriverFormModal({
       });
       const data = await res.json();
       if (!res.ok) {
-        // Already claimed is still useful — admin may only want to assign vehicle
         if (res.status === 409 && data.error?.includes("already been claimed")) {
-          // Look up via drivers list API is heavy; try issue-login will fail later
           setStepError(
             "This driver already has a login. Use Edit on the list to assign a vehicle, or Reset password."
           );
@@ -183,11 +177,14 @@ export default function DriverFormModal({
     setBusy(true);
     setStepError(null);
     try {
-      const res = await fetch(`/api/admin/drivers/${verified.driverId}/issue-login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
+      const res = await fetch(
+        `/api/admin/drivers/${verified.driverId}/issue-login`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        }
+      );
       const data = await res.json();
       if (!res.ok) {
         setStepError(data.error ?? "Could not issue login");
@@ -196,15 +193,30 @@ export default function DriverFormModal({
       }
 
       if (assignReg) {
-        await fetch("/api/assignments", {
+        const linkRes = await fetch("/api/assignments", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             driverId: verified.driverId,
             vehicleReg: assignReg,
-            force: false,
+            force: true,
           }),
         });
+        if (!linkRes.ok) {
+          const linkData = await linkRes.json().catch(() => ({}));
+          setStepError(
+            (linkData as { error?: string }).error ??
+              "Login issued, but vehicle link failed. Use Edit to assign."
+          );
+          onIssuedLogin?.({
+            fullName: verified.fullName,
+            username: data.credentials.username,
+            password: data.credentials.password,
+          });
+          onRefresh?.();
+          setBusy(false);
+          return;
+        }
       }
 
       onIssuedLogin?.({
@@ -233,9 +245,9 @@ export default function DriverFormModal({
     const result = await onSubmit(form);
     setLoading(false);
     if (!result.success) setError(result.error ?? "Failed to save");
+    else onClose();
   };
 
-  // ══════════ CREATE (claim-style) ══════════
   if (mode === "create") {
     return (
       <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
@@ -247,11 +259,15 @@ export default function DriverFormModal({
                 Issue driver login
               </h2>
               <p className="text-xs text-zinc-500 mt-1">
-                Same as claim: verify National ID + phone from the portal profile, then create auth.
-                Do not re-enter demographics.
+                Verify National ID + phone from the portal profile, then create
+                auth. Do not re-enter demographics.
               </p>
             </div>
-            <button type="button" onClick={onClose} className="p-1.5 text-zinc-400 hover:text-zinc-200">
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 text-zinc-400 hover:text-zinc-200"
+            >
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -295,14 +311,20 @@ export default function DriverFormModal({
                   disabled={busy}
                   className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2"
                 >
-                  {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                  {busy ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  )}
                   Verify portal profile
                 </button>
               </form>
             ) : (
               <div className="space-y-4">
                 <div className="rounded-xl border border-emerald-800 bg-emerald-950/40 p-3 text-xs">
-                  <div className="font-bold text-emerald-200">{verified.fullName}</div>
+                  <div className="font-bold text-emerald-200">
+                    {verified.fullName}
+                  </div>
                   <div className="text-emerald-300/80 mt-0.5 font-mono text-[11px]">
                     ID verified · ready to issue login
                   </div>
@@ -319,7 +341,10 @@ export default function DriverFormModal({
                   >
                     <option value="">— None now —</option>
                     {eligibleVehicles.map((v) => (
-                      <option key={v.registrationNumber} value={v.registrationNumber}>
+                      <option
+                        key={v.registrationNumber}
+                        value={v.registrationNumber}
+                      >
                         {vehicleOptionLabel(v)}
                       </option>
                     ))}
@@ -335,7 +360,11 @@ export default function DriverFormModal({
                   onClick={() => void issueLoginAndAssign()}
                   className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2"
                 >
-                  {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+                  {busy ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <KeyRound className="w-3.5 h-3.5" />
+                  )}
                   Issue login credentials
                 </button>
                 <button
@@ -369,18 +398,24 @@ export default function DriverFormModal({
     );
   }
 
-  // ══════════ EDIT ══════════
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-lg w-full max-h-[92vh] overflow-y-auto">
         <div className="sticky top-0 z-10 bg-[#0F0F10] flex items-start justify-between p-5 border-b border-white/[0.06]">
           <div>
-            <h2 className="text-sm font-black uppercase tracking-wide text-white">Edit driver</h2>
+            <h2 className="text-sm font-black uppercase tracking-wide text-white">
+              Edit driver
+            </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
-              Ops only: status, vehicle, corrections. Demographics came from the portal.
+              Ops only: status, vehicle, corrections. Demographics came from the
+              portal.
             </p>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 text-zinc-400 hover:text-zinc-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 text-zinc-400 hover:text-zinc-200"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -410,7 +445,10 @@ export default function DriverFormModal({
             >
               <option value="">— No vehicle —</option>
               {eligibleVehicles.map((v) => (
-                <option key={v.registrationNumber} value={v.registrationNumber}>
+                <option
+                  key={v.registrationNumber}
+                  value={v.registrationNumber}
+                >
                   {vehicleOptionLabel(v)}
                 </option>
               ))}
@@ -418,7 +456,9 @@ export default function DriverFormModal({
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">Status</label>
+            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
+              Status
+            </label>
             <select
               value={form.status}
               onChange={(e) => update("status", e.target.value)}
@@ -432,7 +472,11 @@ export default function DriverFormModal({
           </div>
 
           <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2.5 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold"
+            >
               Cancel
             </button>
             <button

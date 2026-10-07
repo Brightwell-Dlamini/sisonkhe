@@ -2,8 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Staff-only assignment API (auth required via middleware).
- * Public self-service register uses /api/public/* if needed.
+ * Staff-only assignment API. Staff transfers always use force so the
+ * atomic RPC can move a driver between vehicles in one step.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -15,6 +15,7 @@ import {
   unassignDriverVehicle,
 } from "@/lib/assignments/service";
 import { rateLimit } from "@/lib/domain/rateLimit";
+import { writeAudit } from "@/lib/domain/audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,7 +26,7 @@ const postSchema = z.object({
   nationalId: z.string().trim().min(1).max(40).optional().or(z.literal("")),
   driverId: z.string().trim().min(1).max(60).optional().or(z.literal("")),
   vehicleReg: z.string().trim().min(3).max(20),
-  force: z.boolean().optional().default(false),
+  force: z.boolean().optional().default(true),
 });
 
 const deleteSchema = z.object({
@@ -53,13 +54,16 @@ export async function POST(request: NextRequest) {
     const parsed = postSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Validation failed", issues: parsed.error.flatten().fieldErrors },
+        {
+          error: "Validation failed",
+          issues: parsed.error.flatten().fieldErrors,
+        },
         { status: 400 }
       );
     }
 
-    // force only for staff (already gated) — still must be explicit true
-    const force = parsed.data.force === true;
+    // Staff UI = operational transfer authority
+    const force = true;
 
     const admin = createSupabaseAdminClient();
     const result = await assignDriverVehicle(admin, {
@@ -67,6 +71,17 @@ export async function POST(request: NextRequest) {
       nationalId: parsed.data.nationalId || null,
       vehicleReg: parsed.data.vehicleReg,
       force,
+    });
+
+    await writeAudit(admin, {
+      action: "assignment.link",
+      actorId: session.authUserId,
+      actorRole: session.role,
+      actorName: session.fullName,
+      entityType: "driver",
+      entityId: result.driverId,
+      summary: `Linked ${result.driverName} → ${result.vehicleReg}`,
+      after: result,
     });
 
     return NextResponse.json({ success: true, assignment: result });
@@ -122,6 +137,17 @@ export async function DELETE(request: NextRequest) {
       driverId: parsed.data.driverId || null,
       nationalId: parsed.data.nationalId || null,
       vehicleReg: parsed.data.vehicleReg || null,
+    });
+
+    await writeAudit(admin, {
+      action: "assignment.unlink",
+      actorId: session.authUserId,
+      actorRole: session.role,
+      actorName: session.fullName,
+      entityType: "driver",
+      entityId: result.driverId ?? "unknown",
+      summary: `Unlinked driver ${result.driverId ?? "?"} from ${result.vehicleReg ?? "?"}`,
+      after: result,
     });
 
     return NextResponse.json({ success: true, ...result });
