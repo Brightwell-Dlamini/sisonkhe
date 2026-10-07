@@ -2,125 +2,100 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * GET  /api/staff   — list all staff (super-admin only)
- * POST /api/staff   — create a new staff member (super-admin only)
- *
- * Staff are never pre-registered. Every staff member is provisioned in
- * one step: auth user + staff row. Both app_metadata.role and
- * user_metadata.role are set by provisionAuthUser.
+ * GET  /api/staff — list (super-admin)
+ * POST /api/staff — create staff + auth
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { requireServerRole } from "@/lib/auth/session";
 import { createStaffSchema } from "@/lib/staff/validation";
 import { listStaff } from "@/lib/staff/queries";
 import { writeAudit } from "@/lib/domain/audit";
 import { provisionAuthUser } from "@/lib/auth/provision";
+import { AppError } from "@/lib/api/errors";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function statusFor(message: string): number {
-  if (message === "UNAUTHENTICATED") return 401;
-  if (message === "FORBIDDEN") return 403;
-  if (message.toLowerCase().includes("already")) return 409;
-  return 500;
-}
+export const GET = withApiHandler(async () => {
+  await requireServerRole(["super-admin"]);
+  const staff = await listStaff();
+  return ok({ staff });
+});
 
-export async function GET() {
-  try {
-    await requireServerRole(["super-admin"]);
-    const staff = await listStaff();
-    return NextResponse.json({ staff });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/staff] GET error:", err);
-    return NextResponse.json({ error: message }, { status: statusFor(message) });
+export const POST = withApiHandler(async (request: NextRequest) => {
+  const session = await requireServerRole(["super-admin"]);
+
+  const body = await request.json();
+  const parsed = createStaffSchema.safeParse(body);
+  if (!parsed.success) {
+    throw AppError.validation("Validation failed", {
+      issues: parsed.error.flatten().fieldErrors,
+    });
   }
-}
 
-export async function POST(request: NextRequest) {
-  try {
-    const session = await requireServerRole(["super-admin"]);
+  const { fullName, email, phone, role, region, terminalId, password } =
+    parsed.data;
 
-    const body = await request.json();
-    const parsed = createStaffSchema.safeParse(body);
+  const admin = createSupabaseAdminClient();
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        {
-          error: "Validation failed",
-          issues: parsed.error.flatten().fieldErrors,
-        },
-        { status: 400 }
-      );
-    }
+  const { data: existing } = await admin
+    .from("staff")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
 
-    const { fullName, email, phone, role, region, terminalId, password } =
-      parsed.data;
+  if (existing) {
+    throw AppError.conflict("A staff member with that email already exists.");
+  }
 
-    const admin = createSupabaseAdminClient();
+  const staffId = `staff-${crypto.randomUUID()}`;
 
-    const { data: existing } = await admin
-      .from("staff")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle();
-
-    if (existing) {
-      return NextResponse.json(
-        { error: "A staff member with that email already exists." },
-        { status: 409 }
-      );
-    }
-
-    const staffId = `staff-${crypto.randomUUID()}`;
-
-    const { authUserId } = await provisionAuthUser({
-      email,
-      password,
-      role,
-      userMetadata: {
+  const { authUserId } = await provisionAuthUser({
+    email,
+    password,
+    role,
+    userMetadata: { full_name: fullName },
+    insertRoleRow: async (createdAuthUserId) => {
+      const { error: insertErr } = await admin.from("staff").insert({
+        id: staffId,
+        auth_user_id: createdAuthUserId,
         full_name: fullName,
-      },
-      insertRoleRow: async (createdAuthUserId) => {
-        const { error: insertErr } = await admin.from("staff").insert({
-          id: staffId,
-          auth_user_id: createdAuthUserId,
-          full_name: fullName,
-          email,
-          phone: phone || null,
-          role,
-          region: region || null,
-          terminal_id: terminalId || null,
-          is_active: true,
-        });
+        email,
+        phone: phone || null,
+        role,
+        region: region || null,
+        terminal_id: terminalId || null,
+        is_active: true,
+      });
 
-        if (insertErr) {
-          throw new Error(`staff insert failed: ${insertErr.message}`);
-        }
-      },
-    });
+      if (insertErr) {
+        throw new Error(`staff insert failed: ${insertErr.message}`);
+      }
+    },
+  });
 
-    const { data: staffRow } = await admin
-      .from("staff")
-      .select(
-        "id, auth_user_id, full_name, email, phone, role, region, terminal_id, is_active, last_login_at, created_at, updated_at"
-      )
-      .eq("auth_user_id", authUserId)
-      .single();
+  const { data: staffRow } = await admin
+    .from("staff")
+    .select(
+      "id, auth_user_id, full_name, email, phone, role, region, terminal_id, is_active, last_login_at, created_at, updated_at"
+    )
+    .eq("auth_user_id", authUserId)
+    .single();
 
-    await writeAudit(admin, {
-      action: "staff.create",
-      actorId: session.staffId ?? session.authUserId,
-      actorRole: "super-admin",
-      entityType: "staff",
-      entityId: staffId,
-      summary: `Created ${role} ${fullName}`,
-    });
+  await writeAudit(admin, {
+    action: "staff.create",
+    actorId: session.staffId ?? session.authUserId,
+    actorRole: "super-admin",
+    entityType: "staff",
+    entityId: staffId,
+    summary: `Created ${role} ${fullName}`,
+  });
 
-    return NextResponse.json({
+  return ok(
+    {
       success: true,
       staff: staffRow
         ? {
@@ -139,10 +114,7 @@ export async function POST(request: NextRequest) {
           }
         : { id: staffId, authUserId, email },
       credentials: { email, password },
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/staff] POST error:", err);
-    return NextResponse.json({ error: message }, { status: statusFor(message) });
-  }
-}
+    },
+    { status: 201 }
+  );
+});
