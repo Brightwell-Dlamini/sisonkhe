@@ -6,7 +6,6 @@
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 import { matchesRegion } from "../auth/region";
-import { marshalAssignableToRoute } from "@/lib/domain/eligibility";
 
 export interface MarshalRow {
   id: string;
@@ -75,7 +74,6 @@ function mapMarshal(row: Record<string, unknown>): MarshalRow {
   };
 }
 
-/** @param regionScope null = national */
 export async function listMarshals(
   regionScope: string | null = null
 ): Promise<MarshalRow[]> {
@@ -175,22 +173,18 @@ export async function createMarshal(input: CreateMarshalInput): Promise<{
     }
   }
 
+  // One active marshal per route: clear previous occupant
   if (input.assignedRouteId) {
-    const { data: occupant } = await admin
+    await admin
       .from("marshals")
-      .select("id")
+      .update({
+        assigned_route_id: null,
+        updated_at: Date.now(),
+        synced_at: Date.now(),
+        sync_status: "synced",
+      })
       .eq("assigned_route_id", input.assignedRouteId)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    const check = marshalAssignableToRoute(
-      { id: "new", isActive: true, assignedRouteId: null },
-      input.assignedRouteId,
-      occupant?.id as string | null | undefined
-    );
-    if (!check.eligible) {
-      return { success: false, error: check.reason };
-    }
+      .eq("is_active", true);
   }
 
   const id = `marshal-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -244,43 +238,19 @@ export async function updateMarshal(
 ): Promise<{ success: boolean; error?: string }> {
   const admin = createSupabaseAdminClient();
 
-  if (input.assignedRouteId !== undefined && input.assignedRouteId) {
-    const existing = await getMarshalById(id);
-    if (existing) {
-      const { data: occupant } = await admin
-        .from("marshals")
-        .select("id")
-        .eq("assigned_route_id", input.assignedRouteId)
-        .eq("is_active", true)
-        .neq("id", id)
-        .maybeSingle();
-
-      // Explicit reassignment: clear the previous occupant of this corridor
-      if (occupant?.id) {
-        await admin
-          .from("marshals")
-          .update({
-            assigned_route_id: null,
-            updated_at: Date.now(),
-            synced_at: Date.now(),
-            sync_status: "synced",
-          })
-          .eq("id", occupant.id);
-      }
-
-      const check = marshalAssignableToRoute(
-        {
-          id,
-          isActive: input.isActive ?? existing.isActive,
-          assignedRouteId: existing.assignedRouteId,
-        },
-        input.assignedRouteId,
-        null
-      );
-      if (!check.eligible) {
-        return { success: false, error: check.reason };
-      }
-    }
+  // Explicit reassignment: clear ANY other active marshal on this corridor
+  if (input.assignedRouteId) {
+    await admin
+      .from("marshals")
+      .update({
+        assigned_route_id: null,
+        updated_at: Date.now(),
+        synced_at: Date.now(),
+        sync_status: "synced",
+      })
+      .eq("assigned_route_id", input.assignedRouteId)
+      .eq("is_active", true)
+      .neq("id", id);
   }
 
   const patch: Record<string, unknown> = {};
