@@ -32,6 +32,16 @@ export interface MarshalVehicle {
   driverName: string | null;
   driverPhone: string | null;
   lastActive: string | null;
+  // Rank Coach inputs
+  permitStatus: string | null;
+  permitExpiryDate: string | null;
+  cofExpiryDate: string | null;
+  insuranceExpiry: string | null;
+  roadworthinessExpiry: string | null;
+  driverStatus: string | null;
+  driverPdpStatus: string | null;
+  driverPdpExpiry: string | null;
+  printPending: boolean;
 }
 
 export async function getMarshalContext(
@@ -66,7 +76,6 @@ async function routeIdsForMarshal(context: MarshalContext): Promise<string[]> {
   const admin = createSupabaseAdminClient();
   if (context.assignedRouteId) return [context.assignedRouteId];
 
-  // Case-insensitive region match (Hhohho vs HHOHHO vs hhohho)
   const { data: routes } = await admin
     .from("routes")
     .select("id")
@@ -87,7 +96,9 @@ export async function listVehiclesForMarshal(
       `
       registration_number, vic, make, model, seating_capacity, classification,
       status, current_queue_position, loading_bay,
-      route_assignment_id, driver_id, updated_at
+      route_assignment_id, driver_id, updated_at,
+      permit_status, permit_expiry_date, cof_expiry_date,
+      insurance_expiry, roadworthiness_expiry
     `
     )
     .in("route_assignment_id", routeIds)
@@ -113,7 +124,9 @@ export async function listVehiclesForMarshal(
           `
           registration_number, vic, make, model, seating_capacity, classification,
           status, current_queue_position, loading_bay,
-          route_assignment_id, driver_id, updated_at
+          route_assignment_id, driver_id, updated_at,
+          permit_status, permit_expiry_date, cof_expiry_date,
+          insurance_expiry, roadworthiness_expiry
         `
         )
         .in("route_assignment_id", routeIds)
@@ -144,17 +157,47 @@ export async function listVehiclesForMarshal(
     .map((v) => v.driver_id as string | null)
     .filter((id): id is string => !!id);
 
-  const driverMap = new Map<string, { name: string; phone: string | null }>();
+  const driverMap = new Map<
+    string,
+    {
+      name: string;
+      phone: string | null;
+      status: string | null;
+      pdpStatus: string | null;
+      pdpExpiry: string | null;
+    }
+  >();
   if (driverIds.length > 0) {
     const { data: drivers } = await admin
       .from("drivers")
-      .select("id, full_name, phone")
+      .select("id, full_name, phone, status, pdp_status, pdp_expiry_date")
       .in("id", driverIds);
     for (const d of drivers ?? []) {
       driverMap.set(d.id as string, {
         name: d.full_name as string,
         phone: (d.phone as string | null) ?? null,
+        status: (d.status as string | null) ?? null,
+        pdpStatus: (d.pdp_status as string | null) ?? null,
+        pdpExpiry: (d.pdp_expiry_date as string | null) ?? null,
       });
+    }
+  }
+
+  // Batch print-pending: Approved renewals not yet Printed
+  const regs = vehicleList.map((v) => v.registration_number as string);
+  const printPendingSet = new Set<string>();
+  if (regs.length > 0) {
+    try {
+      const { data: pending } = await admin
+        .from("permit_renewal_requests")
+        .select("vehicle_reg, status")
+        .in("vehicle_reg", regs)
+        .eq("status", "Approved");
+      for (const p of pending ?? []) {
+        printPendingSet.add(p.vehicle_reg as string);
+      }
+    } catch {
+      /* ignore */
     }
   }
 
@@ -163,9 +206,10 @@ export async function listVehiclesForMarshal(
     const route = routeId ? routeMap.get(routeId) : null;
     const driverId = v.driver_id as string | null;
     const driver = driverId ? driverMap.get(driverId) : null;
+    const reg = v.registration_number as string;
 
     return {
-      registrationNumber: v.registration_number as string,
+      registrationNumber: reg,
       vic: (v.vic as string | null) ?? null,
       make: v.make as string,
       model: v.model as string,
@@ -181,6 +225,15 @@ export async function listVehiclesForMarshal(
       driverName: driver?.name ?? null,
       driverPhone: driver?.phone ?? null,
       lastActive: (v.updated_at as string | null) ?? null,
+      permitStatus: (v.permit_status as string | null) ?? null,
+      permitExpiryDate: (v.permit_expiry_date as string | null) ?? null,
+      cofExpiryDate: (v.cof_expiry_date as string | null) ?? null,
+      insuranceExpiry: (v.insurance_expiry as string | null) ?? null,
+      roadworthinessExpiry: (v.roadworthiness_expiry as string | null) ?? null,
+      driverStatus: driver?.status ?? null,
+      driverPdpStatus: driver?.pdpStatus ?? null,
+      driverPdpExpiry: driver?.pdpExpiry ?? null,
+      printPending: printPendingSet.has(reg),
     };
   });
 }
