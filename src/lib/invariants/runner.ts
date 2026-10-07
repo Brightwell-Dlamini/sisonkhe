@@ -2,14 +2,9 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Phase 0 — Invariant runner.
- *
- * Two operations:
- *   runInvariantChecks()  → calls run_all_invariant_checks() in Postgres
- *   loadLatestReport()    → reads the most recent run's violations
- *
- * Uses the admin client because the RPCs are SECURITY DEFINER and the
- * violation table is super-admin-read-only for normal users.
+ * Invariant runner.
+ *   runInvariantChecks()  → Postgres run_all_invariant_checks()
+ *   loadLatestReport()    → open violations, grouped, with severity
  */
 
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
@@ -19,6 +14,7 @@ import type {
   InvariantRunSummary,
   InvariantViolation,
 } from "./types";
+import { invariantSeverity } from "./types";
 
 export async function runInvariantChecks(): Promise<InvariantRunSummary> {
   const admin = createSupabaseAdminClient();
@@ -40,26 +36,37 @@ export async function runInvariantChecks(): Promise<InvariantRunSummary> {
 export async function loadLatestReport(): Promise<InvariantReport> {
   const admin = createSupabaseAdminClient();
 
-  // Most recent run id — any violation shares the prefix of its run id.
-  // We take the max detected_at and pull everything within 60 seconds of it.
-  const { data: recent, error: recentErr } = await admin
+  // Prefer unresolved (still open) violations; fall back to recent history.
+  const { data: openRows, error: openErr } = await admin
     .from("invariant_violations")
     .select("*")
-    .order("detected_at", { ascending: false })
+    .is("resolved_at", null)
+    .order("last_seen_at", { ascending: false })
     .limit(500);
 
-  if (recentErr) {
-    throw new Error(`loadLatestReport failed: ${recentErr.message}`);
+  if (openErr) {
+    throw new Error(`loadLatestReport failed: ${openErr.message}`);
   }
 
-  const all = (recent ?? []) as InvariantViolation[];
+  let all = (openRows ?? []) as InvariantViolation[];
+
+  if (all.length === 0) {
+    const { data: recent, error: recentErr } = await admin
+      .from("invariant_violations")
+      .select("*")
+      .order("detected_at", { ascending: false })
+      .limit(100);
+
+    if (recentErr) {
+      throw new Error(`loadLatestReport history failed: ${recentErr.message}`);
+    }
+    all = (recent ?? []) as InvariantViolation[];
+  }
 
   if (all.length === 0) {
     return { summary: null, violations: [], grouped: [] };
   }
 
-  // Group all returned rows by invariant. If the table is empty, this is
-  // silent and clean — which is what we want Phase 0 to look like.
   const byInvariant = new Map<string, InvariantViolation[]>();
   for (const v of all) {
     const arr = byInvariant.get(v.invariant) ?? [];
@@ -71,22 +78,35 @@ export async function loadLatestReport(): Promise<InvariantReport> {
     .map(([invariant, items]) => ({
       invariant,
       count: items.length,
+      severity: invariantSeverity(invariant),
       examples: items.slice(0, 5),
     }))
-    .sort((a, b) => b.count - a.count);
+    .sort((a, b) => {
+      const rank = { critical: 0, high: 1, medium: 2, low: 3 };
+      const sr = rank[a.severity] - rank[b.severity];
+      if (sr !== 0) return sr;
+      return b.count - a.count;
+    });
 
-  // Summary is best-effort: we don't have run_id on the row, so we infer
-  // from the most recent detected_at bucket.
-  const latestDetectedAt = all[0]?.detected_at ?? null;
-  const summary: InvariantRunSummary | null = latestDetectedAt
+  const open = all.filter((v) => !v.resolved_at);
+  const latestSeen =
+    open
+      .map((v) => v.last_seen_at ?? v.detected_at)
+      .sort()
+      .at(-1) ?? all[0]?.detected_at ?? null;
+
+  const summary: InvariantRunSummary | null = latestSeen
     ? {
-        run_id: "inferred",
-        ran_at: latestDetectedAt,
-        money: all.filter((v) => v.invariant.startsWith("money.")).length,
-        identity: all.filter((v) => v.invariant.startsWith("identity."))
-          .length,
-        operational: all.filter((v) => v.invariant.startsWith("ops.")).length,
-        total: all.length,
+        run_id: "open",
+        ran_at: latestSeen,
+        money: open.filter((v) => v.invariant.startsWith("money.")).length,
+        identity: open.filter((v) => v.invariant.startsWith("identity.")).length,
+        operational: open.filter((v) => v.invariant.startsWith("ops.")).length,
+        authority: open.filter((v) => v.invariant.startsWith("authority.")).length,
+        compliance: open.filter((v) =>
+          v.invariant.startsWith("compliance.")
+        ).length,
+        total: open.length,
       }
     : null;
 
