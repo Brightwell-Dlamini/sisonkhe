@@ -3,65 +3,61 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { requireServerRole } from "@/lib/auth/session";
 import { generateTempPassword } from "@/lib/drivers/generators";
+import { writeAudit } from "@/lib/domain/audit";
+import { AppError } from "@/lib/api/errors";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const ALLOWED_ROLES = ["super-admin", "admin", "fleet-manager"] as const;
 
-interface Params {
-  params: Promise<{ id: string }>;
-}
+type Ctx = { params: Promise<{ id: string }> };
 
-export async function POST(_: NextRequest, { params }: Params) {
-  try {
-    await requireServerRole([...ALLOWED_ROLES]);
-    const { id } = await params;
+export const POST = withApiHandler(async (_: NextRequest, ctx: Ctx) => {
+  const session = await requireServerRole([...ALLOWED_ROLES]);
+  const { id } = await ctx.params;
 
-    const admin = createSupabaseAdminClient();
+  const admin = createSupabaseAdminClient();
 
-    const { data: driverRow, error: fetchErr } = await admin
-      .from("drivers")
-      .select("auth_user_id, full_name")
-      .eq("id", id)
-      .maybeSingle();
+  const { data: driverRow, error: fetchErr } = await admin
+    .from("drivers")
+    .select("auth_user_id, full_name")
+    .eq("id", id)
+    .maybeSingle();
 
-    if (fetchErr || !driverRow?.auth_user_id) {
-      return NextResponse.json(
-        { error: "Driver not found or has no login account" },
-        { status: 404 }
-      );
-    }
-
-    const newPassword = generateTempPassword();
-
-    const { error: updateErr } = await admin.auth.admin.updateUserById(
-      driverRow.auth_user_id,
-      { password: newPassword }
-    );
-
-    if (updateErr) {
-      return NextResponse.json(
-        { error: `Password reset failed: ${updateErr.message}` },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      tempPassword: newPassword,
-      fullName: driverRow.full_name,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    const status =
-      message === "UNAUTHENTICATED" ? 401 :
-      message === "FORBIDDEN" ? 403 : 500;
-    console.error("[api/drivers/reset-password] error:", err);
-    return NextResponse.json({ error: message }, { status });
+  if (fetchErr || !driverRow?.auth_user_id) {
+    throw AppError.notFound("Driver login account");
   }
-}
+
+  const newPassword = generateTempPassword();
+
+  const { error: updateErr } = await admin.auth.admin.updateUserById(
+    driverRow.auth_user_id,
+    { password: newPassword }
+  );
+
+  if (updateErr) {
+    throw AppError.internal(`Password reset failed: ${updateErr.message}`);
+  }
+
+  await writeAudit(admin, {
+    action: "driver.reset_password",
+    actorId: session.authUserId,
+    actorRole: session.role,
+    actorName: session.fullName,
+    entityType: "driver",
+    entityId: id,
+    summary: `Reset password for ${driverRow.full_name}`,
+  });
+
+  return ok({
+    success: true,
+    tempPassword: newPassword,
+    fullName: driverRow.full_name,
+  });
+});
