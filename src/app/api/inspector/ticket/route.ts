@@ -8,6 +8,12 @@ import { requirePermission } from "@/lib/auth/session";
 import { createTicketSchema } from "@/lib/inspector/validation";
 import { createTicket, listTicketsForOfficer } from "@/lib/inspector/queries";
 import { rateLimit } from "@/lib/domain/rateLimit";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import {
+  notifyOperatorOfVehicle,
+  notifyDriverById,
+} from "@/lib/notifications/service";
+import { normalizePlate } from "@/lib/domain/identity";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,7 +22,6 @@ export async function GET() {
   try {
     const session = await requirePermission("inspector.ticket");
 
-    // officerUserId — not region (previous bug filtered wrong)
     const tickets = await listTicketsForOfficer(
       session.fullName,
       session.authUserId,
@@ -65,6 +70,37 @@ export async function POST(request: NextRequest) {
       badgeNumber: session.staffId ?? null,
       userId: session.authUserId,
     });
+
+    const plate = normalizePlate(parsed.data.vehicleReg);
+    void notifyOperatorOfVehicle(plate, {
+      type: "ticket.issue",
+      title: "Traffic ticket issued",
+      message: `${plate}: ${parsed.data.offenseType} — E${Number(parsed.data.amountSzl).toFixed(2)} (${ticket.ticketNumber}).`,
+      href: "/operator",
+      entityType: "ticket",
+      entityId: ticket.id,
+    });
+
+    try {
+      const admin = createSupabaseAdminClient();
+      const { data: v } = await admin
+        .from("vehicles")
+        .select("driver_id")
+        .eq("registration_number", plate)
+        .maybeSingle();
+      if (v?.driver_id) {
+        void notifyDriverById(v.driver_id as string, {
+          type: "ticket.issue",
+          title: "Traffic ticket on your vehicle",
+          message: `${plate}: ${parsed.data.offenseType}. Speak to your operator.`,
+          href: "/driver",
+          entityType: "ticket",
+          entityId: ticket.id,
+        });
+      }
+    } catch {
+      /* non-fatal */
+    }
 
     return NextResponse.json({ success: true, ticket });
   } catch (err) {
