@@ -2,29 +2,24 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Marshal claim flow. Two phases:
- *
- *   PUT  /api/auth/claim  — verify identity (national ID + phone)
- *   POST /api/auth/claim  — create auth user, link to existing marshal row
- *
- * Marshals were collected as data (no auth users) during pre-rollout.
- * This route is where they claim their pre-existing row.
- *
- * Uses the DB function link_marshal_auth (id_number, phone, auth_user_id)
- * for the atomic link. claimExistingRow guarantees rollback if linking fails.
+ * Marshal claim flow.
+ *   PUT  — verify identity
+ *   POST — create auth user, link to existing marshal row
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import {
   createSupabaseAdminClient,
   createSupabaseServerClient,
 } from "@/lib/supabase/server";
 import { looseAdmin, rpcRow } from "@/lib/supabase/rpc";
 import { resolveUserRole } from "@/lib/auth/roles";
-import { rateLimit } from "@/lib/domain/rateLimit";
+import { rateLimitAsync } from "@/lib/domain/rateLimit";
 import { isUsernameTaken, claimUsername } from "@/lib/domain/usernames";
 import { writeAudit } from "@/lib/domain/audit";
 import { claimExistingRow } from "@/lib/auth/provision";
+import { AppError } from "@/lib/api/errors";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,238 +32,179 @@ function clientIp(request: NextRequest): string {
   );
 }
 
-// ---------------------------------------------------------------------------
-// PUT — verify identity
-// ---------------------------------------------------------------------------
-
-export async function PUT(request: NextRequest) {
-  try {
-    const rl = rateLimit(`claim:${clientIp(request)}`, 15, 15 * 60_000);
-    if (!rl.ok) {
-      return NextResponse.json(
-        { error: "Too many attempts. Try again later." },
-        { status: 429 }
-      );
-    }
-
-    const body = await request.json();
-    const idNumber = String(body.idNumber ?? "").trim().replace(/\s+/g, "");
-    const phone = String(body.phone ?? "").trim();
-
-    if (!idNumber || !phone) {
-      return NextResponse.json(
-        { error: "National ID and phone number are required." },
-        { status: 400 }
-      );
-    }
-
-    const admin = createSupabaseAdminClient();
-    const { data, error } = await looseAdmin(admin).rpc(
-      "verify_marshal_identity",
-      { p_id_number: idNumber, p_phone: phone }
-    );
-
-    if (error) {
-      console.error("[claim] verify_marshal_identity error:", error);
-      return NextResponse.json(
-        { error: "Verification service unavailable." },
-        { status: 500 }
-      );
-    }
-
-    const row = rpcRow<{
-      already_claimed?: boolean;
-      full_name?: string;
-      marshal_id?: string;
-    }>(data);
-
-    if (!row) {
-      return NextResponse.json(
-        {
-          error:
-            "No marshal found with that National ID and phone number. Check your details or contact your supervisor.",
-        },
-        { status: 404 }
-      );
-    }
-
-    if (row.already_claimed) {
-      return NextResponse.json(
-        {
-          error:
-            "This account has already been claimed. If you forgot your password, contact your supervisor to reset it.",
-        },
-        { status: 409 }
-      );
-    }
-
-    return NextResponse.json({
-      verified: true,
-      fullName: row.full_name,
-      marshalId: row.marshal_id,
+export const PUT = withApiHandler(async (request: NextRequest) => {
+  const rl = await rateLimitAsync(`claim:${clientIp(request)}`, 15, 15 * 60_000);
+  if (!rl.ok) {
+    throw new AppError("RATE_LIMITED", "Too many attempts. Try again later.", {
+      details: { retryAfterSec: rl.retryAfterSec },
     });
-  } catch (err) {
-    console.error("[api/auth/claim] PUT error:", err);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+  }
+
+  const body = await request.json();
+  const idNumber = String(body.idNumber ?? "").trim().replace(/\s+/g, "");
+  const phone = String(body.phone ?? "").trim();
+
+  if (!idNumber || !phone) {
+    throw AppError.validation("National ID and phone number are required.");
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await looseAdmin(admin).rpc("verify_marshal_identity", {
+    p_id_number: idNumber,
+    p_phone: phone,
+  });
+
+  if (error) {
+    console.error("[claim] verify_marshal_identity error:", error);
+    throw AppError.internal("Verification service unavailable.");
+  }
+
+  const row = rpcRow<{
+    already_claimed?: boolean;
+    full_name?: string;
+    marshal_id?: string;
+  }>(data);
+
+  if (!row) {
+    throw AppError.notFound(
+      "Marshal with that National ID and phone number"
     );
   }
-}
 
-// ---------------------------------------------------------------------------
-// POST — claim
-// ---------------------------------------------------------------------------
-
-export async function POST(request: NextRequest) {
-  try {
-    const rl = rateLimit(`claim-post:${clientIp(request)}`, 10, 15 * 60_000);
-    if (!rl.ok) {
-      return NextResponse.json(
-        { error: "Too many attempts. Try again later." },
-        { status: 429 }
-      );
-    }
-
-    const body = await request.json();
-    const idNumber = String(body.idNumber ?? "").trim().replace(/\s+/g, "");
-    const phone = String(body.phone ?? "").trim();
-    const username = String(body.username ?? "").trim().toLowerCase();
-    const password = String(body.password ?? "");
-
-    if (!idNumber || !phone || !username || !password) {
-      return NextResponse.json(
-        { error: "All fields are required." },
-        { status: 400 }
-      );
-    }
-
-    if (!/^[a-z0-9._]{3,32}$/.test(username)) {
-      return NextResponse.json(
-        {
-          error:
-            "Username must be 3-32 characters, lowercase letters, numbers, dots or underscores only.",
-        },
-        { status: 400 }
-      );
-    }
-
-    if (password.length < 8) {
-      return NextResponse.json(
-        { error: "Password must be at least 8 characters." },
-        { status: 400 }
-      );
-    }
-
-    const admin = createSupabaseAdminClient();
-    const loose = looseAdmin(admin);
-
-    const { data: verifyData, error: verifyErr } = await loose.rpc(
-      "verify_marshal_identity",
-      { p_id_number: idNumber, p_phone: phone }
+  if (row.already_claimed) {
+    throw AppError.conflict(
+      "This account has already been claimed. If you forgot your password, contact your supervisor to reset it."
     );
+  }
 
-    if (verifyErr) {
-      return NextResponse.json(
-        { error: "Verification service unavailable." },
-        { status: 500 }
-      );
-    }
+  return ok({
+    verified: true,
+    fullName: row.full_name,
+    marshalId: row.marshal_id,
+  });
+});
 
-    const match = rpcRow<{
-      already_claimed?: boolean;
-      full_name?: string;
-      marshal_id: string;
-    }>(verifyData);
+export const POST = withApiHandler(async (request: NextRequest) => {
+  const rl = await rateLimitAsync(
+    `claim-post:${clientIp(request)}`,
+    10,
+    15 * 60_000
+  );
+  if (!rl.ok) {
+    throw new AppError("RATE_LIMITED", "Too many attempts. Try again later.", {
+      details: { retryAfterSec: rl.retryAfterSec },
+    });
+  }
 
-    if (!match) {
-      return NextResponse.json(
-        { error: "Identity verification failed." },
-        { status: 404 }
-      );
-    }
-    if (match.already_claimed) {
-      return NextResponse.json(
-        { error: "This account has already been claimed." },
-        { status: 409 }
-      );
-    }
+  const body = await request.json();
+  const idNumber = String(body.idNumber ?? "").trim().replace(/\s+/g, "");
+  const phone = String(body.phone ?? "").trim();
+  const username = String(body.username ?? "").trim().toLowerCase();
+  const password = String(body.password ?? "");
 
-    if (await isUsernameTaken(admin, username)) {
-      return NextResponse.json(
-        { error: "That username is already taken. Please choose another." },
-        { status: 409 }
-      );
-    }
+  if (!idNumber || !phone || !username || !password) {
+    throw AppError.validation("All fields are required.");
+  }
 
-    const marshalId = match.marshal_id;
-    const syntheticEmail = `${marshalId}@marshal.sisonkhe.local`;
+  if (!/^[a-z0-9._]{3,32}$/.test(username)) {
+    throw AppError.validation(
+      "Username must be 3-32 characters, lowercase letters, numbers, dots or underscores only."
+    );
+  }
 
-    const { authUserId } = await claimExistingRow({
+  if (password.length < 8) {
+    throw AppError.validation("Password must be at least 8 characters.");
+  }
+
+  const admin = createSupabaseAdminClient();
+  const loose = looseAdmin(admin);
+
+  const { data: verifyData, error: verifyErr } = await loose.rpc(
+    "verify_marshal_identity",
+    { p_id_number: idNumber, p_phone: phone }
+  );
+
+  if (verifyErr) {
+    throw AppError.internal("Verification service unavailable.");
+  }
+
+  const match = rpcRow<{
+    already_claimed?: boolean;
+    full_name?: string;
+    marshal_id: string;
+  }>(verifyData);
+
+  if (!match) throw AppError.notFound("Identity match");
+  if (match.already_claimed) {
+    throw AppError.conflict("This account has already been claimed.");
+  }
+
+  if (await isUsernameTaken(admin, username)) {
+    throw AppError.conflict("That username is already taken. Please choose another.");
+  }
+
+  const marshalId = match.marshal_id;
+  const syntheticEmail = `${marshalId}@marshal.sisonkhe.local`;
+
+  const { authUserId } = await claimExistingRow({
+    email: syntheticEmail,
+    password,
+    role: "marshal",
+    userMetadata: {
+      username,
+      full_name: match.full_name,
+      marshal_id: marshalId,
+      must_change_password: false,
+    },
+    linkExistingRow: async (createdAuthUserId) => {
+      const { data, error } = await loose.rpc("link_marshal_auth", {
+        p_id_number: idNumber,
+        p_phone: phone,
+        p_auth_user_id: createdAuthUserId,
+      });
+      if (error) {
+        throw new Error(`link_marshal_auth failed: ${error.message}`);
+      }
+      return data === true;
+    },
+  });
+
+  await claimUsername(admin, username, authUserId, "marshal");
+
+  await writeAudit(admin, {
+    action: "marshal.claim.success",
+    actorId: authUserId,
+    actorRole: "marshal",
+    entityType: "marshals",
+    entityId: marshalId,
+    summary: `Marshal ${marshalId} claimed account`,
+  });
+
+  const supabase = await createSupabaseServerClient();
+  const { data: signIn, error: signInErr } =
+    await supabase.auth.signInWithPassword({
       email: syntheticEmail,
       password,
-      role: "marshal",
-      userMetadata: {
-        username,
-        full_name: match.full_name,
-        marshal_id: marshalId,
-        must_change_password: false,
-      },
-      linkExistingRow: async (createdAuthUserId) => {
-        const { data, error } = await loose.rpc("link_marshal_auth", {
-          p_id_number: idNumber,
-          p_phone: phone,
-          p_auth_user_id: createdAuthUserId,
-        });
-        if (error) {
-          throw new Error(`link_marshal_auth failed: ${error.message}`);
-        }
-        return data === true;
-      },
     });
 
-    await claimUsername(admin, username, authUserId, "marshal");
-
-    await writeAudit(admin, {
-      action: "claim.success",
-      actorId: authUserId,
-      actorRole: "marshal",
-      entityType: "marshals",
-      entityId: marshalId,
-      summary: `Marshal ${marshalId} claimed account`,
-    });
-
-    const supabase = await createSupabaseServerClient();
-    const { data: signIn, error: signInErr } =
-      await supabase.auth.signInWithPassword({
-        email: syntheticEmail,
-        password,
-      });
-
-    if (signInErr || !signIn.user) {
-      return NextResponse.json({
-        success: true,
-        signedIn: false,
-        message:
-          "Account created. Please sign in at the login page with your new credentials.",
-      });
-    }
-
-    const resolved = await resolveUserRole(
-      signIn.user.id,
-      signIn.user.email ?? null,
-      signIn.user.phone ?? null
-    );
-
-    return NextResponse.json({
+  if (signInErr || !signIn.user) {
+    return ok({
       success: true,
-      signedIn: true,
-      user: resolved,
+      signedIn: false,
+      message:
+        "Account created. Please sign in at the login page with your new credentials.",
     });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    const status = message.toLowerCase().includes("already") ? 409 : 500;
-    console.error("[api/auth/claim] POST error:", err);
-    return NextResponse.json({ error: message }, { status });
   }
-}
+
+  const resolved = await resolveUserRole(
+    signIn.user.id,
+    signIn.user.email ?? null,
+    signIn.user.phone ?? null
+  );
+
+  return ok({
+    success: true,
+    signedIn: true,
+    user: resolved,
+  });
+});
