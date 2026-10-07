@@ -1,25 +1,23 @@
-import { NextRequest, NextResponse } from "next/server";
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import type { NextRequest } from "next/server";
 import { requireServerRole } from "@/lib/auth/session";
 import { listSystemErrors, logSystemError } from "@/lib/super/errors";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
-  try {
-    await requireServerRole(["super-admin"]);
-    return NextResponse.json({ errors: await listSystemErrors() });
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
-  }
-}
+export const GET = withApiHandler(async () => {
+  await requireServerRole(["super-admin"]);
+  return ok({ errors: await listSystemErrors() });
+});
 
-export async function POST(req: NextRequest) {
-  try {
-    await requireServerRole(["super-admin"]);
-    const body = await req.json();
-    return NextResponse.json(await logSystemError(body));
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
-  }
-}
+export const POST = withApiHandler(async (req: NextRequest) => {
+  await requireServerRole(["super-admin"]);
+  const body = await req.json();
+  return ok(await logSystemError(body), { status: 201 });
+});

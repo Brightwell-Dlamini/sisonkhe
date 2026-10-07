@@ -1,15 +1,16 @@
-import { NextResponse } from "next/server";
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { requireServerRole } from "@/lib/auth/session";
 import { getStorageEstimate } from "@/lib/super/storage";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
-  try {
-    await requireServerRole(["super-admin"]);
-    return NextResponse.json(await getStorageEstimate());
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
-  }
-}
+export const GET = withApiHandler(async () => {
+  await requireServerRole(["super-admin"]);
+  return ok(await getStorageEstimate());
+});

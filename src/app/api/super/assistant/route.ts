@@ -1,18 +1,21 @@
-import { NextRequest, NextResponse } from "next/server";
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import type { NextRequest } from "next/server";
 import { requireServerRole } from "@/lib/auth/session";
 import { runAssistantQuery } from "@/lib/super/assistant";
+import { AppError } from "@/lib/api/errors";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function POST(req: NextRequest) {
-  try {
-    const user = await requireServerRole(["super-admin"]);
-    const body = await req.json();
-    const q = String(body.query ?? "");
-    if (!q.trim()) return NextResponse.json({ error: "query required" }, { status: 400 });
-    return NextResponse.json(await runAssistantQuery(q, user));
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
-  }
-}
+export const POST = withApiHandler(async (req: NextRequest) => {
+  const user = await requireServerRole(["super-admin"]);
+  const body = await req.json();
+  const q = String(body.query ?? "");
+  if (!q.trim()) throw AppError.validation("query required");
+  return ok(await runAssistantQuery(q, user));
+});
