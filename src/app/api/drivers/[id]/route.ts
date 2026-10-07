@@ -14,6 +14,10 @@ import {
 import { getDriverById } from "@/lib/drivers/queries";
 import { normalizePlate } from "@/lib/domain/identity";
 import { writeAudit } from "@/lib/domain/audit";
+import {
+  notifyDriverById,
+  notifyOperatorOfVehicle,
+} from "@/lib/notifications/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -81,7 +85,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const admin = createSupabaseAdminClient();
     const input = parsed.data;
 
-    // Never patch assigned_vehicle_reg here — assignment service only
     const patch: Record<string, unknown> = {};
 
     if (input.fullName !== undefined) patch.full_name = input.fullName;
@@ -160,6 +163,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         entityId: id,
         summary: `Unlinked ${oldVehicle} on suspend of ${current.full_name}`,
       });
+      void notifyDriverById(id, {
+        type: "assignment.unlink",
+        title: "Vehicle unlinked",
+        message: `You were unlinked from ${oldVehicle} (account suspended).`,
+        href: "/driver",
+        entityType: "vehicle",
+        entityId: oldVehicle,
+      });
     }
 
     if (Object.keys(patch).length > 0) {
@@ -205,6 +216,22 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           entityId: id,
           summary: `Unlinked ${oldVehicle}`,
         });
+        void notifyDriverById(id, {
+          type: "assignment.unlink",
+          title: "Vehicle unlinked",
+          message: `You were unlinked from ${oldVehicle}.`,
+          href: "/driver",
+          entityType: "vehicle",
+          entityId: oldVehicle,
+        });
+        void notifyOperatorOfVehicle(oldVehicle, {
+          type: "assignment.unlink",
+          title: "Driver removed",
+          message: `Driver was unlinked from ${oldVehicle}.`,
+          href: "/operator",
+          entityType: "vehicle",
+          entityId: oldVehicle,
+        });
       } else if (newVehicleRaw) {
         try {
           await assignDriverVehicle(admin, {
@@ -232,6 +259,22 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           summary: `Linked driver to ${newVehicleRaw}`,
           after: { vehicleReg: newVehicleRaw },
         });
+        void notifyDriverById(id, {
+          type: "assignment.link",
+          title: "Vehicle assigned",
+          message: `You are now assigned to ${newVehicleRaw}.`,
+          href: "/driver",
+          entityType: "vehicle",
+          entityId: newVehicleRaw,
+        });
+        void notifyOperatorOfVehicle(newVehicleRaw, {
+          type: "assignment.link",
+          title: "Driver linked",
+          message: `${current.full_name} assigned to ${newVehicleRaw}.`,
+          href: "/operator",
+          entityType: "vehicle",
+          entityId: newVehicleRaw,
+        });
       }
     }
 
@@ -245,6 +288,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         entityId: id,
         summary: `Suspended ${current.full_name}`,
         before: { status: current.status, vehicle: oldVehicle },
+      });
+      void notifyDriverById(id, {
+        type: "system",
+        title: "Account suspended",
+        message: "Your driver account was suspended. Contact rank admin.",
+        href: "/login",
+        entityType: "driver",
+        entityId: id,
       });
     } else if (Object.keys(patch).length > 0) {
       await writeAudit(admin, {
@@ -325,7 +376,6 @@ export async function DELETE(_: NextRequest, { params }: Params) {
       }
     }
 
-    // Status only — assignment already cleared by RPC (avoid trigger conflict)
     const { error } = await admin
       .from("drivers")
       .update({
@@ -348,6 +398,15 @@ export async function DELETE(_: NextRequest, { params }: Params) {
       entityType: "driver",
       entityId: id,
       summary: `Suspended (archive) ${driverRow?.full_name ?? id}`,
+    });
+
+    void notifyDriverById(id, {
+      type: "system",
+      title: "Account suspended",
+      message: "Your driver account was suspended. Contact rank admin.",
+      href: "/login",
+      entityType: "driver",
+      entityId: id,
     });
 
     return NextResponse.json({
