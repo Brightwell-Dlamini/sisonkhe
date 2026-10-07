@@ -3,14 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * POST /api/register/vehicle — public asset collection only.
- * Does NOT link driver or operator. Staff assign later.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { selfRegisterVehicleSchema } from "@/lib/vehicles/selfRegister";
 import { normalizePlate } from "@/lib/domain/identity";
-import { rateLimit } from "@/lib/domain/rateLimit";
+import { rateLimitAsync } from "@/lib/domain/rateLimit";
+import { AppError } from "@/lib/api/errors";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,116 +39,103 @@ function generateVIC(reg: string): string {
   return `${prefix}-${digits}`;
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const ip =
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      request.headers.get("x-real-ip") ||
-      "unknown";
-    const rl = rateLimit(`reg-vehicle:${ip}`, 15, 15 * 60_000);
-    if (!rl.ok) {
-      return NextResponse.json(
-        { error: "Too many registrations. Try again later." },
-        { status: 429 }
-      );
-    }
+export const POST = withApiHandler(async (request: NextRequest) => {
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown";
+  const rl = await rateLimitAsync(`reg-vehicle:${ip}`, 15, 15 * 60_000);
+  if (!rl.ok) {
+    throw new AppError(
+      "RATE_LIMITED",
+      "Too many registrations. Try again later.",
+      { details: { retryAfterSec: rl.retryAfterSec } }
+    );
+  }
 
-    const body = await request.json();
-    const parsed = selfRegisterVehicleSchema.safeParse(body);
+  const body = await request.json();
+  const parsed = selfRegisterVehicleSchema.safeParse(body);
+  if (!parsed.success) {
+    throw AppError.validation("Validation failed", {
+      issues: parsed.error.flatten().fieldErrors,
+    });
+  }
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        {
-          error: "Validation failed",
-          issues: parsed.error.flatten().fieldErrors,
-        },
-        { status: 400 }
-      );
-    }
+  const input = parsed.data;
+  const plate = normalizePlate(input.registrationNumber);
+  const admin = createSupabaseAdminClient();
 
-    const input = parsed.data;
-    const plate = normalizePlate(input.registrationNumber);
-    const admin = createSupabaseAdminClient();
+  const { data: existing } = await admin
+    .from("vehicles")
+    .select("registration_number")
+    .eq("registration_number", plate)
+    .maybeSingle();
 
-    const { data: existing } = await admin
+  if (existing) {
+    throw AppError.conflict(`Vehicle ${plate} is already registered.`);
+  }
+
+  const vic = generateVIC(plate);
+
+  {
+    const { data: vicClash } = await admin
       .from("vehicles")
       .select("registration_number")
-      .eq("registration_number", plate)
+      .eq("vic", vic)
       .maybeSingle();
-
-    if (existing) {
-      return NextResponse.json(
-        { error: `Vehicle ${plate} is already registered.` },
-        { status: 409 }
+    if (vicClash) {
+      throw AppError.conflict(
+        `Generated VIC ${vic} already exists. Contact admin.`
       );
     }
+  }
 
-    const vic = generateVIC(plate);
+  const { error: insertErr } = await admin.from("vehicles").insert({
+    registration_number: plate,
+    registration_source: "public",
+    vic,
+    make: input.make,
+    model: input.model,
+    seating_capacity: input.seatingCapacity,
+    classification: input.classification,
+    route_assignment_id: null,
+    loading_bay: input.loadingBay || null,
+    owner_name: input.ownerName || null,
+    owner_phone: input.ownerPhone || null,
+    owner_operator_id: null,
+    driver_id: null,
+    status: "Waiting",
+    current_queue_position: 0,
+    permit_number: input.permitNumber || null,
+    permit_status: input.permitNumber ? "Active" : null,
+    permit_issue_date: input.permitIssueDate || null,
+    permit_expiry_date: input.permitExpiryDate || null,
+    cof_number: input.cofNumber || null,
+    cof_issue_date: input.cofIssueDate || null,
+    cof_expiry_date: input.cofExpiryDate || null,
+    last_inspection_date: null,
+    association: input.association || null,
+    insurance_expiry: input.insuranceExpiry || null,
+    roadworthiness_expiry: input.roadworthinessExpiry || null,
+    is_mid_month_addition: false,
+    registration_date: new Date().toISOString().split("T")[0],
+    month_registered: new Date().toISOString().slice(0, 7),
+  });
 
+  if (insertErr) {
+    throw AppError.internal(
+      `Could not register vehicle: ${insertErr.message}`
+    );
+  }
+
+  return ok(
     {
-      const { data: vicClash } = await admin
-        .from("vehicles")
-        .select("registration_number")
-        .eq("vic", vic)
-        .maybeSingle();
-      if (vicClash) {
-        return NextResponse.json(
-          { error: `Generated VIC ${vic} already exists. Contact admin.` },
-          { status: 409 }
-        );
-      }
-    }
-
-    const { error: insertErr } = await admin.from("vehicles").insert({
-      registration_number: plate,
-      registration_source: "public",
-      vic,
-      make: input.make,
-      model: input.model,
-      seating_capacity: input.seatingCapacity,
-      classification: input.classification,
-      route_assignment_id: null,
-      loading_bay: input.loadingBay || null,
-      owner_name: input.ownerName || null,
-      owner_phone: input.ownerPhone || null,
-      owner_operator_id: null,
-      driver_id: null,
-      status: "Waiting",
-      current_queue_position: 0,
-      permit_number: input.permitNumber || null,
-      permit_status: input.permitNumber ? "Active" : null,
-      permit_issue_date: input.permitIssueDate || null,
-      permit_expiry_date: input.permitExpiryDate || null,
-      cof_number: input.cofNumber || null,
-      cof_issue_date: input.cofIssueDate || null,
-      cof_expiry_date: input.cofExpiryDate || null,
-      last_inspection_date: null,
-      association: input.association || null,
-      insurance_expiry: input.insuranceExpiry || null,
-      roadworthiness_expiry: input.roadworthinessExpiry || null,
-      is_mid_month_addition: false,
-      registration_date: new Date().toISOString().split("T")[0],
-      month_registered: new Date().toISOString().slice(0, 7),
-    });
-
-    if (insertErr) {
-      return NextResponse.json(
-        { error: `Could not register vehicle: ${insertErr.message}` },
-        { status: 500 }
-      );
-    }
-
-    // Virtual card is NOT auto-issued on public register — admin/operator does money later.
-
-    return NextResponse.json({
       success: true,
       registrationNumber: plate,
       vic,
       message:
         "Vehicle recorded. No driver was linked. An authorised staff member will assign driver, route, and operator.",
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
+    },
+    { status: 201 }
+  );
+});

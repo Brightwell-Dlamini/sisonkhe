@@ -2,34 +2,26 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * GET /api/sync/status  — lightweight heartbeat + latest seq.
+ * GET /api/sync/status — heartbeat + latest seq.
  */
 
-import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
-  try {
-    const admin = createSupabaseAdminClient();
-    const { data } = await admin
-      .from("sync_events")
-      .select("seq")
-      .order("seq", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+export const GET = withApiHandler(async () => {
+  const admin = createSupabaseAdminClient();
+  const { data } = await admin
+    .from("sync_events")
+    .select("seq")
+    .order("seq", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-    return NextResponse.json({
-      ok: true,
-      serverSeq: data?.seq ?? 0,
-      serverTime: new Date().toISOString(),
-    });
-  } catch (err) {
-    return NextResponse.json(
-      { ok: false, serverTime: new Date().toISOString() },
-      { status: 500 }
-    );
-  }
-}
+  return ok({
+    serverSeq: data?.seq ?? 0,
+    serverTime: new Date().toISOString(),
+  });
+});
