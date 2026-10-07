@@ -2,54 +2,30 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * GET /api/marshal/terminal
- *
- * Returns the calling marshal's context, visible vehicles, and summary stats.
- * One call, one screen's worth of data.
+ * GET /api/marshal/terminal — context + vehicles + summary in one call.
  */
 
-import { NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth/session";
+import { requireServerRole } from "@/lib/auth/session";
 import {
   getMarshalContext,
   listVehiclesForMarshal,
   getMarshalSummary,
 } from "@/lib/marshal/queries";
+import { AppError } from "@/lib/api/errors";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
-  try {
-    const session = await getServerSession();
-    if (!session || session.role !== "marshal") {
-      return NextResponse.json(
-        { error: "Marshal access required" },
-        { status: 403 }
-      );
-    }
+export const GET = withApiHandler(async () => {
+  const session = await requireServerRole(["marshal"]);
+  const context = await getMarshalContext(session.authUserId);
+  if (!context) throw AppError.notFound("Marshal assignment");
 
-    const context = await getMarshalContext(session.authUserId);
-    if (!context) {
-      return NextResponse.json(
-        { error: "Marshal assignment not found" },
-        { status: 404 }
-      );
-    }
+  const [vehicles, summary] = await Promise.all([
+    listVehiclesForMarshal(context),
+    getMarshalSummary(context),
+  ]);
 
-    const [vehicles, summary] = await Promise.all([
-      listVehiclesForMarshal(context),
-      getMarshalSummary(context),
-    ]);
-
-    return NextResponse.json({
-      context,
-      vehicles,
-      summary,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[api/marshal/terminal] error:", err);
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
+  return ok({ context, vehicles, summary });
+});
