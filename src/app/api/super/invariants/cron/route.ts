@@ -2,26 +2,19 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Phase 0 — Nightly invariant cron entry point.
+ * Nightly invariant cron entry point.
  *
  * Called by Vercel Cron. Verifies the CRON_SECRET header, runs the
- * invariant checks, returns the summary.
- *
- * This route is the ONLY way to run checks outside of the super-admin
- * POST /api/super/invariants. It exists so the nightly job does not need
- * a user session.
- *
- * Security:
- *   - Vercel sends `Authorization: Bearer <CRON_SECRET>` automatically
- *     when CRON_SECRET is set in the project env.
- *   - We compare in constant time.
- *   - We do not log the secret.
+ * invariant checks, notifies super-admins when violations are found,
+ * returns the summary.
  */
 
 import { NextResponse } from "next/server";
 import { runInvariantChecks } from "@/lib/invariants/runner";
+import { notifyStaff } from "@/lib/notifications/service";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -36,7 +29,6 @@ export async function GET(request: Request) {
   const expected = process.env.CRON_SECRET;
 
   if (!expected) {
-    // Fail loud — a cron without a secret is a security hole.
     return NextResponse.json(
       { error: "CRON_SECRET is not configured" },
       { status: 500 }
@@ -52,6 +44,22 @@ export async function GET(request: Request) {
 
   try {
     const summary = await runInvariantChecks();
+    const total = Number(summary.total ?? 0);
+
+    if (total > 0) {
+      await notifyStaff(
+        { roles: ["super-admin"] },
+        {
+          type: "system",
+          title: `Invariant run — ${total} open issue(s)`,
+          message: `Money: ${summary.money ?? 0} · Identity: ${summary.identity ?? 0} · Ops: ${summary.operational ?? 0}. Review /admin/super or invariants panel.`,
+          href: "/super/invariants",
+          entityType: "invariant_run",
+          entityId: summary.run_id ?? summary.ran_at,
+        }
+      );
+    }
+
     return NextResponse.json({ ok: true, summary });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
