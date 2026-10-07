@@ -23,6 +23,13 @@ export type NotificationType =
   | "dispatch.breakdown"
   | "ticket.issue"
   | "renewal.submitted"
+  | "compliance.permit_expired"
+  | "compliance.permit_expiring"
+  | "compliance.cof_expired"
+  | "compliance.cof_expiring"
+  | "compliance.pdp_expired"
+  | "compliance.pdp_expiring"
+  | "compliance.digest"
   | "system";
 
 export interface NotifyInput {
@@ -224,7 +231,6 @@ export async function listNotificationsForUser(
     .limit(limit);
 
   if (error) {
-    // Table missing → empty list, not a hard crash
     console.warn("[notifications] list failed:", error.message);
     return [];
   }
