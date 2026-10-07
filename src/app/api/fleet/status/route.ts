@@ -1,5 +1,12 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { NextResponse } from "next/server";
 import { getLastUpdated } from "@/lib/fleetStore";
+import { AppError } from "@/lib/api/errors";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,15 +21,11 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
 
-export async function GET() {
+export const GET = withApiHandler(async () => {
   try {
     const lastUpdated = await getLastUpdated();
-    return NextResponse.json({ lastUpdated }, { headers: CORS_HEADERS });
-  } catch (error) {
-    console.error("[fleet/status] error:", error);
-    return NextResponse.json(
-      { lastUpdated: 0, error: "Failed to read status" },
-      { status: 500, headers: CORS_HEADERS }
-    );
+    return ok({ lastUpdated }, { headers: CORS_HEADERS });
+  } catch {
+    throw AppError.internal("Failed to read status");
   }
-}
+});
