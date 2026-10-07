@@ -4,14 +4,11 @@
  *
  * Payment intent lifecycle.
  *
- * An intent is a request to move money. It has a provider, a status, and a
- * reference. When the provider confirms, we credit the target entity.
- *
  * Money rules:
  * - Intent and client reference ids are cryptographic (never Date.now+Math.random).
  * - creditTarget is idempotent via payment_credits.
- * - If credit fails after status=completed, we mark credit_status=failed and
- *   write an audit row so reconciliation and ops can recover — never silent.
+ * - Card balance updates use optimistic concurrency (eq balance_szl) to prevent lost updates.
+ * - If credit fails after status=completed, we mark credit_status=failed and audit.
  */
 
 import "server-only";
@@ -276,8 +273,8 @@ export async function applyProviderStatus(
 
 /**
  * Credit the target entity. Idempotent via payment_credits.
- * On failure after completed intent: surface via audit + provider_payload flag
- * so reconciliation can detect intent_success_no_credit.
+ * Balance writes are optimistic (eq on previous balance) to prevent lost updates
+ * under concurrent webhooks.
  */
 async function creditTarget(intent: PaymentIntent): Promise<void> {
   const admin = createSupabaseAdminClient();
@@ -300,14 +297,23 @@ async function creditTarget(intent: PaymentIntent): Promise<void> {
 
       if (!card) throw new Error("Master card not found.");
 
-      const { error: balErr } = await admin
+      const prevBal = Number(card.balance_szl);
+      const newBal = prevBal + intent.amountSzl;
+
+      const { data: debited, error: balErr } = await admin
         .from("operator_master_cards")
-        .update({
-          balance_szl: Number(card.balance_szl) + intent.amountSzl,
-        })
-        .eq("id", card.id as string);
+        .update({ balance_szl: newBal })
+        .eq("id", card.id as string)
+        .eq("balance_szl", prevBal)
+        .select("id")
+        .maybeSingle();
 
       if (balErr) throw new Error(balErr.message);
+      if (!debited) {
+        throw new Error(
+          "Master card balance changed concurrently. Retry credit."
+        );
+      }
 
       const { error: txErr } = await admin.from("operator_card_transactions").insert({
         id: newCardTxId(intent.id),
@@ -333,14 +339,23 @@ async function creditTarget(intent: PaymentIntent): Promise<void> {
 
       if (!card) throw new Error("Vehicle card not found.");
 
-      const { error: balErr } = await admin
+      const prevBal = Number(card.balance_szl);
+      const newBal = prevBal + intent.amountSzl;
+
+      const { data: credited, error: balErr } = await admin
         .from("vehicle_virtual_cards")
-        .update({
-          balance_szl: Number(card.balance_szl) + intent.amountSzl,
-        })
-        .eq("id", card.id as string);
+        .update({ balance_szl: newBal })
+        .eq("id", card.id as string)
+        .eq("balance_szl", prevBal)
+        .select("id")
+        .maybeSingle();
 
       if (balErr) throw new Error(balErr.message);
+      if (!credited) {
+        throw new Error(
+          "Vehicle card balance changed concurrently. Retry credit."
+        );
+      }
 
       const { error: txErr } = await admin.from("virtual_card_transactions").insert({
         id: newCardTxId(intent.id),
@@ -356,7 +371,6 @@ async function creditTarget(intent: PaymentIntent): Promise<void> {
 
       if (txErr) throw new Error(txErr.message);
     }
-    // rank_fee / renewal_fee: ledger-only paths handled elsewhere
 
     const { error: creditErr } = await admin.from("payment_credits").insert({
       id: newCreditId(intent.id),
@@ -376,7 +390,6 @@ async function creditTarget(intent: PaymentIntent): Promise<void> {
       error: message,
     });
 
-    // Persist failure signal on the intent so reconciliation can find it
     try {
       await admin
         .from("payment_intents")
