@@ -6,6 +6,7 @@
  *
  * Policy: resolution errors are LOUD. A user whose role cannot be determined
  * is treated as unauthenticated, logged, and never handed a partial identity.
+ * Auth failures throw AppError so route handlers stay free of string matching.
  */
 
 import "server-only";
@@ -21,6 +22,7 @@ import {
   regionScopeOrThrow,
   type Permission,
 } from "./permissions";
+import { AppError } from "@/lib/api/errors";
 
 export async function getServerSession(): Promise<ResolvedUser | null> {
   const supabase = await createSupabaseServerClient();
@@ -34,7 +36,6 @@ export async function getServerSession(): Promise<ResolvedUser | null> {
     return await resolveUserRole(user.id, user.email ?? null, user.phone ?? null);
   } catch (err) {
     if (err instanceof RoleResolutionError) {
-      // LOUD. Never silently degrade to "no role".
       console.error("[session] role resolution failed:", {
         code: err.code,
         message: err.message,
@@ -48,7 +49,7 @@ export async function getServerSession(): Promise<ResolvedUser | null> {
 
 export async function requireServerSession(): Promise<ResolvedUser> {
   const session = await getServerSession();
-  if (!session) throw new Error("UNAUTHENTICATED");
+  if (!session) throw AppError.unauthenticated();
   return session;
 }
 
@@ -57,7 +58,7 @@ export async function requireServerRole(
 ): Promise<ResolvedUser> {
   const session = await requireServerSession();
   if (!roles.includes(session.role)) {
-    throw new Error("FORBIDDEN");
+    throw AppError.forbidden();
   }
   return session;
 }

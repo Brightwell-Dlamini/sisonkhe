@@ -23,6 +23,7 @@
  */
 
 import type { AuthRole, ResolvedUser } from "./roles";
+import { AppError } from "@/lib/api/errors";
 
 export type Permission =
   | "admin.shell"
@@ -151,14 +152,14 @@ export function isNationalScope(user: ResolvedUser): boolean {
  * Region filter for list queries.
  * Returns null when the caller may see all regions (super-admin / national).
  * Returns the region string when the caller is limited to one region.
- * Throws FORBIDDEN when a regional admin has no region assigned.
+ * Throws AppError(REGION_REQUIRED) when a regional admin has no region assigned.
  */
 export function regionScopeOrThrow(user: ResolvedUser): string | null {
   if (isNationalScope(user)) return null;
   if (user.role === "admin" || user.role === "fleet-manager") {
     const region = user.region?.trim();
     if (!region) {
-      throw new Error("REGION_REQUIRED");
+      throw AppError.regionRequired();
     }
     return region;
   }
@@ -170,6 +171,6 @@ export function assertPermission(
   permission: Permission
 ): void {
   if (!can(user.role, permission)) {
-    throw new Error("FORBIDDEN");
+    throw AppError.forbidden();
   }
 }

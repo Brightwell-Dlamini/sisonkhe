@@ -6,6 +6,8 @@
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 import { matchesRegion } from "../auth/region";
+import { newMarshalId } from "@/lib/domain/ids";
+import { AppError } from "@/lib/api/errors";
 
 export interface MarshalRow {
   id: string;
@@ -91,7 +93,7 @@ export async function listMarshals(
 
   if (error) {
     console.error("[admin/marshals] list error:", error);
-    throw new Error(`Failed to list marshals: ${error.message}`);
+    throw AppError.internal(`Failed to list marshals: ${error.message}`, error);
   }
 
   const rows = (data ?? []).map(mapMarshal);
@@ -109,7 +111,7 @@ export async function getMarshalById(id: string): Promise<MarshalRow | null> {
 
   if (error) {
     console.error("[admin/marshals] getById error:", error);
-    throw new Error(`Failed to load marshal: ${error.message}`);
+    throw AppError.internal(`Failed to load marshal: ${error.message}`, error);
   }
   return data ? mapMarshal(data) : null;
 }
@@ -187,7 +189,8 @@ export async function createMarshal(input: CreateMarshalInput): Promise<{
       .eq("is_active", true);
   }
 
-  const id = `marshal-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  // Crypto-random id — never Date.now + Math.random
+  const id = newMarshalId();
   const now = Date.now();
 
   const { data, error } = await admin

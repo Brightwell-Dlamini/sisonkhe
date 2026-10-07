@@ -6,36 +6,15 @@
  * Rank admin: region-scoped. Super-admin: national.
  */
 
-import { NextResponse } from "next/server";
 import { requireAdminScope } from "@/lib/auth/session";
 import { buildIntelligenceSnapshot } from "@/lib/intelligence/snapshot";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
-  try {
-    const { user } = await requireAdminScope();
-    const snapshot = await buildIntelligenceSnapshot(user);
-    return NextResponse.json(snapshot, {
-      headers: { "Cache-Control": "no-store" },
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Error";
-    const status =
-      msg === "UNAUTHENTICATED"
-        ? 401
-        : msg === "FORBIDDEN" || msg === "REGION_REQUIRED"
-          ? 403
-          : 500;
-    return NextResponse.json(
-      {
-        error:
-          msg === "REGION_REQUIRED"
-            ? "Rank admin must have a region assigned on their staff profile"
-            : msg,
-      },
-      { status }
-    );
-  }
-}
+export const GET = withApiHandler(async () => {
+  const { user } = await requireAdminScope();
+  const snapshot = await buildIntelligenceSnapshot(user);
+  return ok(snapshot);
+});

@@ -5,10 +5,13 @@
  * Aggregates audit events from multiple sources:
  *   - permit_audit_logs (permit approvals/rejections)
  *   - sync_events (all mutations)
+ *
+ * Supports offset/limit pagination via shared helpers.
  */
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
+import { buildPageMeta, type PageMeta } from "@/lib/pagination";
 
 export interface AuditEntry {
   id: string;
@@ -23,26 +26,40 @@ export interface AuditEntry {
   ipAddress: string | null;
 }
 
-export async function listAuditEntries(limit: number = 200): Promise<AuditEntry[]> {
+export interface AuditPage {
+  entries: AuditEntry[];
+  meta: PageMeta;
+}
+
+/**
+ * Fetch a merged, time-sorted audit page.
+ * Fetches a window from each source then merges — acceptable until a
+ * unified audit_events table exists.
+ */
+export async function listAuditEntries(
+  limit: number = 50,
+  offset: number = 0
+): Promise<AuditPage> {
   const admin = createSupabaseAdminClient();
+  // Over-fetch so merge+slice remains accurate for modest pages
+  const fetchLimit = Math.min(limit + offset + 50, 500);
 
-  // Permit audits
-  const { data: permitLogs } = await admin
-    .from("permit_audit_logs")
-    .select(
-      "id, user_role, date, time, action, approval_decision, previous_values, new_values, ip_address, created_at"
-    )
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  // Sync events
-  const { data: syncLogs } = await admin
-    .from("sync_events")
-    .select(
-      "id, entity_type, entity_id, operation, client_id, occurred_at, applied_at, payload, idempotency_key"
-    )
-    .order("applied_at", { ascending: false })
-    .limit(limit);
+  const [{ data: permitLogs }, { data: syncLogs }] = await Promise.all([
+    admin
+      .from("permit_audit_logs")
+      .select(
+        "id, user_role, date, time, action, approval_decision, previous_values, new_values, ip_address, created_at"
+      )
+      .order("created_at", { ascending: false })
+      .limit(fetchLimit),
+    admin
+      .from("sync_events")
+      .select(
+        "id, entity_type, entity_id, operation, client_id, occurred_at, applied_at, payload, idempotency_key"
+      )
+      .order("applied_at", { ascending: false })
+      .limit(fetchLimit),
+  ]);
 
   const entries: AuditEntry[] = [];
 
@@ -81,5 +98,12 @@ export async function listAuditEntries(limit: number = 200): Promise<AuditEntry[
   }
 
   entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-  return entries.slice(0, limit);
+  const total = entries.length;
+  const page = Math.floor(offset / limit) + 1;
+  const slice = entries.slice(offset, offset + limit);
+
+  return {
+    entries: slice,
+    meta: buildPageMeta(total, page, limit),
+  };
 }
