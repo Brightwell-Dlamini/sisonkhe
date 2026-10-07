@@ -1,9 +1,6 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Staff-only assignment API. Staff transfers always use force so the
- * atomic RPC can move a driver between vehicles in one step.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,6 +13,10 @@ import {
 } from "@/lib/assignments/service";
 import { rateLimit } from "@/lib/domain/rateLimit";
 import { writeAudit } from "@/lib/domain/audit";
+import {
+  notifyDriverById,
+  notifyOperatorOfVehicle,
+} from "@/lib/notifications/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -62,15 +63,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Staff UI = operational transfer authority
-    const force = true;
-
     const admin = createSupabaseAdminClient();
     const result = await assignDriverVehicle(admin, {
       driverId: parsed.data.driverId || null,
       nationalId: parsed.data.nationalId || null,
       vehicleReg: parsed.data.vehicleReg,
-      force,
+      force: true,
     });
 
     await writeAudit(admin, {
@@ -82,6 +80,23 @@ export async function POST(request: NextRequest) {
       entityId: result.driverId,
       summary: `Linked ${result.driverName} → ${result.vehicleReg}`,
       after: result,
+    });
+
+    void notifyDriverById(result.driverId, {
+      type: "assignment.link",
+      title: "Vehicle assigned",
+      message: `You are now assigned to ${result.vehicleReg}.`,
+      href: "/driver",
+      entityType: "vehicle",
+      entityId: result.vehicleReg,
+    });
+    void notifyOperatorOfVehicle(result.vehicleReg, {
+      type: "assignment.link",
+      title: "Driver linked to vehicle",
+      message: `${result.driverName} was assigned to ${result.vehicleReg}.`,
+      href: "/operator",
+      entityType: "vehicle",
+      entityId: result.vehicleReg,
     });
 
     return NextResponse.json({ success: true, assignment: result });
@@ -149,6 +164,29 @@ export async function DELETE(request: NextRequest) {
       summary: `Unlinked driver ${result.driverId ?? "?"} from ${result.vehicleReg ?? "?"}`,
       after: result,
     });
+
+    if (result.driverId) {
+      void notifyDriverById(result.driverId, {
+        type: "assignment.unlink",
+        title: "Vehicle unlinked",
+        message: result.vehicleReg
+          ? `You were unlinked from ${result.vehicleReg}.`
+          : "Your vehicle assignment was cleared.",
+        href: "/driver",
+        entityType: "vehicle",
+        entityId: result.vehicleReg,
+      });
+    }
+    if (result.vehicleReg) {
+      void notifyOperatorOfVehicle(result.vehicleReg, {
+        type: "assignment.unlink",
+        title: "Driver removed from vehicle",
+        message: `Driver was unlinked from ${result.vehicleReg}.`,
+        href: "/operator",
+        entityType: "vehicle",
+        entityId: result.vehicleReg,
+      });
+    }
 
     return NextResponse.json({ success: true, ...result });
   } catch (err) {
