@@ -2,9 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * GET  — list marshals (region scoped, paginated)
+ * GET  — list marshals (region scoped, DB-range paginated)
  * POST — identity-row only (no auth). Prefer field portal for demographics.
- *        Issue login via POST /api/admin/marshals/[id]/issue-login
  */
 
 import type { NextRequest } from "next/server";
@@ -29,9 +28,10 @@ export const GET = withApiHandler(async (request: NextRequest) => {
     maxLimit: 200,
   });
 
-  const all = await listMarshals(regionScope);
-  const total = all.length;
-  const marshals = all.slice(offset, offset + limit);
+  const { rows: marshals, total } = await listMarshals(regionScope, {
+    offset,
+    limit,
+  });
 
   return ok(
     { marshals, regionScope },
@@ -39,7 +39,6 @@ export const GET = withApiHandler(async (request: NextRequest) => {
   );
 });
 
-/** Identity row only — does not create a login. Use issue-login for access. */
 export const POST = withApiHandler(async (request: NextRequest) => {
   const user = await requireServerRole(ALLOWED);
   const regionScope = regionScopeOrThrow(user);

@@ -5,6 +5,7 @@
 
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
+import { newEntityId } from "@/lib/domain/ids";
 
 export interface RouteRow {
   id: string;
@@ -32,9 +33,11 @@ function mapRoute(row: Record<string, unknown>): RouteRow {
   };
 }
 
-export async function listRoutes(): Promise<RouteRow[]> {
+export async function listRoutes(
+  regionScope: string | null = null
+): Promise<RouteRow[]> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from("routes")
     .select(
       "id, region_code, origin, destination, distance_km, base_fare_e, is_popular, start_time, default_bay"
@@ -42,7 +45,15 @@ export async function listRoutes(): Promise<RouteRow[]> {
     .order("region_code", { ascending: true })
     .order("origin", { ascending: true });
 
-  if (error) return [];
+  if (regionScope) {
+    query = query.ilike("region_code", regionScope);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error("[admin/routes] list error:", error);
+    return [];
+  }
   return (data ?? []).map(mapRoute);
 }
 
@@ -63,7 +74,7 @@ export async function createRoute(input: CreateRouteInput): Promise<{
   error?: string;
 }> {
   const admin = createSupabaseAdminClient();
-  const id = `route-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const id = newEntityId("route");
 
   const { data, error } = await admin
     .from("routes")
@@ -107,9 +118,10 @@ export async function updateRoute(
   return { success: true };
 }
 
-export async function deleteRoute(id: string): Promise<{ success: boolean; error?: string }> {
+export async function deleteRoute(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
   const admin = createSupabaseAdminClient();
-  // Check if any vehicles use this route
   const { data: vehicles } = await admin
     .from("vehicles")
     .select("registration_number")
@@ -117,7 +129,10 @@ export async function deleteRoute(id: string): Promise<{ success: boolean; error
     .limit(1);
 
   if (vehicles && vehicles.length > 0) {
-    return { success: false, error: "Cannot delete: vehicles are assigned to this route." };
+    return {
+      success: false,
+      error: "Cannot delete: vehicles are assigned to this route.",
+    };
   }
 
   const { error } = await admin.from("routes").delete().eq("id", id);

@@ -1,52 +1,46 @@
-import { NextRequest, NextResponse } from "next/server";
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import type { NextRequest } from "next/server";
 import { requireServerRole } from "@/lib/auth/session";
 import {
   listRegionConfigs,
   listTerminals,
   createTerminal,
 } from "@/lib/admin/terminals";
+import { AppError } from "@/lib/api/errors";
+import { ok, withApiHandler } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
-  try {
-    await requireServerRole(["super-admin", "admin", "fleet-manager"]);
-    const [terminals, terminalRecords] = await Promise.all([
-      listRegionConfigs(),
-      listTerminals(),
-    ]);
-    return NextResponse.json({ terminals, terminalRecords });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Error";
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
-}
+export const GET = withApiHandler(async () => {
+  await requireServerRole(["super-admin", "admin", "fleet-manager"]);
+  const [terminals, terminalRecords] = await Promise.all([
+    listRegionConfigs(),
+    listTerminals(),
+  ]);
+  return ok({ terminals, terminalRecords });
+});
 
-export async function POST(request: NextRequest) {
-  try {
-    await requireServerRole(["super-admin", "admin", "fleet-manager"]);
-    const body = await request.json();
-    const name = String(body.name ?? "").trim();
-    const region = String(body.region ?? "").trim();
-    if (!name || !region) {
-      return NextResponse.json(
-        { error: "Name and region are required." },
-        { status: 400 }
-      );
-    }
-    const result = await createTerminal({
-      region,
-      name,
-      emergencyNumber: body.emergencyNumber ?? null,
-      announcement: body.announcement ?? null,
-    });
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
-    }
-    return NextResponse.json({ success: true, terminal: result.terminal });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Error";
-    return NextResponse.json({ error: msg }, { status: 500 });
+export const POST = withApiHandler(async (request: NextRequest) => {
+  await requireServerRole(["super-admin", "admin", "fleet-manager"]);
+  const body = await request.json();
+  const name = String(body.name ?? "").trim();
+  const region = String(body.region ?? "").trim();
+  if (!name || !region) {
+    throw AppError.validation("Name and region are required.");
   }
-}
+  const result = await createTerminal({
+    region,
+    name,
+    emergencyNumber: body.emergencyNumber ?? null,
+    announcement: body.announcement ?? null,
+  });
+  if (!result.success) {
+    throw AppError.validation(result.error ?? "Create failed");
+  }
+  return ok({ terminal: result.terminal }, { status: 201 });
+});

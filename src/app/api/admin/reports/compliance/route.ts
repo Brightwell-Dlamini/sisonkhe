@@ -1,6 +1,15 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * CSV download — returns raw text/csv, not the JSON envelope.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { requireServerRole } from "@/lib/auth/session";
 import { generateComplianceReport, type ReportType } from "@/lib/admin/reports";
+import { AppError } from "@/lib/api/errors";
+import { fail } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,7 +27,7 @@ export async function GET(request: NextRequest) {
     await requireServerRole(["super-admin", "admin", "fleet-manager"]);
     const type = request.nextUrl.searchParams.get("type") as ReportType | null;
     if (!type || !VALID.includes(type)) {
-      return NextResponse.json({ error: "Invalid report type" }, { status: 400 });
+      throw AppError.validation("Invalid report type");
     }
 
     const { filename, csv } = await generateComplianceReport(type);
@@ -32,7 +41,6 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Error";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return fail(err);
   }
 }

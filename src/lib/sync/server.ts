@@ -3,7 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Server-side event application.
- * Applies SyncEvents to the relational store with idempotency and version checks.
+ *
+ * Apply order (per event):
+ *   1. Claim idempotency via insert into sync_events (unique key).
+ *   2. Apply mutation to entity table.
+ *   3. On mutation failure, delete the claimed event so the client can retry.
+ *
+ * This avoids “mutation applied, log missing” and “log present, mutation missing”
+ * without requiring a multi-statement SQL transaction from the JS client.
  */
 
 import "server-only";
@@ -23,6 +30,11 @@ const ENTITY_TABLE: Record<string, string> = {
   operator: "fleet_operators",
 };
 
+function primaryKeyColumn(entityType: string): string {
+  if (entityType === "vehicle") return "registration_number";
+  return "id";
+}
+
 export async function applyEvents(
   events: SyncEvent[],
   clientId: string
@@ -33,79 +45,17 @@ export async function applyEvents(
 
   for (const event of events) {
     try {
-      // Idempotency: skip if already applied
-      const { data: existing } = await admin
-        .from("sync_events")
-        .select("id")
-        .eq("idempotency_key", event.idempotencyKey)
-        .maybeSingle();
-
-      if (existing) {
-        accepted.push(event.id);
-        continue;
-      }
-
       const table = ENTITY_TABLE[event.entityType];
       if (!table) {
-        rejected.push({ id: event.id, reason: `Unknown entityType: ${event.entityType}` });
+        rejected.push({
+          id: event.id,
+          reason: `Unknown entityType: ${event.entityType}`,
+        });
         continue;
       }
 
-      if (event.operation === "UPDATE" && event.baseVersion != null) {
-        // Optimistic concurrency check
-        const { data: row } = await admin
-          .from(table)
-          .select("version")
-          .eq(primaryKeyColumn(event.entityType), event.entityId)
-          .maybeSingle();
-
-        if (row && row.version !== event.baseVersion) {
-          rejected.push({
-            id: event.id,
-            reason: `Version conflict: expected ${event.baseVersion}, found ${row.version}`,
-          });
-          continue;
-        }
-      }
-
-      // Apply mutation
-      if (event.operation === "INSERT") {
-        const { error } = await admin.from(table).insert({
-          ...event.payload,
-          version: 1,
-        });
-        if (error) {
-          rejected.push({ id: event.id, reason: error.message });
-          continue;
-        }
-      } else if (event.operation === "UPDATE") {
-        const { error } = await admin
-          .from(table)
-          .update({
-            ...event.payload,
-            version: (event.baseVersion ?? 0) + 1,
-            updated_at: new Date().toISOString(),
-          })
-          .eq(primaryKeyColumn(event.entityType), event.entityId);
-
-        if (error) {
-          rejected.push({ id: event.id, reason: error.message });
-          continue;
-        }
-      } else if (event.operation === "DELETE") {
-        const { error } = await admin
-          .from(table)
-          .delete()
-          .eq(primaryKeyColumn(event.entityType), event.entityId);
-
-        if (error) {
-          rejected.push({ id: event.id, reason: error.message });
-          continue;
-        }
-      }
-
-      // Record the event
-      const { error: logError } = await admin.from("sync_events").insert({
+      // 1. Claim idempotency key first
+      const { error: claimErr } = await admin.from("sync_events").insert({
         id: event.id,
         entity_type: event.entityType,
         entity_id: event.entityId,
@@ -117,25 +67,93 @@ export async function applyEvents(
         base_version: event.baseVersion ?? null,
       });
 
-      if (logError) {
-        // Mutation succeeded but log failed — still accept to avoid double-apply on retry
-        console.error("[sync] failed to log event", event.id, logError.message);
+      if (claimErr) {
+        // Unique violation on idempotency_key → already applied
+        const code = (claimErr as { code?: string }).code;
+        const msg = claimErr.message ?? "";
+        if (
+          code === "23505" ||
+          /duplicate|unique/i.test(msg)
+        ) {
+          accepted.push(event.id);
+          continue;
+        }
+        rejected.push({ id: event.id, reason: `Claim failed: ${msg}` });
+        continue;
+      }
+
+      // 2. Optimistic concurrency for UPDATE
+      if (event.operation === "UPDATE" && event.baseVersion != null) {
+        const { data: row } = await admin
+          .from(table)
+          .select("version")
+          .eq(primaryKeyColumn(event.entityType), event.entityId)
+          .maybeSingle();
+
+        if (row && row.version !== event.baseVersion) {
+          await admin
+            .from("sync_events")
+            .delete()
+            .eq("id", event.id);
+          rejected.push({
+            id: event.id,
+            reason: `Version conflict: expected ${event.baseVersion}, found ${row.version}`,
+          });
+          continue;
+        }
+      }
+
+      // 3. Apply mutation
+      let mutationError: string | null = null;
+
+      if (event.operation === "INSERT") {
+        const { error } = await admin.from(table).insert({
+          ...event.payload,
+          version: 1,
+        });
+        if (error) mutationError = error.message;
+      } else if (event.operation === "UPDATE") {
+        const { error } = await admin
+          .from(table)
+          .update({
+            ...event.payload,
+            version: (event.baseVersion ?? 0) + 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq(primaryKeyColumn(event.entityType), event.entityId);
+        if (error) mutationError = error.message;
+      } else if (event.operation === "DELETE") {
+        const { error } = await admin
+          .from(table)
+          .delete()
+          .eq(primaryKeyColumn(event.entityType), event.entityId);
+        if (error) mutationError = error.message;
+      } else {
+        mutationError = `Unknown operation: ${event.operation}`;
+      }
+
+      if (mutationError) {
+        // Rollback claim so client can retry cleanly
+        await admin.from("sync_events").delete().eq("id", event.id);
+        rejected.push({ id: event.id, reason: mutationError });
+        continue;
       }
 
       accepted.push(event.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
+      // Best-effort rollback of claim
+      try {
+        await admin.from("sync_events").delete().eq("id", event.id);
+      } catch {
+        /* ignore */
+      }
       rejected.push({ id: event.id, reason: message });
     }
   }
 
   const latestSeq = await getLatestSeq();
   return { accepted, rejected, latestSeq };
-}
-
-function primaryKeyColumn(entityType: string): string {
-  if (entityType === "vehicle") return "registration_number";
-  return "id";
 }
 
 export async function getLatestSeq(): Promise<number> {
@@ -151,18 +169,19 @@ export async function getLatestSeq(): Promise<number> {
 
 export async function pullEvents(sinceSeq: number, limit = 100) {
   const admin = createSupabaseAdminClient();
+  const safeLimit = Math.min(Math.max(1, limit), 500);
   const { data, error } = await admin
     .from("sync_events")
     .select("*")
     .gt("seq", sinceSeq)
     .order("seq", { ascending: true })
-    .limit(limit + 1);
+    .limit(safeLimit + 1);
 
   if (error) throw new Error(error.message);
 
   const rows = data ?? [];
-  const hasMore = rows.length > limit;
-  const slice = hasMore ? rows.slice(0, limit) : rows;
+  const hasMore = rows.length > safeLimit;
+  const slice = hasMore ? rows.slice(0, safeLimit) : rows;
 
   return {
     events: slice.map((r) => ({

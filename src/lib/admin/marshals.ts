@@ -77,13 +77,28 @@ function mapMarshal(row: Record<string, unknown>): MarshalRow {
 }
 
 export async function listMarshals(
-  regionScope: string | null = null
-): Promise<MarshalRow[]> {
+  regionScope: string | null = null,
+  opts?: { offset?: number; limit?: number }
+): Promise<{ rows: MarshalRow[]; total: number }> {
   const admin = createSupabaseAdminClient();
+  const offset = opts?.offset ?? 0;
+  const limit = opts?.limit ?? 50;
+
+  // When region-scoped we may still need a client filter (matchesRegion),
+  // so fetch a bounded window + count.
+  let countQuery = admin
+    .from("marshals")
+    .select("id", { count: "exact", head: true });
+  if (regionScope) {
+    countQuery = countQuery.ilike("region", regionScope);
+  }
+  const { count: rawCount } = await countQuery;
+
   let query = admin
     .from("marshals")
     .select(SELECT_COLUMNS)
-    .order("server_created_at", { ascending: false });
+    .order("server_created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
 
   if (regionScope) {
     query = query.ilike("region", regionScope);
@@ -96,9 +111,15 @@ export async function listMarshals(
     throw AppError.internal(`Failed to list marshals: ${error.message}`, error);
   }
 
-  const rows = (data ?? []).map(mapMarshal);
-  if (!regionScope) return rows;
-  return rows.filter((m) => matchesRegion(regionScope, m.region));
+  let rows = (data ?? []).map(mapMarshal);
+  if (regionScope) {
+    rows = rows.filter((m) => matchesRegion(regionScope, m.region));
+  }
+
+  return {
+    rows,
+    total: typeof rawCount === "number" ? rawCount : rows.length,
+  };
 }
 
 export async function getMarshalById(id: string): Promise<MarshalRow | null> {
@@ -175,7 +196,6 @@ export async function createMarshal(input: CreateMarshalInput): Promise<{
     }
   }
 
-  // One active marshal per route: clear previous occupant
   if (input.assignedRouteId) {
     await admin
       .from("marshals")
@@ -189,7 +209,6 @@ export async function createMarshal(input: CreateMarshalInput): Promise<{
       .eq("is_active", true);
   }
 
-  // Crypto-random id — never Date.now + Math.random
   const id = newMarshalId();
   const now = Date.now();
 
@@ -241,7 +260,6 @@ export async function updateMarshal(
 ): Promise<{ success: boolean; error?: string }> {
   const admin = createSupabaseAdminClient();
 
-  // Explicit reassignment: clear ANY other active marshal on this corridor
   if (input.assignedRouteId) {
     await admin
       .from("marshals")
