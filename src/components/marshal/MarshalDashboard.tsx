@@ -7,7 +7,6 @@ import {
   AlertCircle,
   ListOrdered,
   Calendar,
-  Scale,
   MessageSquare,
   Settings,
   Plus,
@@ -20,6 +19,7 @@ import QueueList from "./QueueList";
 import RecentActivityFeed from "./RecentActivityFeed";
 import AddVehicleModal from "./AddVehicleModal";
 import VehicleDetailsModal from "./VehicleDetailsModal";
+import QueueSuggestionsPanel from "./QueueSuggestionsPanel";
 
 export default function MarshalDashboard() {
   const {
@@ -72,6 +72,11 @@ export default function MarshalDashboard() {
   }
 
   if (!context) return null;
+
+  const routeId =
+    (context as { routeId?: string; assignedRouteId?: string }).routeId ??
+    (context as { assignedRouteId?: string }).assignedRouteId ??
+    null;
 
   return (
     <div className="space-y-5">
@@ -138,7 +143,8 @@ export default function MarshalDashboard() {
             onSelectVehicle={setDetailReg}
           />
         </div>
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1 space-y-4">
+          <QueueSuggestionsPanel routeId={routeId} />
           <RecentActivityFeed activity={activity} />
         </div>
       </div>
