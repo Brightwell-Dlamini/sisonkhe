@@ -49,7 +49,7 @@ export const POST = withApiHandler(async (_: NextRequest, ctx: Ctx) => {
   }
 
   await writeAudit(admin, {
-    action: "system.snapshot_restore",
+    action: "system.restore",
     actorId: session.authUserId,
     actorRole: session.role,
     actorName: session.fullName,

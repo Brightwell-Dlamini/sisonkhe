@@ -39,6 +39,7 @@ export type AuditAction =
   | "vehicle.update"
   | "vehicle.deactivate"
   | "vehicle.transfer"
+  | "vehicle.auto_reset_departed"
   | "permit.submit"
   | "permit.approve"
   | "permit.reject"
@@ -52,6 +53,7 @@ export type AuditAction =
   | "ticket.paid"
   | "ticket.challenged"
   | "payment.intent.created"
+  | "payment.intent_expired"
   | "payment.settled"
   | "payment.failed"
   | "payment.credit_failed"
@@ -63,6 +65,7 @@ export type AuditAction =
   | "auth.password_changed"
   | "system.snapshot"
   | "system.restore"
+  | "system.snapshot_restore"
   | "system.config_changed";
 
 export interface AuditEntry {

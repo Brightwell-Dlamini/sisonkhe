@@ -3,8 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Auto-reset vehicles stuck in Departed beyond the soft policy window.
- * Uses shouldAutoResetDeparted (6h default). Clears queue position and
- * shifts the route queue forward when needed.
  */
 
 import "server-only";
