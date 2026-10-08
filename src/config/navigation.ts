@@ -36,7 +36,8 @@ import {
   Database,
   HardDrive,
   Megaphone,
-  Sparkles,
+  Search,
+  Layers,
   Wallet,
   MessageSquare,
   Activity as ActivityIcon,
@@ -120,11 +121,10 @@ export const PLATFORM_NAV: NavGroup[] = [
   {
     label: "Platform",
     items: [
-      { href: "/admin/super", label: "Control Centre", icon: Sparkles, exact: true, roles: ["super-admin"], hint: "Elevated system overview" },
+      { href: "/admin/super", label: "Control Centre", icon: Layers, exact: true, roles: ["super-admin"], hint: "Elevated system overview" },
       { href: "/admin/super/analytics", label: "Live Analytics", icon: Activity, roles: ["super-admin"] },
       { href: "/admin/super/security", label: "Security", icon: Shield, roles: ["super-admin"] },
       { href: "/admin/super/telemetry", label: "Telemetry", icon: Cpu, roles: ["super-admin"] },
-      // NEW — Phase 0 invariants page
       { href: "/super/invariants", label: "Invariants", icon: ActivityIcon, roles: ["super-admin"], hint: "Reconciliation and drift report" },
       { href: "/admin/super/errors", label: "Error Hub", icon: AlertOctagon, roles: ["super-admin"] },
       { href: "/admin/super/storage", label: "Storage", icon: HardDrive, roles: ["super-admin"] },
@@ -132,7 +132,7 @@ export const PLATFORM_NAV: NavGroup[] = [
       { href: "/admin/config", label: "Rank Config", icon: Settings, roles: ["super-admin"], hint: "Rank fee and operational settings" },
       { href: "/admin/super/adverts", label: "Adverts", icon: Megaphone, roles: ["super-admin"] },
       { href: "/admin/super/recovery", label: "Snapshots", icon: Database, roles: ["super-admin"] },
-      { href: "/admin/super/assistant", label: "Assistant", icon: Sparkles, roles: ["super-admin"] },
+      { href: "/admin/super/assistant", label: "Ops Query", icon: Search, roles: ["super-admin"] },
     ],
   },
 ];

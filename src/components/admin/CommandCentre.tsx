@@ -25,7 +25,6 @@ import {
   Settings,
   Shield,
   ShieldCheck,
-  Sparkles,
   UserCircle,
   Users,
   Calendar,
@@ -201,8 +200,8 @@ export default function CommandCentre() {
   return (
     <div className="space-y-6">
       <RoleWelcomeBanner
-        title={`Command centre ready${user?.fullName ? `, ${user.fullName}` : ""}`}
-        subtitle="Monitor system health, high-risk exposures, and operational priorities before the next operational cycle."
+        title={`${user?.fullName ? user.fullName : "Administrator"}`}
+        subtitle="Work queue, risk signals, and the next action for this rank cycle."
         actionLabel="Open queue"
         actionHref="/admin/queue"
       />
@@ -211,7 +210,7 @@ export default function CommandCentre() {
         title="Command Centre"
         description={
           snap?.briefing ??
-          `Welcome back, ${user?.fullName ?? "Administrator"}. Loading operational intelligence…`
+          `Welcome back, ${user?.fullName ?? "Administrator"}. Loading operational data…`
         }
         actions={
           <Button
@@ -233,26 +232,26 @@ export default function CommandCentre() {
       {isSuperAdmin && (
         <Link
           href="/admin/super"
-          className="group block bg-gradient-to-r from-purple-600/90 to-purple-800/90 border border-purple-500/30 text-white rounded-2xl p-5 hover:border-purple-400/50 transition-all"
+          className="group block bg-[#0F0F10] border border-white/[0.08] text-white rounded-2xl p-5 hover:border-zinc-500 transition-all"
         >
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
-                <ShieldCheck className="w-6 h-6" />
+              <div className="w-12 h-12 rounded-2xl bg-white/[0.06] flex items-center justify-center">
+                <ShieldCheck className="w-6 h-6 text-zinc-300" />
               </div>
               <div>
-                <div className="text-[10px] uppercase font-black tracking-widest opacity-80">
-                  Elevated Access
+                <div className="text-[10px] uppercase font-black tracking-widest text-zinc-500">
+                  Elevated access
                 </div>
                 <h2 className="text-base font-black uppercase mt-0.5">
                   Super Admin Control Centre
                 </h2>
-                <p className="text-xs opacity-80 mt-0.5">
-                  Analytics, security, telemetry, disaster recovery, and system-wide configuration.
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Analytics, security, telemetry, recovery, and system config.
                 </p>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 opacity-70 group-hover:translate-x-1 transition-transform" />
+            <ChevronRight className="w-5 h-5 text-zinc-500 group-hover:translate-x-1 transition-transform" />
           </div>
         </Link>
       )}
@@ -263,11 +262,11 @@ export default function CommandCentre() {
           className="group flex items-center gap-4 bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4 hover:border-emerald-400/50 transition-all"
         >
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-            <Sparkles className="w-5 h-5" />
+            <ArrowRight className="w-5 h-5" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[10px] uppercase font-black tracking-widest text-emerald-400/80">
-              Recommended next move
+              Next action
             </div>
             <div className="text-sm font-black text-white mt-0.5">{snap.primaryAction.label}</div>
             <p className="text-[11px] text-zinc-400 mt-0.5">{snap.primaryAction.reason}</p>
@@ -357,7 +356,7 @@ export default function CommandCentre() {
       {loading && !snap && (
         <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-10 flex flex-col items-center gap-3 text-zinc-400">
           <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
-          <p className="text-xs font-medium">Computing operational intelligence…</p>
+          <p className="text-xs font-medium">Loading operational data…</p>
         </div>
       )}
 
@@ -365,7 +364,7 @@ export default function CommandCentre() {
         <div className="bg-[#0F0F10] border border-red-500/30 rounded-2xl p-6 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
           <div>
-            <div className="text-sm font-semibold text-white">Intelligence feed unavailable</div>
+            <div className="text-sm font-semibold text-white">Could not load dashboard</div>
             <p className="text-xs text-zinc-400 mt-1">{error}</p>
             <Button variant="secondary" size="sm" className="mt-3" onClick={() => void load()}>
               Retry

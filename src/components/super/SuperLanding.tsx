@@ -11,7 +11,7 @@ import {
   Database,
   HardDrive,
   Megaphone,
-  Sparkles,
+  Search,
   ChevronRight,
 } from "lucide-react";
 
@@ -25,7 +25,7 @@ const LINKS = [
   { href: "/admin/super/recovery", label: "Disaster Recovery", desc: "Snapshots and restore", icon: Database },
   { href: "/admin/super/storage", label: "Storage Usage", desc: "Row counts per table", icon: HardDrive },
   { href: "/admin/super/adverts", label: "Advertisements", desc: "Kiosk sponsored content", icon: Megaphone },
-  { href: "/admin/super/assistant", label: "AI Assistant", desc: "Diagnostic query interface", icon: Sparkles },
+  { href: "/admin/super/assistant", label: "Ops Query", desc: "Status and inventory lookup", icon: Search },
 ];
 
 export default function SuperLanding() {
@@ -47,13 +47,13 @@ export default function SuperLanding() {
             <Link
               key={l.href}
               href={l.href}
-              className="group bg-[#0F0F10] border border-white/[0.06] hover:border-purple-400 rounded-2xl p-4"
+              className="group bg-[#0F0F10] border border-white/[0.06] hover:border-zinc-500 rounded-2xl p-4"
             >
               <div className="flex items-start justify-between">
-                <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-white/[0.04] text-zinc-300 flex items-center justify-center">
                   <Icon className="w-5 h-5" />
                 </div>
-                <ChevronRight className="w-4 h-4 text-zinc-300 group-hover:text-purple-500" />
+                <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:text-zinc-300" />
               </div>
               <h2 className="text-xs font-black text-white uppercase mt-2.5">
                 {l.label}

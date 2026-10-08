@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Loader2, Send } from "lucide-react";
+import { Search, Loader2, Send } from "lucide-react";
 
 interface Response {
   query: string;
@@ -41,11 +41,11 @@ export default function AssistantPanel() {
     <div className="space-y-4">
       <header>
         <h1 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-purple-600" />
-          AI Virtual Assistant
+          <Search className="w-5 h-5 text-zinc-400" />
+          Ops Query
         </h1>
         <p className="text-xs text-zinc-500 mt-1">
-          Ask about system status, permits, security, or inventory.
+          Look up system status, permits, security, or inventory.
         </p>
       </header>
 
@@ -55,7 +55,7 @@ export default function AssistantPanel() {
             <button
               key={p}
               onClick={() => ask(p)}
-              className="px-2.5 py-1.5 rounded-lg bg-purple-950/40 text-purple-300 text-xs font-bold"
+              className="px-2.5 py-1.5 rounded-lg bg-white/[0.04] text-zinc-300 text-xs font-bold border border-white/[0.06] hover:border-zinc-500"
             >
               {p}
             </button>
@@ -72,27 +72,27 @@ export default function AssistantPanel() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Ask a question…"
-            className="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm"
+            placeholder="Search operations…"
+            className="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white"
           />
           <button
             type="submit"
             disabled={loading}
-            className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase flex items-center gap-1.5"
+            className="px-4 py-2.5 bg-zinc-100 hover:bg-white disabled:opacity-50 text-zinc-900 rounded-xl text-xs font-black uppercase flex items-center gap-1.5"
           >
             {loading ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
               <Send className="w-3.5 h-3.5" />
             )}
-            Ask
+            Run
           </button>
         </form>
 
         {response && (
-          <div className="p-4 rounded-xl bg-purple-950/30 border border-purple-800 space-y-2">
-            <div className="text-[10px] uppercase font-bold text-purple-600">
-              Response
+          <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-2">
+            <div className="text-[10px] uppercase font-bold text-zinc-500">
+              Result
             </div>
             <div className="text-sm text-white font-bold">
               {response.answer}
