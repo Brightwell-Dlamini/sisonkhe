@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AlertTriangle, ShieldCheck, TrendingUp, Truck } from "lucide-react";
+import { AlertTriangle, ShieldCheck, TrendingUp, Truck, CreditCard } from "lucide-react";
+import Link from "next/link";
 
 interface Props {
   balanceSzl: number;
@@ -39,6 +40,12 @@ export default function OperatorReadinessCard({
 
   return (
     <div className={`rounded-2xl border p-4 ${tone}`}>
+      <div className="flex items-center justify-end mb-3">
+        <div className="flex gap-2">
+          <Link href="/operator/wallet" className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold">Top up</Link>
+          <Link href="/operator/fleet" className="px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-zinc-200 text-xs font-bold">Fleet</Link>
+        </div>
+      </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-current/80">
