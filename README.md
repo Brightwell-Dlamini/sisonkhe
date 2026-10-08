@@ -47,6 +47,7 @@ Next.js 15 (App Router)
 | `src/lib/payments/reconciliation.ts` | Intent ↔ ledger matching helpers |
 | `src/lib/pagination.ts` | Shared cursor/limit helpers for list APIs |
 | `src/lib/observability/` | Structured logging helpers for operational telemetry |
+| `src/lib/offline/` | Dexie outbox, network heartbeat, background sync daemon |
 
 ## Environment
 
@@ -77,6 +78,7 @@ npm run db:studio
 
 | Path | Schedule | Purpose |
 |------|----------|---------|
+| `/api/cron/daily` | `0 2 * * *` | Daily maintenance tasks |
 | `/api/super/invariants/cron` | `0 2 * * *` | Nightly invariant run + staff alerts |
 | `/api/cron/compliance-digest` | `0 6 * * *` | Daily permit/COF/PDP expiry notifications |
 | `/api/cron/payment-reconcile` | `30 3 * * *` | Flag unmatched intents / rank fees |
@@ -85,17 +87,30 @@ All cron routes require `Authorization: Bearer $CRON_SECRET`.
 
 ## Offline
 
-Marshals and drivers can work offline via Dexie outbox. On reconnect, clients push events to `/api/sync/push` and pull from `/api/sync/pull`. Version conflicts are returned in the push response for client-side resolution.
+Marshals and drivers can work offline via Dexie outbox. On reconnect, clients automatically replay pending entries against `/api/sync/replay` and pull from `/api/sync/pull`. Features:
+
+- Attempt cap (`MAX_OUTBOX_ATTEMPTS`) with permanent failure marking
+- Stuck `in_flight` recovery after timeout (crash safety)
+- Immediate replay when network connectivity is restored
+- Version-conflict requeue for optimistic concurrency
 
 ## Security notes
 
 - Role gates live in `src/lib/auth/` and middleware.
 - Money and permit mutations should always write audit-friendly rows (permit_audit_logs, card transactions).
+- Payment webhooks require shared secrets (`MOMO_WEBHOOK_SECRET`, `EMLANGENI_WEBHOOK_SECRET`) and fail closed in production.
 - Never commit `.env.local` or service-role keys.
 
-## Improvement roadmap (in progress)
+## Improvement roadmap
 
-Phase 1 (foundation) focuses on completing the migration away from the legacy blob store, strengthening event-log sync, offline resilience, invariants, payment reconciliation, and structured observability. Changes are committed directly to `main`.
+**Phase 1 (foundation) — complete**
+- Legacy fleet-blob path hardened and instrumented for measured removal
+- Event-log sync strengthened with structured telemetry
+- Offline outbox hardened (attempt limits, stuck recovery, reconnect sync)
+- Invariants and payment reconciliation crons registered and logged
+- Structured observability applied across sync, payments, and invariants
+
+Subsequent phases will cover financial ledger maturity, intelligence enhancements, finer-grained permissions, and UX/localisation.
 
 ## License
 
