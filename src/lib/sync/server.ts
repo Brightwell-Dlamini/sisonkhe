@@ -9,9 +9,6 @@
  *   1. Claim idempotency via insert into sync_events (unique key).
  *   2. Apply mutation to entity table.
  *   3. On mutation failure, delete the claimed event so the client can retry.
- *
- * This avoids “mutation applied, log missing” and “log present, mutation missing”
- * without requiring a multi-statement SQL transaction from the JS client.
  */
 
 import "server-only";
@@ -64,19 +61,21 @@ export async function applyEvents(
         continue;
       }
 
-      // 1. Claim idempotency key first
+      // Claim idempotency key first. Actor is enforced in-process; do not
+      // write optional actor_* columns unless a migration has added them.
       const { error: claimErr } = await admin.from("sync_events").insert({
         id: event.id,
         entity_type: event.entityType,
         entity_id: event.entityId,
         operation: event.operation,
-        payload: event.payload,
+        payload: {
+          ...event.payload,
+          _actor: { authUserId: actor.authUserId, role: actor.role },
+        },
         idempotency_key: event.idempotencyKey,
         client_id: clientId,
         occurred_at: event.occurredAt,
         base_version: event.baseVersion ?? null,
-        actor_auth_user_id: actor.authUserId,
-        actor_role: actor.role,
       });
 
       if (claimErr) {
@@ -90,7 +89,6 @@ export async function applyEvents(
         continue;
       }
 
-      // 2. Optimistic concurrency for UPDATE (baseVersion required by authorize)
       if (event.operation === "UPDATE" && event.baseVersion != null) {
         const { data: row } = await admin
           .from(table)
@@ -108,12 +106,17 @@ export async function applyEvents(
         }
       }
 
-      // 3. Apply mutation
       let mutationError: string | null = null;
+
+      // Strip audit meta from payload before applying to entity tables
+      const { _actor: _ignored, ...entityPayload } = event.payload as Record<
+        string,
+        unknown
+      > & { _actor?: unknown };
 
       if (event.operation === "INSERT") {
         const { error } = await admin.from(table).insert({
-          ...event.payload,
+          ...entityPayload,
           version: 1,
         });
         if (error) mutationError = error.message;
@@ -121,7 +124,7 @@ export async function applyEvents(
         const { error } = await admin
           .from(table)
           .update({
-            ...event.payload,
+            ...entityPayload,
             version: (event.baseVersion ?? 0) + 1,
             updated_at: new Date().toISOString(),
           })
