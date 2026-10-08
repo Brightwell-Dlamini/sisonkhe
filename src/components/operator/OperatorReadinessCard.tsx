@@ -53,15 +53,39 @@ export default function OperatorReadinessCard({
       <div className="flex items-center justify-end mb-3">
         <div className="flex gap-2">
           {onReload ? (
-            <button onClick={onReload} className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold">Top up</button>
+            <button
+              onClick={onReload}
+              aria-label="Top up master wallet"
+              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            >
+              Top up
+            </button>
           ) : (
-            <Link href="/operator/wallet" className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold">Top up</Link>
+            <Link
+              href="/operator/wallet"
+              aria-label="Open wallet"
+              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            >
+              Top up
+            </Link>
           )}
 
           {onSend ? (
-            <button onClick={onSend} className="px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-zinc-200 text-xs font-bold">Fleet</button>
+            <button
+              onClick={onSend}
+              aria-label="Go to fleet"
+              className="px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-zinc-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-white/20"
+            >
+              Fleet
+            </button>
           ) : (
-            <Link href="/operator/fleet" className="px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-zinc-200 text-xs font-bold">Fleet</Link>
+            <Link
+              href="/operator/fleet"
+              aria-label="Open fleet"
+              className="px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-zinc-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-white/20"
+            >
+              Fleet
+            </Link>
           )}
 
           {onToggleFreeze && (

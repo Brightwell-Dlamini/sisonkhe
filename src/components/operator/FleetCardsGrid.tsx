@@ -7,12 +7,14 @@ import VehicleCardMini from "./VehicleCardMini";
 import CardInspectionModal from "./CardInspectionModal";
 import SendMoneyModal from "./SendMoneyModal";
 import { useOperatorMasterCard } from "@/hooks/useOperatorMasterCard";
+import { useToast } from "@/components/ui";
 
 export default function FleetCardsGrid() {
   const { vehicles, loading, error } = useOperatorFleetCards();
   const [selected, setSelected] = useState<string | null>(null);
   const [sendTo, setSendTo] = useState<string | null>(null);
   const { card, refresh, sendMoney } = useOperatorMasterCard();
+  const toast = useToast();
 
   if (loading && vehicles.length === 0) {
     return (
@@ -74,6 +76,9 @@ export default function FleetCardsGrid() {
             const res = await sendMoney(input);
             if (res.success) {
               await refresh();
+              toast.success("Transfer sent", `E${input.amountSzl.toFixed(2)} → ${input.vehicleReg}`);
+            } else {
+              toast.error("Transfer failed", res.error ?? "Request failed");
             }
             return res;
           }}

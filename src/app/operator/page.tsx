@@ -8,6 +8,8 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   CreditCard,
   CreditCardIcon,
@@ -19,6 +21,8 @@ import {
 } from "lucide-react";
 import { useOperatorMasterCard } from "@/hooks/useOperatorMasterCard";
 import { useOperatorFleetCards } from "@/hooks/useOperatorFleetCards";
+import { useAuth } from "@/hooks/useAuth";
+import TopUpModal from "@/components/payments/TopUpModal";
 import MasterCardView from "@/components/operator/MasterCardView";
 import FleetCardsGrid from "@/components/operator/FleetCardsGrid";
 import OperatorReadinessCard from "@/components/operator/OperatorReadinessCard";
@@ -26,8 +30,11 @@ import { RoleGuidance } from "@/components/common/RoleGuidance";
 import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
 
 export default function OperatorHome() {
-  const { card, loading: cardLoading } = useOperatorMasterCard();
+  const { card, loading: cardLoading, toggleFreeze, refresh } = useOperatorMasterCard();
   const { vehicles } = useOperatorFleetCards();
+  const { user } = useAuth();
+  const [showTopUp, setShowTopUp] = useState(false);
+  const router = useRouter();
 
   return (
     <div className="space-y-6">
@@ -43,6 +50,13 @@ export default function OperatorHome() {
           balanceSzl={card.balanceSzl}
           fleetCount={vehicles.length}
           status={card.status}
+          onReload={() => setShowTopUp(true)}
+          onSend={() => router.push("/operator/wallet")}
+          onToggleFreeze={async () => {
+            const ok = await toggleFreeze();
+            if (ok) await refresh();
+            return ok;
+          }}
         />
       )}
 
@@ -149,6 +163,19 @@ export default function OperatorHome() {
           },
         ]}
       />
+      {showTopUp && user?.operatorId && (
+        <TopUpModal
+          purpose="master_card_topup"
+          targetEntityId={user.operatorId}
+          targetLabel={`${user.fullName}'s Master Card`}
+          defaultPhone={user.phone ?? ""}
+          onClose={() => setShowTopUp(false)}
+          onSuccess={() => {
+            void refresh();
+            setShowTopUp(false);
+          }}
+        />
+      )}
     </div>
   );
 }

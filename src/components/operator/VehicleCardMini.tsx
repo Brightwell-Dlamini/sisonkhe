@@ -68,7 +68,8 @@ export default function VehicleCardMini({ vehicle, onClick, onQuickSend }: Props
             e.stopPropagation();
             onClick?.();
           }}
-          className="text-xs text-zinc-400 bg-white/[0.02] px-2 py-1 rounded-lg"
+          aria-label={`Inspect ${vehicle.registrationNumber}`}
+          className="text-xs text-zinc-400 bg-white/[0.02] px-2 py-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20"
         >
           Inspect
         </button>
@@ -78,8 +79,9 @@ export default function VehicleCardMini({ vehicle, onClick, onQuickSend }: Props
               e.stopPropagation();
               onQuickSend?.(vehicle.registrationNumber);
             }}
+            aria-label={`Send money to ${vehicle.registrationNumber}`}
             disabled={isFrozen}
-            className={`px-3 py-1 rounded-lg text-xs font-bold ${isFrozen ? "opacity-50 cursor-not-allowed" : "bg-amber-500 text-black"}`}
+            className={`px-3 py-1 rounded-lg text-xs font-bold ${isFrozen ? "opacity-50 cursor-not-allowed" : "bg-amber-500 text-black"} focus:outline-none focus:ring-2 focus:ring-amber-400`}
           >
             Send
           </button>
