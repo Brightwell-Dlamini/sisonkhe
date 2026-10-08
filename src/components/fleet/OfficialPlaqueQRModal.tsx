@@ -3,14 +3,12 @@ import {
   ShieldCheck,
   Download,
   Printer,
-  CheckCircle,
   ExternalLink,
   X,
   Award,
   RefreshCw,
 } from "lucide-react";
 import { Vehicle, Route, Driver } from "../../types";
-import { logQREvent } from "../../utils/qrSecurity";
 import SignedQRCode from "../qr/SignedQRCode";
 import QRValidityCertificateModal from "./QRValidityCertificateModal";
 
@@ -31,13 +29,11 @@ export default function OfficialPlaqueQRModal({
   drivers,
   onClose,
   onPrintA4,
-  onOpenScannerSim,
 }: OfficialPlaqueQRModalProps) {
   const [verifyStep, setVerifyStep] = useState<number>(0);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [showValidityModal, setShowValidityModal] = useState(false);
   const [qrToken, setQrToken] = useState<string>("");
-  const [qrVersion, setQrVersion] = useState<number>(1);
 
   const routeObj = routes.find((r) => r.id === vehicle.routeAssignmentId);
   const driverObj = drivers.find(
@@ -46,7 +42,6 @@ export default function OfficialPlaqueQRModal({
       d.assignedVehicleReg === vehicle.registrationNumber
   );
 
-  // Load latest signed token + version info
   useEffect(() => {
     let cancelled = false;
 
@@ -62,19 +57,8 @@ export default function OfficialPlaqueQRModal({
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled) {
-          setQrToken(data.token ?? "");
+          setQrToken(data.token ?? data.data?.token ?? "");
         }
-      } catch {
-        // ignore
-      }
-
-      // Read local version for display
-      try {
-        const registry = JSON.parse(
-          localStorage.getItem("kombiflow_qr_registry") || "{}"
-        );
-        const record = registry[vehicle.registrationNumber];
-        if (!cancelled) setQrVersion(record?.version ?? 1);
       } catch {
         // ignore
       }
@@ -86,29 +70,33 @@ export default function OfficialPlaqueQRModal({
     };
   }, [vehicle.registrationNumber]);
 
-  const handleVerifyQR = () => {
+  const handleVerifyQR = async () => {
     setVerifyStep(1);
-    setTimeout(() => {
-      setVerifyStep(2);
-      setTimeout(() => {
+    try {
+      if (qrToken) {
+        setVerifyStep(2);
+        const res = await fetch("/api/qr/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: qrToken }),
+        });
         setVerifyStep(3);
-        setTimeout(() => {
-          setVerifyStep(4);
-          logQREvent(
-            "VERIFICATION_SUCCESS",
-            vehicle.registrationNumber,
-            `Cryptographic HMAC-SHA256 QR signature verified for ${vehicle.registrationNumber}.`
-          );
-          setToastMsg(
-            "🛡️ Cryptographic HMAC-SHA256 signature verified & synchronized successfully!"
-          );
-          setTimeout(() => {
-            setVerifyStep(0);
-            setShowValidityModal(true);
-          }, 1000);
-        }, 600);
-      }, 600);
-    }, 600);
+        const body = await res.json().catch(() => ({}));
+        const valid = body?.data?.valid ?? body?.valid ?? res.ok;
+        setVerifyStep(4);
+        setToastMsg(
+          valid
+            ? "Server HMAC-SHA256 signature verified successfully."
+            : "Verification completed — token rejected or permit not active."
+        );
+      }
+    } catch {
+      setToastMsg("Verification request failed.");
+    }
+    setTimeout(() => {
+      setVerifyStep(0);
+      setShowValidityModal(true);
+    }, 800);
   };
 
   const handleDownloadToken = () => {
@@ -117,10 +105,7 @@ export default function OfficialPlaqueQRModal({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `QR_TOKEN_${vehicle.registrationNumber.replace(
-      /\s+/g,
-      "_"
-    )}.txt`;
+    a.download = `QR_TOKEN_${vehicle.registrationNumber.replace(/\s+/g, "_")}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -150,7 +135,6 @@ export default function OfficialPlaqueQRModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 my-6">
-        {/* Modal Header */}
         <div className="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-zinc-800">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center">
@@ -168,24 +152,28 @@ export default function OfficialPlaqueQRModal({
           <button
             onClick={onClose}
             className="p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {toastMsg && (
-          <div className="p-3 bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-between">
+          <div
+            className="p-3 bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-between"
+            role="status"
+          >
             <span>{toastMsg}</span>
             <button
               onClick={() => setToastMsg(null)}
               className="text-white/80 hover:text-white font-bold ml-2"
+              aria-label="Dismiss"
             >
               ✕
             </button>
           </div>
         )}
 
-        {/* Official Plaque Card */}
         <div className="bg-gradient-to-b from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900 p-5 rounded-2xl border-2 border-emerald-600/40 shadow-inner relative overflow-hidden text-center space-y-4">
           <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
             <Award className="w-72 h-72 text-emerald-900" />
@@ -199,7 +187,6 @@ export default function OfficialPlaqueQRModal({
             </span>
           </div>
 
-          {/* Signed QR */}
           <div className="relative z-10 flex flex-col items-center justify-center mx-auto">
             <SignedQRCode
               registrationNumber={vehicle.registrationNumber}
@@ -208,9 +195,8 @@ export default function OfficialPlaqueQRModal({
             />
           </div>
 
-          {/* Vehicle registration & VIC */}
           <div className="relative z-10 space-y-0.5">
-            <div className="text-xl font-black font-mono-jb tracking-wider text-zinc-900 dark:text-white">
+            <div className="text-xl font-black font-mono tracking-wider text-zinc-900 dark:text-white">
               {vehicle.registrationNumber}
             </div>
             <div className="text-xs font-mono font-bold text-emerald-700 dark:text-emerald-400">
@@ -222,7 +208,6 @@ export default function OfficialPlaqueQRModal({
             </div>
           </div>
 
-          {/* Metadata grid */}
           <div className="relative z-10 grid grid-cols-2 gap-2 text-left text-[10.5px] bg-white/80 dark:bg-black/50 backdrop-blur-sm p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 font-mono">
             <div>
               <span className="text-zinc-400 text-[9px] block uppercase">
@@ -237,7 +222,7 @@ export default function OfficialPlaqueQRModal({
                 Permit Expiry
               </span>
               <strong className="text-zinc-900 dark:text-zinc-100 font-bold block">
-                {vehicle.permitExpiryDate || "2027-08-01"}
+                {vehicle.permitExpiryDate || "—"}
               </strong>
             </div>
             <div>
@@ -245,7 +230,7 @@ export default function OfficialPlaqueQRModal({
                 Fitness (COF)
               </span>
               <strong className="text-zinc-900 dark:text-zinc-100 font-bold truncate block">
-                {vehicle.cofNumber || "COF-VALID"}
+                {vehicle.cofNumber || "—"}
               </strong>
             </div>
             <div>
@@ -253,7 +238,7 @@ export default function OfficialPlaqueQRModal({
                 Assigned Bay
               </span>
               <strong className="text-emerald-600 dark:text-emerald-400 font-bold block">
-                {vehicle.loadingBay || "Bay 01"}
+                {vehicle.loadingBay || "—"}
               </strong>
             </div>
             <div className="col-span-2 pt-1 border-t border-zinc-150 dark:border-zinc-800">
@@ -277,23 +262,21 @@ export default function OfficialPlaqueQRModal({
             </div>
           </div>
 
-          {/* Verification progress */}
           {verifyStep > 0 && (
             <div className="p-3 bg-emerald-950/80 border border-emerald-500 rounded-xl text-white text-xs font-mono space-y-1 text-left">
               <div className="flex items-center gap-2">
                 <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
                 <span className="font-bold text-emerald-300">
-                  {verifyStep === 1 && "Step 1/3: Validating HMAC-SHA256 signature..."}
-                  {verifyStep === 2 && "Step 2/3: Cross-checking vehicle registry..."}
-                  {verifyStep === 3 && "Step 3/3: Verifying permit status..."}
-                  {verifyStep === 4 && "✓ Verification Complete — Token Authentic!"}
+                  {verifyStep === 1 && "Step 1/3: Submitting token to server…"}
+                  {verifyStep === 2 && "Step 2/3: Validating HMAC-SHA256 signature…"}
+                  {verifyStep === 3 && "Step 3/3: Checking live permit status…"}
+                  {verifyStep === 4 && "Verification complete."}
                 </span>
               </div>
             </div>
           )}
         </div>
 
-        {/* Action Buttons */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
           <button
             onClick={handleVerifyQR}

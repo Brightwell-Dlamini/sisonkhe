@@ -4,9 +4,9 @@
  *
  * Authorization for event-log sync mutations.
  * applyEvents uses the service role; every event must be checked here first.
+ * Pure functions — safe to unit test without a server runtime.
  */
 
-import "server-only";
 import type { ResolvedUser } from "@/lib/auth/roles";
 import type { EntityType, SyncEvent, SyncOperation } from "./protocol";
 
@@ -90,7 +90,6 @@ export function authorizeSyncEvent(
     return "UPDATE requires baseVersion for optimistic concurrency";
   }
 
-  // Platform-only entities
   if (entityType === "staff" || entityType === "advert") {
     if (user.role !== "super-admin") {
       return `${entityType} mutations require super-admin`;
@@ -169,8 +168,6 @@ export function authorizeSyncEvent(
   return `Role ${user.role} is not permitted to push sync events`;
 }
 
-export function assertSyncOperation(
-  op: string
-): op is SyncOperation {
+export function assertSyncOperation(op: string): op is SyncOperation {
   return op === "INSERT" || op === "UPDATE" || op === "DELETE";
 }
