@@ -11,6 +11,7 @@
 
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { log } from "@/lib/observability/log";
 
 export type ReconIssueKind =
   | "intent_pending_stale"
@@ -100,7 +101,9 @@ export async function runPaymentReconciliation(opts?: {
       }
     }
   } catch (err) {
-    console.warn("[reconciliation] rank_fee_payments scan failed:", err);
+    log.error("reconciliation.rank_fee_scan_failed", {
+      err: err instanceof Error ? err.message : String(err),
+    });
   }
 
   try {
@@ -166,9 +169,15 @@ export async function runPaymentReconciliation(opts?: {
           }
         }
       }
+    } else if (error) {
+      log.error("reconciliation.intent_scan_failed", {
+        err: error.message,
+      });
     }
   } catch (err) {
-    console.warn("[reconciliation] payment_intents scan failed:", err);
+    log.error("reconciliation.intent_scan_failed", {
+      err: err instanceof Error ? err.message : String(err),
+    });
   }
 
   issues.sort((a, b) => {
@@ -176,9 +185,33 @@ export async function runPaymentReconciliation(opts?: {
     return order[a.severity] - order[b.severity];
   });
 
-  return {
+  const report: ReconReport = {
     generatedAt: now.toISOString(),
     issues: issues.slice(0, 100),
     counts,
   };
+
+  const highCount = issues.filter((i) => i.severity === "high").length;
+  log.info("reconciliation.run", {
+    totalIssues: issues.length,
+    highSeverity: highCount,
+    intent_pending_stale: counts.intent_pending_stale,
+    intent_success_no_credit: counts.intent_success_no_credit,
+    rank_fee_pending: counts.rank_fee_pending,
+    lookbackDays,
+    stalePendingHours,
+  });
+
+  if (highCount > 0) {
+    log.warn("reconciliation.high_severity", {
+      count: highCount,
+      samples: issues
+        .filter((i) => i.severity === "high")
+        .slice(0, 5)
+        .map((i) => i.title)
+        .join(" | "),
+    });
+  }
+
+  return report;
 }
