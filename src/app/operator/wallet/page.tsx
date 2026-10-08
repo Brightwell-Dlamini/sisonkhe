@@ -11,6 +11,7 @@ import { useOperatorMasterCard } from "@/hooks/useOperatorMasterCard";
 import { useOperatorFleetCards } from "@/hooks/useOperatorFleetCards";
 import MasterCardView from "@/components/operator/MasterCardView";
 import MasterCardActions from "@/components/operator/MasterCardActions";
+import OperatorReadinessCard from "@/components/operator/OperatorReadinessCard";
 import SendMoneyModal from "@/components/operator/SendMoneyModal";
 import TopUpModal from "@/components/payments/TopUpModal";
 import { useAuth } from "@/hooks/useAuth";
@@ -62,6 +63,12 @@ export default function OperatorWalletPage() {
           {toast}
         </div>
       )}
+
+      <OperatorReadinessCard
+        balanceSzl={card.balanceSzl}
+        fleetCount={vehicles.length}
+        status={card.status}
+      />
 
       <MasterCardView card={card} />
 

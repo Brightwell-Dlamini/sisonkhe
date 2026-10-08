@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 import { Search, Inbox } from "lucide-react";
 import type { MarshalVehicle } from "@/lib/marshal/queries";
 import type { DispatchAction } from "@/lib/marshal/dispatch";
+import { rankCoach } from "@/lib/domain/rankCoach";
 import QueueRow from "./QueueRow";
 
 interface Props {
@@ -37,11 +38,18 @@ export default function QueueList({
 
   const sorted = useMemo(() => {
     return [...vehicles].sort((a, b) => {
-      const aPos = a.currentQueuePosition;
-      const bPos = b.currentQueuePosition;
-      if (aPos > 0 && bPos > 0) return aPos - bPos;
-      if (aPos > 0 && bPos === 0) return -1;
-      if (bPos > 0 && aPos === 0) return 1;
+      const aCoach = rankCoach(a);
+      const bCoach = rankCoach(b);
+
+      const aPriority = aCoach.blocked ? 0 : a.status === "Delayed" ? 1 : 2;
+      const bPriority = bCoach.blocked ? 0 : b.status === "Delayed" ? 1 : 2;
+
+      if (aPriority !== bPriority) return aPriority - bPriority;
+
+      const aPos = a.currentQueuePosition > 0 ? a.currentQueuePosition : 9999;
+      const bPos = b.currentQueuePosition > 0 ? b.currentQueuePosition : 9999;
+
+      if (aPos !== bPos) return aPos - bPos;
       return a.registrationNumber.localeCompare(b.registrationNumber);
     });
   }, [vehicles]);

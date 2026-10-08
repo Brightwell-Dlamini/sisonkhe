@@ -6,9 +6,11 @@ import {
   ShieldCheck,
   MessageSquare,
   Moon,
+  Sparkles,
 } from "lucide-react";
 import type { DriverContext } from "@/lib/driver/queries";
 import type { DriverSignalKind } from "@/hooks/useDriverSignal";
+import { driverCoach } from "@/lib/domain/driverCoach";
 import DriverSignalPanel from "./DriverSignalPanel";
 
 interface Props {
@@ -55,6 +57,13 @@ export default function DriverVehicleCard({
   }
 
   const isLead = vehicle.currentQueuePosition === 1;
+  const coach = driverCoach({
+    status: vehicle.status,
+    currentQueuePosition: vehicle.currentQueuePosition,
+    hasVehicle: true,
+    routeOrigin: vehicle.routeOrigin,
+    routeDestination: vehicle.routeDestination,
+  });
 
   return (
     <div className="space-y-4">
@@ -74,6 +83,21 @@ export default function DriverVehicleCard({
             : "border-white/[0.06]"
         }`}
       >
+        <div className="mb-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">
+              <Sparkles className="h-3.5 w-3.5" />
+              Next action
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-200">
+              {coach.primaryLabel}
+            </span>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-zinc-300">
+            {coach.coachLine}
+          </p>
+        </div>
+
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
             <div className="w-12 h-12 rounded-xl bg-blue-950/60 text-cyan-400 flex items-center justify-center shrink-0">

@@ -18,13 +18,16 @@ import {
   WalletCards,
 } from "lucide-react";
 import { useOperatorMasterCard } from "@/hooks/useOperatorMasterCard";
+import { useOperatorFleetCards } from "@/hooks/useOperatorFleetCards";
 import MasterCardView from "@/components/operator/MasterCardView";
 import FleetCardsGrid from "@/components/operator/FleetCardsGrid";
+import OperatorReadinessCard from "@/components/operator/OperatorReadinessCard";
 import { RoleGuidance } from "@/components/common/RoleGuidance";
 import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
 
 export default function OperatorHome() {
   const { card, loading: cardLoading } = useOperatorMasterCard();
+  const { vehicles } = useOperatorFleetCards();
 
   return (
     <div className="space-y-6">
@@ -34,6 +37,14 @@ export default function OperatorHome() {
         actionLabel="Review renewals"
         actionHref="/operator/renewals"
       />
+
+      {card && (
+        <OperatorReadinessCard
+          balanceSzl={card.balanceSzl}
+          fleetCount={vehicles.length}
+          status={card.status}
+        />
+      )}
 
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>

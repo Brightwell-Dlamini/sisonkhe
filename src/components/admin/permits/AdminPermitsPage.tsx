@@ -21,6 +21,7 @@ import {
   TableSkeleton,
   useToast,
 } from "@/components/ui";
+import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
 
 type Tab = "pending" | "approved" | "rejected";
 
@@ -88,6 +89,13 @@ export default function AdminPermitsPage() {
 
   return (
     <div>
+      <RoleWelcomeBanner
+        title="Renewal review is active"
+        subtitle="Prioritise approvals, scan expiring permits, and keep the fleet compliant before the next operating window."
+        actionLabel="Print queue"
+        actionHref="/admin/permits/print"
+      />
+
       <PageHeader
         title="Permit Renewals"
         description="Review operator-submitted renewal requests. Approvals update the vehicle's permit and archive the old one."

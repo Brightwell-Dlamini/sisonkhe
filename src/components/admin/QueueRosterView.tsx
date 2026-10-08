@@ -11,6 +11,7 @@ import {
   TableSkeleton,
   Badge,
 } from "@/components/ui";
+import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
 
 interface RouteOption {
   id: string;
@@ -71,6 +72,13 @@ export default function QueueRosterView() {
 
   return (
     <div>
+      <RoleWelcomeBanner
+        title="Route planning is live"
+        subtitle="Review the rolling monthly rotation, spot coverage gaps, and keep the next dispatch cycle aligned before it starts."
+        actionLabel="Open command centre"
+        actionHref="/admin"
+      />
+
       <PageHeader
         title="30-Day Rotation Queue"
         description="Full monthly cycle viewer for any route."
