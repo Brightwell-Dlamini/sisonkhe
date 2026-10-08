@@ -13,6 +13,7 @@ import { momoProvider } from "@/lib/payments/providers/momo";
 import { assertWebhookSecret } from "@/lib/payments/webhookAuth";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
+import { log } from "@/lib/observability/log";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,11 +25,13 @@ export const POST = withApiHandler(async (request: NextRequest) => {
     const body = await request.json();
     const parsed = momoProvider.parseWebhook?.(body);
     if (!parsed) {
-      console.warn("[webhook/momo] unparseable payload:", body);
+      log.warn("webhook.momo.unparseable", {
+        keys: body && typeof body === "object" ? Object.keys(body as object).slice(0, 12).join(",") : "n/a",
+      });
       return ok({ ignored: true });
     }
 
-    console.info("[webhook/momo] received:", {
+    log.info("webhook.momo.received", {
       referenceId: parsed.providerReference,
       status: parsed.status,
     });
@@ -40,11 +43,16 @@ export const POST = withApiHandler(async (request: NextRequest) => {
       parsed.rawPayload
     );
 
+    log.info("webhook.momo.applied", {
+      referenceId: parsed.providerReference,
+      status: parsed.status,
+    });
+
     return ok({ received: true });
   } catch (err) {
     if (err instanceof AppError) throw err;
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[webhook/momo] error:", err);
+    log.error("webhook.momo.apply_failed", { err: message });
     // Verified payload but apply failed — acknowledge to avoid infinite retries
     return ok({ received: true, error: message });
   }

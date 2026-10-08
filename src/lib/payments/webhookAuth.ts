@@ -7,6 +7,7 @@
 
 import "server-only";
 import { AppError } from "@/lib/api/errors";
+import { log } from "@/lib/observability/log";
 
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -46,16 +47,16 @@ export function assertWebhookSecret(
 
   if (!expected) {
     if (isProd) {
+      log.error("webhook.secret_missing", { envKey });
       throw AppError.internal(`${envKey} is not configured`);
     }
-    console.warn(
-      `[webhook] ${envKey} unset — allowing unsigned webhook in non-production`
-    );
+    log.warn("webhook.secret_unset_dev", { envKey });
     return;
   }
 
   const provided = extractProvided(request);
   if (!provided || !timingSafeEqual(provided, expected)) {
+    log.warn("webhook.auth_failed", { envKey });
     throw AppError.unauthenticated("Invalid webhook signature");
   }
 }
