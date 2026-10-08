@@ -10,7 +10,9 @@ import DriverVehicleCard from "./DriverVehicleCard";
 import DriverSummaryCards from "./DriverSummaryCards";
 import DriverTripsList from "./DriverTripsList";
 import MessageMarshalModal from "./MessageMarshalModal";
+import { RoleGuidance } from "@/components/common/RoleGuidance";
 import { IconButton, TableSkeleton, useToast } from "@/components/ui";
+import { CalendarClock, CreditCardIcon, MessageSquareText, Route } from "lucide-react";
 
 function isAfter830PMLocal(): boolean {
   const now = new Date();
@@ -105,6 +107,35 @@ export default function DriverDashboard() {
           pendingSignalCount={pendingSignals.length}
           isAfter830PM={after830}
         />
+
+        <RoleGuidance
+          title="Daily driver flow"
+          items={[
+            {
+              label: "Update vehicle status",
+              detail: "Keep the marshal synced with road availability, delays, and route readiness.",
+              icon: Route,
+            },
+            {
+              label: "Review roster",
+              detail: "Check the next assigned dates and trip sequence before the day begins.",
+              href: "/driver/roster",
+              icon: CalendarClock,
+            },
+            {
+              label: "Send marshal note",
+              detail: "Report a delay, issue, or operating change quickly and clearly.",
+              icon: MessageSquareText,
+            },
+            {
+              label: "Use virtual card",
+              detail: "Access trip and payment details from the driver card when needed.",
+              href: "/driver/card",
+              icon: CreditCardIcon,
+            },
+          ]}
+        />
+
         <DriverTripsList trips={trips} />
       </div>
 

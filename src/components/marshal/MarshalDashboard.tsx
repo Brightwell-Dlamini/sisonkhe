@@ -20,6 +20,8 @@ import RecentActivityFeed from "./RecentActivityFeed";
 import AddVehicleModal from "./AddVehicleModal";
 import VehicleDetailsModal from "./VehicleDetailsModal";
 import QueueSuggestionsPanel from "./QueueSuggestionsPanel";
+import { RoleGuidance } from "@/components/common/RoleGuidance";
+import { CalendarRange, MessageSquareText, Route, PlusCircle } from "lucide-react";
 
 export default function MarshalDashboard() {
   const {
@@ -144,6 +146,34 @@ export default function MarshalDashboard() {
           />
         </div>
         <div className="lg:col-span-1 space-y-4">
+          <RoleGuidance
+            title="Terminal flow"
+            items={[
+              {
+                label: "Add vehicle",
+                detail: "Board a vehicle into the live queue and assign the next priority slot.",
+                icon: PlusCircle,
+              },
+              {
+                label: "Review roster",
+                detail: "Check the current terminal rotation and dispatch cadence for the next cycle.",
+                href: "/marshal/queue",
+                icon: CalendarRange,
+              },
+              {
+                label: "Send updates",
+                detail: "Keep drivers aligned on route, status, and delays before dispatch.",
+                href: "/marshal/comms",
+                icon: MessageSquareText,
+              },
+              {
+                label: "Route guidance",
+                detail: "Use the queue suggestions panel to push the most ready vehicle first.",
+                href: "/marshal/settings",
+                icon: Route,
+              },
+            ]}
+          />
           <QueueSuggestionsPanel routeId={routeId} />
           <RecentActivityFeed activity={activity} />
         </div>

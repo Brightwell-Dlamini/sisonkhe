@@ -10,14 +10,17 @@
 import Link from "next/link";
 import {
   CreditCard,
+  CreditCardIcon,
   Truck,
   FileText,
   ArrowRight,
   Loader2,
+  WalletCards,
 } from "lucide-react";
 import { useOperatorMasterCard } from "@/hooks/useOperatorMasterCard";
 import MasterCardView from "@/components/operator/MasterCardView";
 import FleetCardsGrid from "@/components/operator/FleetCardsGrid";
+import { RoleGuidance } from "@/components/common/RoleGuidance";
 
 export default function OperatorHome() {
   const { card, loading: cardLoading } = useOperatorMasterCard();
@@ -97,6 +100,36 @@ export default function OperatorHome() {
         </div>
         <FleetCardsGrid />
       </section>
+
+      <RoleGuidance
+        title="Operator flow"
+        items={[
+          {
+            label: "Review master card",
+            detail: "Check the business profile, balance, and handoff status for the current fleet cycle.",
+            href: "/operator",
+            icon: CreditCardIcon,
+          },
+          {
+            label: "Manage wallet",
+            detail: "Top up or review the account used for transport and settlement movements.",
+            href: "/operator/wallet",
+            icon: WalletCards,
+          },
+          {
+            label: "Review fleet",
+            detail: "Track every vehicle and keep your fleet coverage aligned with active demand.",
+            href: "/operator/fleet",
+            icon: Truck,
+          },
+          {
+            label: "Submit renewals",
+            detail: "Open any renewal or compliance request before expiry to keep operations moving.",
+            href: "/operator/renewals",
+            icon: FileText,
+          },
+        ]}
+      />
     </div>
   );
 }
