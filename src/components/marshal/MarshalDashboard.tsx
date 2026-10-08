@@ -21,6 +21,7 @@ import AddVehicleModal from "./AddVehicleModal";
 import VehicleDetailsModal from "./VehicleDetailsModal";
 import QueueSuggestionsPanel from "./QueueSuggestionsPanel";
 import { RoleGuidance } from "@/components/common/RoleGuidance";
+import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
 import { CalendarRange, MessageSquareText, Route, PlusCircle } from "lucide-react";
 
 export default function MarshalDashboard() {
@@ -82,6 +83,13 @@ export default function MarshalDashboard() {
 
   return (
     <div className="space-y-5">
+      <RoleWelcomeBanner
+        title={`Welcome back, ${context.fullName}`}
+        subtitle="Your dispatch board is live. Review queue priorities, route health, and driver updates before the next departure."
+        actionLabel="Open queue"
+        actionHref="/marshal/queue"
+      />
+
       {toast && (
         <div className="bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 rounded-xl px-4 py-3 text-xs font-bold flex items-center justify-between">
           <span>{toast}</span>

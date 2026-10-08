@@ -21,12 +21,20 @@ import { useOperatorMasterCard } from "@/hooks/useOperatorMasterCard";
 import MasterCardView from "@/components/operator/MasterCardView";
 import FleetCardsGrid from "@/components/operator/FleetCardsGrid";
 import { RoleGuidance } from "@/components/common/RoleGuidance";
+import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
 
 export default function OperatorHome() {
   const { card, loading: cardLoading } = useOperatorMasterCard();
 
   return (
     <div className="space-y-6">
+      <RoleWelcomeBanner
+        title="Operator desk ready"
+        subtitle="Review your master card, fleet coverage, and renewal queue before the next operating cycle begins."
+        actionLabel="Review renewals"
+        actionHref="/operator/renewals"
+      />
+
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-black text-white uppercase tracking-tight">

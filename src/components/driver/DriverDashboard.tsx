@@ -11,6 +11,7 @@ import DriverSummaryCards from "./DriverSummaryCards";
 import DriverTripsList from "./DriverTripsList";
 import MessageMarshalModal from "./MessageMarshalModal";
 import { RoleGuidance } from "@/components/common/RoleGuidance";
+import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
 import { IconButton, TableSkeleton, useToast } from "@/components/ui";
 import { CalendarClock, CreditCardIcon, MessageSquareText, Route } from "lucide-react";
 
@@ -57,6 +58,13 @@ export default function DriverDashboard() {
 
   return (
     <div className="space-y-5">
+      <RoleWelcomeBanner
+        title={`Welcome back, ${context.fullName}`}
+        subtitle="Your vehicle status, roster, and trip readiness are ready to review. Keep the marshal informed before the next push."
+        actionLabel="Open roster"
+        actionHref="/driver/roster"
+      />
+
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <DriverHeader context={context} onPhotoUploaded={refresh} />
