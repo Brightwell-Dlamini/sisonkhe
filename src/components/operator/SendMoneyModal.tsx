@@ -14,6 +14,7 @@ interface Props {
   vehicles: VehicleCardSummary[];
   masterBalance: number;
   onClose: () => void;
+  initialVehicleReg?: string;
   onSubmit: (input: {
     vehicleReg: string;
     amountSzl: number;
@@ -42,9 +43,10 @@ export default function SendMoneyModal({
   vehicles,
   masterBalance,
   onClose,
+  initialVehicleReg,
   onSubmit,
 }: Props) {
-  const [vehicleReg, setVehicleReg] = useState(vehicles[0]?.registrationNumber ?? "");
+  const [vehicleReg, setVehicleReg] = useState(initialVehicleReg ?? vehicles[0]?.registrationNumber ?? "");
   const [amount, setAmount] = useState(250);
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [note, setNote] = useState("");

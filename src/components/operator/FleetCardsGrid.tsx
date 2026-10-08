@@ -5,10 +5,14 @@ import { Loader2, Inbox } from "lucide-react";
 import { useOperatorFleetCards } from "@/hooks/useOperatorFleetCards";
 import VehicleCardMini from "./VehicleCardMini";
 import CardInspectionModal from "./CardInspectionModal";
+import SendMoneyModal from "./SendMoneyModal";
+import { useOperatorMasterCard } from "@/hooks/useOperatorMasterCard";
 
 export default function FleetCardsGrid() {
   const { vehicles, loading, error } = useOperatorFleetCards();
   const [selected, setSelected] = useState<string | null>(null);
+  const [sendTo, setSendTo] = useState<string | null>(null);
+  const { card, refresh, sendMoney } = useOperatorMasterCard();
 
   if (loading && vehicles.length === 0) {
     return (
@@ -48,6 +52,7 @@ export default function FleetCardsGrid() {
             key={v.registrationNumber}
             vehicle={v}
             onClick={() => setSelected(v.registrationNumber)}
+            onQuickSend={(reg) => setSendTo(reg)}
           />
         ))}
       </div>
@@ -56,6 +61,22 @@ export default function FleetCardsGrid() {
         <CardInspectionModal
           registrationNumber={selected}
           onClose={() => setSelected(null)}
+        />
+      )}
+
+      {sendTo && card && (
+        <SendMoneyModal
+          vehicles={vehicles}
+          initialVehicleReg={sendTo}
+          masterBalance={card.balanceSzl}
+          onClose={() => setSendTo(null)}
+          onSubmit={async (input) => {
+            const res = await sendMoney(input);
+            if (res.success) {
+              await refresh();
+            }
+            return res;
+          }}
         />
       )}
     </>

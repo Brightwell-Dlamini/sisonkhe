@@ -68,6 +68,13 @@ export default function OperatorWalletPage() {
         balanceSzl={card.balanceSzl}
         fleetCount={vehicles.length}
         status={card.status}
+        onReload={() => setShowTopUp(true)}
+        onSend={() => setShowSend(true)}
+        onToggleFreeze={async () => {
+          const ok = await toggleFreeze();
+          if (ok) showToast(`Card ${card.status === "Active" ? "frozen" : "unfrozen"}`);
+          return ok;
+        }}
       />
 
       <MasterCardView card={card} />

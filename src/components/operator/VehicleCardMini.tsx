@@ -6,14 +6,15 @@ import type { VehicleCardSummary } from "@/lib/operator/queries";
 interface Props {
   vehicle: VehicleCardSummary;
   onClick: () => void;
+  onQuickSend?: (reg: string) => void;
 }
 
-export default function VehicleCardMini({ vehicle, onClick }: Props) {
+export default function VehicleCardMini({ vehicle, onClick, onQuickSend }: Props) {
   const isFrozen = vehicle.cardStatus === "Frozen";
 
   return (
-    <button
-      onClick={onClick}
+    <div
+      onClick={() => onClick?.()}
       className={`w-full text-left rounded-2xl p-4 border transition-all ${
         isFrozen
           ? "bg-slate-100 dark:bg-slate-950 border-slate-300 dark:border-slate-800"
@@ -61,11 +62,35 @@ export default function VehicleCardMini({ vehicle, onClick }: Props) {
         </div>
       </div>
 
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick?.();
+          }}
+          className="text-xs text-zinc-400 bg-white/[0.02] px-2 py-1 rounded-lg"
+        >
+          Inspect
+        </button>
+        <div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onQuickSend?.(vehicle.registrationNumber);
+            }}
+            disabled={isFrozen}
+            className={`px-3 py-1 rounded-lg text-xs font-bold ${isFrozen ? "opacity-50 cursor-not-allowed" : "bg-amber-500 text-black"}`}
+          >
+            Send
+          </button>
+        </div>
+      </div>
+
       {vehicle.cardNumber && (
         <div className={`mt-2 text-[10px] font-mono truncate ${isFrozen ? "text-slate-400" : "text-blue-200"}`}>
           {vehicle.cardNumber}
         </div>
       )}
-    </button>
+    </div>
   );
 }

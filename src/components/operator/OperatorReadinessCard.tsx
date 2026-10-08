@@ -3,20 +3,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AlertTriangle, ShieldCheck, TrendingUp, Truck, CreditCard } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { AlertTriangle, ShieldCheck, TrendingUp, Truck, CreditCard, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 interface Props {
   balanceSzl: number;
   fleetCount: number;
   status: string;
+  onReload?: () => void;
+  onSend?: () => void;
+  onToggleFreeze?: () => Promise<boolean>;
 }
 
 export default function OperatorReadinessCard({
   balanceSzl,
   fleetCount,
   status,
+  onReload,
+  onSend,
+  onToggleFreeze,
 }: Props) {
+  const [freezing, setFreezing] = useState(false);
   const isFrozen = status === "Frozen";
   const isLowBalance = balanceSzl < 250;
 
@@ -42,8 +52,38 @@ export default function OperatorReadinessCard({
     <div className={`rounded-2xl border p-4 ${tone}`}>
       <div className="flex items-center justify-end mb-3">
         <div className="flex gap-2">
-          <Link href="/operator/wallet" className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold">Top up</Link>
-          <Link href="/operator/fleet" className="px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-zinc-200 text-xs font-bold">Fleet</Link>
+          {onReload ? (
+            <button onClick={onReload} className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold">Top up</button>
+          ) : (
+            <Link href="/operator/wallet" className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold">Top up</Link>
+          )}
+
+          {onSend ? (
+            <button onClick={onSend} className="px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-zinc-200 text-xs font-bold">Fleet</button>
+          ) : (
+            <Link href="/operator/fleet" className="px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-zinc-200 text-xs font-bold">Fleet</Link>
+          )}
+
+          {onToggleFreeze && (
+            <button
+              onClick={async () => {
+                try {
+                  setFreezing(true);
+                  await onToggleFreeze();
+                } finally {
+                  setFreezing(false);
+                }
+              }}
+              disabled={freezing}
+              className={`px-3 py-2 rounded-xl font-bold text-xs ${
+                status === "Frozen"
+                  ? "bg-emerald-600 text-black"
+                  : "bg-white/[0.03] border border-white/[0.08] text-zinc-200"
+              }`}
+            >
+              {freezing ? <Loader2 className="w-4 h-4 animate-spin" /> : status === "Frozen" ? "Unfreeze" : "Freeze"}
+            </button>
+          )}
         </div>
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
