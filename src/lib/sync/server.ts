@@ -16,6 +16,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import type { ResolvedUser } from "@/lib/auth/roles";
 import type { SyncEvent, SyncPushResult } from "./protocol";
 import { authorizeSyncEvent } from "./authorize";
+import { log } from "@/lib/observability/log";
 
 const ENTITY_TABLE: Record<string, string> = {
   vehicle: "vehicles",
@@ -82,6 +83,7 @@ export async function applyEvents(
         const code = (claimErr as { code?: string }).code;
         const msg = claimErr.message ?? "";
         if (code === "23505" || /duplicate|unique/i.test(msg)) {
+          // Idempotent replay — treat as accepted
           accepted.push(event.id);
           continue;
         }
@@ -98,9 +100,14 @@ export async function applyEvents(
 
         if (row && row.version !== event.baseVersion) {
           await admin.from("sync_events").delete().eq("id", event.id);
-          rejected.push({
-            id: event.id,
-            reason: `Version conflict: expected ${event.baseVersion}, found ${row.version}`,
+          const reason = `Version conflict: expected ${event.baseVersion}, found ${row.version}`;
+          rejected.push({ id: event.id, reason });
+          log.warn("sync.version_conflict", {
+            entityType: event.entityType,
+            entityId: event.entityId,
+            expected: event.baseVersion,
+            found: row.version,
+            clientId,
           });
           continue;
         }

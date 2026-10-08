@@ -11,12 +11,13 @@ import { pullEvents } from "@/lib/sync/server";
 import { requireServerSession } from "@/lib/auth/session";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
+import { log } from "@/lib/observability/log";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export const GET = withApiHandler(async (request: NextRequest) => {
-  await requireServerSession();
+  const session = await requireServerSession();
 
   const since = Number(request.nextUrl.searchParams.get("since") ?? "0");
   const limit = Math.min(
@@ -29,5 +30,15 @@ export const GET = withApiHandler(async (request: NextRequest) => {
   }
 
   const result = await pullEvents(since, limit);
+
+  log.info("sync.pull", {
+    role: session.role,
+    since,
+    limit,
+    returned: result.events.length,
+    latestSeq: result.latestSeq,
+    hasMore: result.hasMore,
+  });
+
   return ok(result);
 });
