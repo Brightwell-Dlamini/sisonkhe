@@ -42,3 +42,7 @@ next-env.d.ts
 
 # local data
 data/fleet_state.json
+
+# generated dumps (do not commit)
+repomix-output.xml
+tree.txt

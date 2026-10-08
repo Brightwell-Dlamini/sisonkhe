@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * POST /api/register/vehicle — public asset collection only.
+ * Permit status is always Pending until staff review.
  */
 
 import type { NextRequest } from "next/server";
@@ -107,7 +108,8 @@ export const POST = withApiHandler(async (request: NextRequest) => {
     status: "Waiting",
     current_queue_position: 0,
     permit_number: input.permitNumber || null,
-    permit_status: input.permitNumber ? "Active" : null,
+    // Never trust client-asserted Active; staff must activate after review
+    permit_status: "Pending",
     permit_issue_date: input.permitIssueDate || null,
     permit_expiry_date: input.permitExpiryDate || null,
     cof_number: input.cofNumber || null,
@@ -133,8 +135,9 @@ export const POST = withApiHandler(async (request: NextRequest) => {
       success: true,
       registrationNumber: plate,
       vic,
+      permitStatus: "Pending",
       message:
-        "Vehicle recorded. No driver was linked. An authorised staff member will assign driver, route, and operator.",
+        "Vehicle recorded with pending permit status. An authorised staff member will verify compliance, assign driver, route, and operator.",
     },
     { status: 201 }
   );
