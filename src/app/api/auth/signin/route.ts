@@ -10,7 +10,6 @@ import {
 } from "@/lib/supabase/server";
 import { looseAdmin, rpcRow } from "@/lib/supabase/rpc";
 import { resolveUserRole } from "@/lib/auth/roles";
-import { rateLimitAsync } from "@/lib/domain/rateLimit";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
 
@@ -40,16 +39,7 @@ export const POST = withApiHandler(async (request: NextRequest) => {
   const identifier = String(body.identifier ?? "").trim();
   const password = String(body.password ?? "");
 
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown";
-  const rl = await rateLimitAsync(`signin:${ip}`, 20, 15 * 60_000);
-  if (!rl.ok) {
-    throw new AppError("RATE_LIMITED", "Too many sign-in attempts. Try again later.", {
-      details: { retryAfterSec: rl.retryAfterSec },
-    });
-  }
+  // Rate limiting intentionally removed until public rollout.
 
   if (!identifier || !password) {
     throw AppError.validation("Identifier and password are required");
