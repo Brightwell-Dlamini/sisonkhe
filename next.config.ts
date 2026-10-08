@@ -5,18 +5,11 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
 
-  /**
-   * TEMPORARY (2026-10-05):
-   * Generated Supabase Database types are incomplete (portal RPCs + some
-   * marshals columns missing). Strict typecheck fails one error at a time
-   * after a successful compile. Allow deploy while types are regenerated.
-   * Re-enable ignoreBuildErrors: false once src/types/database.ts is synced.
-   */
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
 
   experimental: {
@@ -45,11 +38,12 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              // Next.js still requires inline for some bootstrap; prefer nonces in a follow-up
+              "script-src 'self' 'unsafe-inline'",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              "connect-src 'self' https: wss:",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.upstash.io https://*.mtn.com https://momodeveloper.mtn.com",
               "worker-src 'self'",
               "manifest-src 'self'",
               "frame-ancestors 'none'",

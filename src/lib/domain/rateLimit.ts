@@ -7,7 +7,7 @@
  * Primary: Upstash Redis (works across all Vercel instances).
  * Fallback: in-process Map when Upstash is not configured (local dev only).
  *
- * In-process alone is not production-safe under multi-instance serverless.
+ * In production, missing/failed Upstash fails closed (rejects the request).
  */
 
 import "server-only";
@@ -53,9 +53,14 @@ function upstashConfigured(): boolean {
   );
 }
 
+function isProduction(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
 /**
  * Sliding fixed-window rate limit.
- * Prefer Upstash when configured; otherwise local (dev).
+ * Prefer Upstash when configured; otherwise local (dev only).
+ * Production without Upstash → fail closed.
  */
 export async function rateLimitAsync(
   key: string,
@@ -63,6 +68,12 @@ export async function rateLimitAsync(
   windowMs: number
 ): Promise<{ ok: boolean; remaining: number; retryAfterSec: number }> {
   if (!upstashConfigured()) {
+    if (isProduction()) {
+      console.error(
+        "[rateLimit] Upstash not configured in production — denying request"
+      );
+      return { ok: false, remaining: 0, retryAfterSec: 60 };
+    }
     return localRateLimit(key, limit, windowMs);
   }
 
@@ -85,7 +96,10 @@ export async function rateLimitAsync(
         : Math.max(1, Math.ceil((result.reset - Date.now()) / 1000)),
     };
   } catch (err) {
-    console.warn("[rateLimit] Upstash failed, falling back to local:", err);
+    console.error("[rateLimit] Upstash failed:", err);
+    if (isProduction()) {
+      return { ok: false, remaining: 0, retryAfterSec: 60 };
+    }
     return localRateLimit(key, limit, windowMs);
   }
 }
@@ -100,5 +114,8 @@ export function rateLimit(
   limit: number,
   windowMs: number
 ): { ok: boolean; remaining: number; retryAfterSec: number } {
+  if (isProduction() && !upstashConfigured()) {
+    return { ok: false, remaining: 0, retryAfterSec: 60 };
+  }
   return localRateLimit(key, limit, windowMs);
 }
