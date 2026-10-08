@@ -2,9 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { LogOut, Settings, User, ChevronDown } from "lucide-react";
+import {
+  LogOut,
+  Settings,
+  User,
+  ChevronDown,
+  House,
+  Landmark,
+  Route,
+  Truck,
+  ShieldCheck,
+} from "lucide-react";
 import type { ResolvedUser } from "@/lib/auth/roles";
 import type { Role } from "@/config/navigation";
+import { homeRouteForRole } from "@/lib/navigation/resolve";
 import RoleBadge from "./RoleBadge";
 
 interface Props {
@@ -40,6 +51,44 @@ export default function UserMenu({ user, role }: Props) {
     } catch {}
     window.location.href = "/login";
   };
+
+  const roleShortcuts = (() => {
+    switch (role) {
+      case "marshal":
+        return [
+          { label: "Dispatch board", href: "/marshal" },
+          { label: "Queue", href: "/marshal/queue" },
+          { label: "Driver comms", href: "/marshal/comms" },
+        ];
+      case "driver":
+        return [
+          { label: "Dashboard", href: "/driver" },
+          { label: "Roster", href: "/driver/roster" },
+          { label: "Virtual card", href: "/driver/card" },
+        ];
+      case "operator":
+        return [
+          { label: "Operator desk", href: "/operator" },
+          { label: "Fleet", href: "/operator/fleet" },
+          { label: "Renewals", href: "/operator/renewals" },
+        ];
+      case "inspector":
+        return [
+          { label: "Scan desk", href: "/inspector/scan" },
+          { label: "Tickets", href: "/inspector/tickets" },
+        ];
+      case "admin":
+      case "fleet-manager":
+      case "super-admin":
+        return [
+          { label: "Command centre", href: "/admin" },
+          { label: "Fleet", href: "/admin/vehicles" },
+          { label: "Drivers", href: "/admin/drivers" },
+        ];
+      default:
+        return [{ label: "Home", href: "/" }];
+    }
+  })();
 
   return (
     <div className="relative" ref={ref}>
@@ -102,23 +151,49 @@ export default function UserMenu({ user, role }: Props) {
             </div>
           </div>
 
-          <div className="p-1.5">
-            <Link
-              href="/account"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/[0.06] transition-colors"
-            >
-              <User className="w-3.5 h-3.5" />
-              Account
-            </Link>
-            <Link
-              href="/account"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/[0.06] transition-colors"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              Settings
-            </Link>
+          <div className="p-2">
+            <div className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">
+              Quick actions
+            </div>
+            <div className="space-y-1.5">
+              <Link
+                href={homeRouteForRole(role)}
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
+                <House className="w-3.5 h-3.5" />
+                Home
+              </Link>
+              {roleShortcuts.map(({ label, href }) => (
+                <Link
+                  key={label}
+                  href={href}
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+                >
+                  {label === "Dispatch board" || label === "Command centre" ? (
+                    <Landmark className="w-3.5 h-3.5" />
+                  ) : label === "Queue" || label === "Fleet" || label === "Drivers" ? (
+                    <Route className="w-3.5 h-3.5" />
+                  ) : label === "Driver comms" || label === "Virtual card" || label === "Roster" ? (
+                    <Truck className="w-3.5 h-3.5" />
+                  ) : label === "Renewals" || label === "Tickets" ? (
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  ) : (
+                    <User className="w-3.5 h-3.5" />
+                  )}
+                  {label}
+                </Link>
+              ))}
+              <Link
+                href="/account"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                Account settings
+              </Link>
+            </div>
           </div>
 
           <div className="p-1.5 border-t border-white/[0.06]">
