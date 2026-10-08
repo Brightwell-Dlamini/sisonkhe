@@ -6,6 +6,7 @@
 "use client";
 
 import { Clock, Inbox } from "lucide-react";
+import { EmptyState } from "@/components/ui";
 import type { DriverTrip } from "@/lib/driver/queries";
 
 interface Props {
@@ -26,13 +27,11 @@ export default function DriverTripsList({ trips }: Props) {
       </div>
 
       {trips.length === 0 ? (
-        <div className="text-center py-12">
-          <Inbox className="w-7 h-7 mx-auto text-zinc-600 mb-2" />
-          <div className="text-sm font-bold text-zinc-300">No trips yet</div>
-          <div className="text-xs text-zinc-500 mt-1">
-            Trips appear here after your marshal dispatches your vehicle.
-          </div>
-        </div>
+        <EmptyState
+          icon={Inbox}
+          title="No trips yet"
+          description="Trips appear here after your marshal dispatches your vehicle."
+        />
       ) : (
         <div className="divide-y divide-white/[0.06]">
           {trips.map((t) => (

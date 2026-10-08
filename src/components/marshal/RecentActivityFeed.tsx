@@ -5,7 +5,8 @@
 
 "use client";
 
-import { CheckCircle2, Clock } from "lucide-react";
+import { CheckCircle2, Clock, Inbox } from "lucide-react";
+import { EmptyState } from "@/components/ui";
 import type { MarshalActivityItem } from "@/lib/marshal/queries";
 
 interface Props {
@@ -23,9 +24,12 @@ export default function RecentActivityFeed({ activity }: Props) {
       </div>
 
       {activity.length === 0 ? (
-        <div className="py-8 text-center text-xs text-zinc-500">
-          No dispatches yet today.
-        </div>
+        <EmptyState
+          icon={Inbox}
+          title="No dispatches yet"
+          description="Dispatch activity appears here once vehicles move through the terminal."
+          className="border-0 bg-transparent p-6"
+        />
       ) : (
         <div className="divide-y divide-white/[0.06]">
           {activity.map((item) => (

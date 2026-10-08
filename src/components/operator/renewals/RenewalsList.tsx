@@ -6,6 +6,7 @@
 "use client";
 
 import { Loader2, Inbox } from "lucide-react";
+import { EmptyState } from "@/components/ui";
 import type { RenewalRow } from "@/lib/renewals/queries";
 import RenewalStatusBadge from "./RenewalStatusBadge";
 
@@ -25,15 +26,11 @@ export default function RenewalsList({ renewals, loading }: Props) {
 
   if (renewals.length === 0) {
     return (
-      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-12 text-center">
-        <Inbox className="w-8 h-8 mx-auto text-zinc-600 mb-2" />
-        <div className="text-sm font-bold text-zinc-300">
-          No renewal requests yet
-        </div>
-        <div className="text-xs text-zinc-500 mt-1">
-          Click "Request Renewal" to submit one for a vehicle in your fleet.
-        </div>
-      </div>
+      <EmptyState
+        icon={Inbox}
+        title="No renewal requests yet"
+        description="Click “Request Renewal” to submit one for a vehicle in your fleet."
+      />
     );
   }
 
