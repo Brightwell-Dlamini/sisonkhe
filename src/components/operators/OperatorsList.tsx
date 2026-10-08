@@ -124,8 +124,9 @@ export default function OperatorsList() {
     if (ok) {
       showToast("Operator updated");
       setEditingOperator(null);
+      return { success: true };
     }
-    return ok;
+    return { success: false, error: "Failed to update operator" };
   };
 
   const handleDeactivate = async (op: OperatorRow) => {
@@ -325,6 +326,7 @@ export default function OperatorsList() {
 
       {showCreateModal && (
         <OperatorFormModal
+          mode="create"
           onClose={() => setShowCreateModal(false)}
           onSubmit={handleCreate}
         />
@@ -332,6 +334,7 @@ export default function OperatorsList() {
 
       {editingOperator && (
         <OperatorFormModal
+          mode="edit"
           operator={editingOperator}
           onClose={() => setEditingOperator(null)}
           onSubmit={(input) => handleUpdate(editingOperator.id, input)}
@@ -340,7 +343,13 @@ export default function OperatorsList() {
 
       {credentials && (
         <OperatorCredentialsDialog
-          credentials={credentials}
+          name={credentials.name}
+          email={credentials.email}
+          username={credentials.username}
+          password={credentials.password}
+          masterCardNumber={credentials.masterCardNumber}
+          initialBalance={credentials.initialBalance}
+          isReset={credentials.isReset}
           onClose={() => setCredentials(null)}
         />
       )}

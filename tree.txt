@@ -12,8 +12,9 @@
 │   │   └── maskable-512.png
 │   ├── logo.jpg
 │   ├── manifest.webmanifest
+│   ├── Sisonkhe in transit.jpg
 │   └── sw.js
-├── repomix-output.xml
+├── README.md
 ├── schema.sql
 ├── src
 │   ├── app
@@ -98,6 +99,13 @@
 │   │   │   │   │   │   │   └── route.ts
 │   │   │   │   │   │   └── route.ts
 │   │   │   │   │   └── route.ts
+│   │   │   │   ├── ops
+│   │   │   │   │   ├── card-ledger
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── command-center
+│   │   │   │   │       └── route.ts
+│   │   │   │   ├── reconciliation
+│   │   │   │   │   └── route.ts
 │   │   │   │   ├── reports
 │   │   │   │   │   └── compliance
 │   │   │   │   │       └── route.ts
@@ -129,6 +137,17 @@
 │   │   │   │   ├── signin
 │   │   │   │   │   └── route.ts
 │   │   │   │   └── signout
+│   │   │   │       └── route.ts
+│   │   │   ├── cron
+│   │   │   │   ├── compliance-digest
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── daily
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── departed-reset
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── payment-reconcile
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── payment-stale-sweep
 │   │   │   │       └── route.ts
 │   │   │   ├── driver
 │   │   │   │   ├── card
@@ -183,7 +202,9 @@
 │   │   │   │   ├── queue
 │   │   │   │   │   ├── advance
 │   │   │   │   │   │   └── route.ts
-│   │   │   │   │   └── settings
+│   │   │   │   │   ├── settings
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── suggestions
 │   │   │   │   │       └── route.ts
 │   │   │   │   ├── roster
 │   │   │   │   │   └── route.ts
@@ -321,8 +342,12 @@
 │   │   │   └── login
 │   │   │       └── page.tsx
 │   │   ├── driver
+│   │   │   ├── card
+│   │   │   │   └── page.tsx
 │   │   │   ├── layout.tsx
-│   │   │   └── page.tsx
+│   │   │   ├── page.tsx
+│   │   │   └── roster
+│   │   │       └── page.tsx
 │   │   ├── globals.css
 │   │   ├── inspector
 │   │   │   ├── layout.tsx
@@ -336,8 +361,14 @@
 │   │   │   └── page.tsx
 │   │   ├── layout.tsx
 │   │   ├── marshal
+│   │   │   ├── comms
+│   │   │   │   └── page.tsx
 │   │   │   ├── layout.tsx
-│   │   │   └── page.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── queue
+│   │   │   │   └── page.tsx
+│   │   │   └── settings
+│   │   │       └── page.tsx
 │   │   ├── offline
 │   │   │   └── page.tsx
 │   │   ├── operator
@@ -472,6 +503,7 @@
 │   │   │   ├── MarshalHeader.tsx
 │   │   │   ├── QueueList.tsx
 │   │   │   ├── QueueRow.tsx
+│   │   │   ├── QueueSuggestionsPanel.tsx
 │   │   │   ├── RecentActivityFeed.tsx
 │   │   │   ├── RosterView.tsx
 │   │   │   ├── SettingsPanel.tsx
@@ -600,6 +632,10 @@
 │   │   │   ├── routes.ts
 │   │   │   ├── terminals.ts
 │   │   │   └── yoy.ts
+│   │   ├── api
+│   │   │   ├── cronAuth.ts
+│   │   │   ├── errors.ts
+│   │   │   └── response.ts
 │   │   ├── assignments
 │   │   │   └── service.ts
 │   │   ├── auth
@@ -609,15 +645,19 @@
 │   │   │   ├── region.ts
 │   │   │   ├── roles.ts
 │   │   │   └── session.ts
+│   │   ├── compliance
+│   │   │   └── digest.ts
 │   │   ├── domain
 │   │   │   ├── audit.ts
 │   │   │   ├── compliance.ts
+│   │   │   ├── driverCoach.ts
 │   │   │   ├── driverSignal.ts
 │   │   │   ├── eligibility.ts
 │   │   │   ├── identity.ts
 │   │   │   ├── ids.ts
 │   │   │   ├── operatorRules.ts
 │   │   │   ├── permitLifecycle.ts
+│   │   │   ├── rankCoach.ts
 │   │   │   ├── rankFee.ts
 │   │   │   ├── rateLimit.ts
 │   │   │   ├── serials.ts
@@ -660,6 +700,8 @@
 │   │   │   └── roster.ts
 │   │   ├── navigation
 │   │   │   └── resolve.ts
+│   │   ├── notifications
+│   │   │   └── service.ts
 │   │   ├── offline
 │   │   │   ├── db.ts
 │   │   │   ├── network.ts
@@ -672,14 +714,22 @@
 │   │   │   ├── generators.ts
 │   │   │   ├── queries.ts
 │   │   │   └── validation.ts
+│   │   ├── ops
+│   │   │   ├── commandCenter.ts
+│   │   │   └── departedReset.ts
+│   │   ├── pagination.ts
 │   │   ├── payments
+│   │   │   ├── cardLedger.ts
 │   │   │   ├── intent.ts
 │   │   │   ├── providers
 │   │   │   │   ├── emlangeni.ts
 │   │   │   │   ├── index.ts
 │   │   │   │   ├── manual.ts
 │   │   │   │   └── momo.ts
-│   │   │   └── types.ts
+│   │   │   ├── reconciliation.ts
+│   │   │   ├── staleSweep.ts
+│   │   │   ├── types.ts
+│   │   │   └── webhookAuth.ts
 │   │   ├── printing
 │   │   │   ├── batch.ts
 │   │   │   ├── permit.ts
@@ -690,6 +740,8 @@
 │   │   │   ├── payload.ts
 │   │   │   ├── sign.ts
 │   │   │   └── verify.ts
+│   │   ├── queue
+│   │   │   └── suggestions.ts
 │   │   ├── renewals
 │   │   │   ├── queries.ts
 │   │   │   └── validation.ts
@@ -712,9 +764,13 @@
 │   │   │   ├── storage.ts
 │   │   │   └── telemetry.ts
 │   │   ├── sync
+│   │   │   ├── authorize.test.ts
+│   │   │   ├── authorize.ts
 │   │   │   ├── client.ts
 │   │   │   ├── protocol.ts
 │   │   │   └── server.ts
+│   │   ├── system
+│   │   │   └── health.ts
 │   │   ├── utils.ts
 │   │   └── vehicles
 │   │       ├── queries.ts
@@ -726,9 +782,7 @@
 │   │   └── setup.ts
 │   ├── types
 │   │   └── database.ts
-│   ├── types.ts
-│   └── utils
-│       └── qrSecurity.ts
+│   └── types.ts
 ├── supabase
 │   └── migrations
 │       ├── 0000_initial.sql
@@ -749,6 +803,7 @@
 │       ├── 20261006_intelligence_infra.sql
 │       ├── 20261006_operator_region.sql
 │       ├── 20261006_plate_key.sql
+│       ├── 20261006_terminals.sql
 │       ├── 20261006_usernames.sql
 │       ├── 20261007_driver_signals.sql
 │       ├── 20261007_role_hardening.sql
@@ -756,19 +811,29 @@
 │       ├── 20261009_invariant_violations.sql
 │       ├── 20261010_invariant_rls.sql
 │       ├── 20261011_identity_hardening.sql
+│       ├── 20261012_assignment_atomic.sql
 │       ├── 20261012_invariant_run_idempotent.sql
 │       ├── 20261013_invariant_last_seen.sql
+│       ├── 20261013_system_sequences.sql
 │       ├── 20261014_identity_lifecycle.sql
+│       ├── 20261014_production_rpcs.sql
 │       ├── 20261015_identity_lifecycle.sql
 │       ├── 20261015_money_chain_hardening.sql
+│       ├── 20261015_user_notifications.sql
 │       ├── 20261016_dedupe_unassigned_driver.sql
 │       ├── 20261017_operational_integrity.sql
 │       ├── 20261018_authority_lattice.sql
 │       ├── 20261019_authority_lattice_fixes.sql
-│       └── 20261020_authority_invariant_refinement.sql
+│       ├── 20261020_authority_invariant_refinement.sql
+│       ├── 20261021_public_vehicle_registration.sql
+│       ├── 20261022_invariant_coverage_phase5.sql
+│       ├── 20261023_invariant_identity_fix.sql
+│       ├── 20261024_card_ledger_invariants.sql
+│       └── 20261025_fix_username_uuid_cast.sql
 ├── tree.txt
+├── tree.txttree
 ├── tsconfig.json
 ├── vercel.json
 └── vitest.config.ts
 
-253 directories, 519 files
+274 directories, 563 files

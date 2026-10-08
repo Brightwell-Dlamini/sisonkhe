@@ -12,7 +12,7 @@ import Dexie, { type Table } from "dexie";
 
 export interface OutboxEntry {
   id: string;
-  action: "INSERT" | "UPDATE" | "DELETE";
+  action: "INSERT" | "UPDATE" | "DELETE" | "dispatch";
   entityType: string;
   entityId: string;
   payload: Record<string, unknown>;

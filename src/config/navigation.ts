@@ -43,6 +43,8 @@ import {
 } from "lucide-react";
 import type { NavRole } from "@/lib/auth/roles";
 
+export type Role = NavRole;
+
 export interface NavItem {
   href: string;
   label: string;

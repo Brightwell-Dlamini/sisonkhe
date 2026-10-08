@@ -60,6 +60,7 @@ export type AuditAction =
   | "card.topup"
   | "card.freeze"
   | "card.unfreeze"
+  | "ledger.adjust"
   | "auth.signin"
   | "auth.signout"
   | "auth.password_changed"

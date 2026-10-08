@@ -11,13 +11,13 @@ export interface PageParams {
   offset: number;
 }
 
-export interface PageMeta {
+export type PageMeta = Record<string, unknown> & {
   page: number;
   limit: number;
   total: number;
   totalPages: number;
   hasMore: boolean;
-}
+};
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -94,7 +94,7 @@ export function parseSinceSeq(
     source instanceof URLSearchParams
       ? source.get("since") ?? source.get("sinceSeq")
       : (source.since as string | undefined) ??
-        (source.sinceSeq as string | undefined);
+      (source.sinceSeq as string | undefined);
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 0) return 0;
   return Math.floor(n);

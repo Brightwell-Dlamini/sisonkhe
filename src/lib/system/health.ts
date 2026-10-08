@@ -36,9 +36,45 @@ export interface SystemHealthReport {
   };
 }
 
+export function validateOperationalEnvironment(): HealthCheck[] {
+  const groups: Array<{ name: string; keys: string[] }> = [
+    {
+      name: "supabase_env",
+      keys: [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+      ],
+    },
+    {
+      name: "auth_env",
+      keys: ["NEXTAUTH_SECRET", "NEXTAUTH_URL"],
+    },
+    {
+      name: "app_env",
+      keys: ["NEXT_PUBLIC_APP_URL"],
+    },
+  ];
+
+  return groups.map(({ name, keys }) => {
+    const missing = keys.filter(
+      (key) => !process.env[key] || process.env[key]?.trim() === ""
+    );
+
+    return {
+      name,
+      status: missing.length === 0 ? "ok" : "fail",
+      detail:
+        missing.length === 0
+          ? "configured"
+          : `missing=${missing.join(", ")}`,
+    };
+  });
+}
+
 export async function buildSystemHealth(): Promise<SystemHealthReport> {
   const started = Date.now();
-  const checks: HealthCheck[] = [];
+  const checks: HealthCheck[] = validateOperationalEnvironment();
   let latestSyncSeq = 0;
   let syncEventsLastHour = 0;
   let openInvariantViolations = 0;

@@ -22,6 +22,7 @@ import type { DispatchAction } from "../lib/marshal/dispatch";
 import { enqueue } from "../lib/offline/outbox";
 import { isOnline, subscribeNetwork } from "../lib/offline/network";
 import { replayOutbox } from "../lib/offline/sync";
+import { createIdempotencyKey } from "../lib/sync/protocol";
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -128,6 +129,7 @@ export function useMarshalTerminal(): UseMarshalTerminalResult {
           entityType: "vehicle",
           entityId: registrationNumber,
           payload: { action, reason },
+          idempotencyKey: createIdempotencyKey(),
         });
         return {
           success: true,
@@ -156,6 +158,7 @@ export function useMarshalTerminal(): UseMarshalTerminalResult {
               entityType: "vehicle",
               entityId: registrationNumber,
               payload: { action, reason },
+              idempotencyKey: createIdempotencyKey(),
             });
             return {
               success: true,
@@ -182,6 +185,7 @@ export function useMarshalTerminal(): UseMarshalTerminalResult {
           entityType: "vehicle",
           entityId: registrationNumber,
           payload: { action, reason },
+          idempotencyKey: createIdempotencyKey(),
         });
         return {
           success: true,

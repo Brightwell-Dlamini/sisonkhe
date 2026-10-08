@@ -5,7 +5,7 @@
  * Invariant observation types + human labels.
  */
 
-export interface InvariantRunSummary {
+export interface InvariantRunSummary extends Record<string, unknown> {
   run_id: string;
   ran_at: string;
   money: number;

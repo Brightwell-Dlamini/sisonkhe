@@ -41,7 +41,7 @@ function mapAssignError(message: string): AppError {
     return AppError.conflict(message);
   }
   if (message.includes("RPC is not installed")) {
-    return new AppError("INTERNAL", message, { httpStatus: 503 });
+    return new AppError("INTERNAL", message, { expose: false });
   }
   return AppError.internal(message);
 }

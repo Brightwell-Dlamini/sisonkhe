@@ -33,8 +33,8 @@ const SUGGESTED_AMOUNTS: Record<string, number> = {
 };
 
 export default function TicketForm({ vehicle, onCancel, onSubmit }: Props) {
-  const [offenseType, setOffenseType] = useState(OFFENCE_TYPES[0]);
-  const [amount, setAmount] = useState(SUGGESTED_AMOUNTS[OFFENCE_TYPES[0]] ?? 300);
+  const [offenseType, setOffenseType] = useState<string>(OFFENCE_TYPES[0] ?? "Speeding");
+  const [amount, setAmount] = useState<number>(SUGGESTED_AMOUNTS[OFFENCE_TYPES[0] ?? "Speeding"] ?? 300);
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
@@ -42,7 +42,7 @@ export default function TicketForm({ vehicle, onCancel, onSubmit }: Props) {
 
   // Auto-suggest amount when offense changes
   const handleOffenceChange = (o: string) => {
-    setOffenseType(o as typeof OFFENCE_TYPES[number]);
+    setOffenseType(o);
     setAmount(SUGGESTED_AMOUNTS[o] ?? 300);
   };
 

@@ -52,7 +52,21 @@ export const POST = withApiHandler(async (request: NextRequest) => {
     });
   }
 
-  const ticket = await createTicket(parsed.data, {
+  const ticketInput: {
+    vehicleReg: string;
+    offenseType: string;
+    amountSzl: number;
+    location?: string;
+    notes?: string;
+  } = {
+    vehicleReg: parsed.data.vehicleReg,
+    offenseType: parsed.data.offenseType,
+    amountSzl: Number(parsed.data.amountSzl),
+    location: parsed.data.location || undefined,
+    notes: parsed.data.notes || undefined,
+  };
+
+  const ticket = await createTicket(ticketInput, {
     fullName: session.fullName,
     badgeNumber: session.staffId ?? null,
     userId: session.authUserId,

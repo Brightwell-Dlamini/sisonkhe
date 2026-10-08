@@ -29,7 +29,7 @@ export async function createSupabaseServerClient() {
     throw new Error("Missing Supabase env vars.");
   }
 
-  return createServerClient(url, key, {
+  return createServerClient<any>(url, key, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -52,9 +52,9 @@ export async function createSupabaseServerClient() {
 // Admin client (bypasses RLS — server-only)
 // ---------------------------------------------------------------------------
 
-let adminCached: ReturnType<typeof createClient> | null = null;
+let adminCached: any = null;
 
-export function createSupabaseAdminClient() {
+export function createSupabaseAdminClient(): any {
   if (adminCached) return adminCached;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -63,11 +63,11 @@ export function createSupabaseAdminClient() {
   if (!url || !serviceRole) {
     throw new Error(
       "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. " +
-        "This client is server-only and requires the service role key."
+      "This client is server-only and requires the service role key."
     );
   }
 
-  adminCached = createClient(url, serviceRole, {
+  adminCached = createClient<any>(url, serviceRole, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,

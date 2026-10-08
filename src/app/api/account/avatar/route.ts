@@ -84,7 +84,8 @@ export const POST = withApiHandler(async (request: NextRequest) => {
 
   const write = await updateMyAvatar(session, publicUrl);
   if (!write.success) {
-    throw AppError.internal(write.error ?? "Avatar write failed");
+    const error = (write as { success: false; error: string }).error;
+    throw AppError.internal(error ?? "Avatar write failed");
   }
 
   return ok({ success: true, url: publicUrl, path });
@@ -94,7 +95,8 @@ export const DELETE = withApiHandler(async () => {
   const session = await requireServerSession();
   const write = await updateMyAvatar(session, null);
   if (!write.success) {
-    throw AppError.internal(write.error ?? "Avatar clear failed");
+    const error = (write as { success: false; error: string }).error;
+    throw AppError.internal(error ?? "Avatar clear failed");
   }
   return ok({ success: true, url: null });
 });

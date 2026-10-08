@@ -362,7 +362,7 @@ export async function applyDispatchAction(
 
   const transition = canMarshalTransition(vehicle.status, action);
   if (!transition.ok) {
-    return { success: false, error: transition.reason };
+    return { success: false, error: (transition as { ok: false; reason: string }).reason };
   }
 
   const reg = vehicle.reg;
