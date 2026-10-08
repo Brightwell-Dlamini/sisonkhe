@@ -61,5 +61,6 @@ export const POST = withApiHandler(async (request: NextRequest, ctx: Ctx) => {
     success: true,
     newStatus: result.newStatus,
     rankFeeWritten: result.rankFeeWritten ?? false,
+    smartRecommendation: result.smartRecommendation ?? null,
   });
 });

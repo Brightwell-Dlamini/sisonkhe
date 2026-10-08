@@ -38,6 +38,14 @@ export interface QueueIntelligenceResult {
   recommendedNext: string | null;
 }
 
+export type QueueReadiness = "ready" | "review" | "hold";
+
+export interface QueueCandidateScore {
+  score: number;
+  readiness: QueueReadiness;
+  reasons: string[];
+}
+
 interface VehicleQueueRow {
   registration_number: string;
   status: string | null;
@@ -49,6 +57,90 @@ interface VehicleQueueRow {
   cof_expiry_date: string | null;
   route_assignment_id: string | null;
   updated_at: string | null;
+}
+
+export function scoreQueueCandidate(
+  row: Pick<
+    VehicleQueueRow,
+    | "registration_number"
+    | "status"
+    | "current_queue_position"
+    | "driver_id"
+    | "owner_operator_id"
+    | "permit_status"
+    | "permit_expiry_date"
+    | "cof_expiry_date"
+    | "updated_at"
+  >,
+  context?: {
+    now?: Date;
+    queueLength?: number;
+    operatorCounts?: Map<string, number>;
+  }
+): QueueCandidateScore {
+  const now = context?.now ?? new Date();
+  const queueLength = Math.max(1, context?.queueLength ?? 1);
+  const opCount = context?.operatorCounts?.get(row.owner_operator_id ?? "unknown") ?? 0;
+  const opShare = queueLength > 0 ? opCount / queueLength : 0;
+
+  let score = 50;
+  const reasons: string[] = [];
+
+  if (row.driver_id) {
+    score += 25;
+  } else {
+    score -= 35;
+    reasons.push("no driver");
+  }
+
+  if (row.permit_status === "Expired" || row.permit_status === "Suspended") {
+    score -= 60;
+    reasons.push("expired or suspended permit");
+  } else {
+    const permitDays = daysUntil(row.permit_expiry_date, now);
+    if (permitDays !== null && permitDays <= 14) {
+      score -= permitDays <= 0 ? 50 : 15;
+      reasons.push(`permit expiring in ${permitDays} day${permitDays === 1 ? "" : "s"}`);
+    }
+  }
+
+  const cofDays = daysUntil(row.cof_expiry_date, now);
+  if (cofDays !== null && cofDays <= 30) {
+    score -= cofDays <= 0 ? 35 : 12;
+    reasons.push(`COF expiring in ${cofDays} day${cofDays === 1 ? "" : "s"}`);
+  }
+
+  if (row.current_queue_position != null) {
+    if (row.current_queue_position <= 2) score += 8;
+    else if (row.current_queue_position >= 8) score -= 10;
+  }
+
+  if (row.updated_at) {
+    const ageMs = now.getTime() - new Date(row.updated_at).getTime();
+    if (ageMs > 4 * 60 * 60 * 1000) {
+      score -= 12;
+      reasons.push("stale queue state");
+    }
+  }
+
+  if (opShare > 0.55) {
+    score -= 12;
+    reasons.push("operator concentration is high");
+  } else if (opShare < 0.25) {
+    score += 8;
+  }
+
+  const clamp = (value: number): number => Math.max(0, Math.min(100, value));
+  score = clamp(score);
+
+  let readiness: QueueReadiness = "ready";
+  if (score < 40 || reasons.some((reason) => /expired|no driver|stale/i.test(reason))) {
+    readiness = "hold";
+  } else if (score < 70 || reasons.length > 0) {
+    readiness = "review";
+  }
+
+  return { score, readiness, reasons };
 }
 
 /**
@@ -113,34 +205,25 @@ export async function buildQueueSuggestions(opts: {
     // Fairness is advisory only
   }
 
-  const scored = rows.map((r, index) => {
-    let score = 100 - index * 2;
-    const permitDays = daysUntil(r.permit_expiry_date, now);
-    const cofDays = daysUntil(r.cof_expiry_date, now);
-    let blocked = false;
+  const opCounts = new Map<string, number>();
+  for (const r of rows) {
+    const op = r.owner_operator_id ?? "unknown";
+    opCounts.set(op, (opCounts.get(op) ?? 0) + 1);
+  }
 
-    if (r.permit_status === "Expired" || r.permit_status === "Suspended") {
-      score -= 80;
-      blocked = true;
-    }
-    if (permitDays !== null && permitDays < 0) {
-      score -= 80;
-      blocked = true;
-    }
-    if (cofDays !== null && cofDays < 0) {
-      score -= 70;
-      blocked = true;
-    }
-    if (!r.driver_id) {
-      score -= 40;
-      blocked = true;
-    }
+  const scored = rows.map((r, index) => {
+    const evaluated = scoreQueueCandidate(r, {
+      now,
+      queueLength: rows.length,
+      operatorCounts: opCounts,
+    });
 
     const op = r.owner_operator_id ?? "unknown";
     const tripsToday = operatorTripCounts.get(op) ?? 0;
-    score += Math.max(0, 8 - tripsToday);
+    const score = evaluated.score + Math.max(0, 8 - tripsToday) - index;
+    const blocked = evaluated.readiness === "hold";
 
-    return { row: r, score, blocked, tripsToday, index };
+    return { row: r, score, blocked, tripsToday, index, reasons: evaluated.reasons };
   });
 
   scored.sort((a, b) => b.score - a.score);
@@ -209,11 +292,6 @@ export async function buildQueueSuggestions(opts: {
     });
   }
 
-  const opCounts = new Map<string, number>();
-  for (const r of rows) {
-    const op = r.owner_operator_id ?? "unknown";
-    opCounts.set(op, (opCounts.get(op) ?? 0) + 1);
-  }
   if (opCounts.size >= 2 && queueLength >= 4) {
     const sortedOps = Array.from(opCounts.entries()).sort(
       (a, b) => b[1] - a[1]

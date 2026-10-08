@@ -378,22 +378,7 @@ export default function DriverFormModal({
             )}
           </div>
 
-          <style jsx>{`
-            .input {
-              width: 100%;
-              background-color: rgba(255, 255, 255, 0.03);
-              border: 1px solid rgba(255, 255, 255, 0.06);
-              border-radius: 0.75rem;
-              padding: 0.625rem 0.875rem;
-              font-size: 0.875rem;
-              color: white;
-              outline: none;
-            }
-            .input:focus {
-              border-color: rgb(16 185 129);
-            }
-          `}</style>
-        </div>
+          </div>
       </div>
     );
   }
@@ -490,21 +475,6 @@ export default function DriverFormModal({
           </div>
         </form>
 
-        <style jsx>{`
-          .input {
-            width: 100%;
-            background-color: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 0.75rem;
-            padding: 0.625rem 0.875rem;
-            font-size: 0.875rem;
-            color: white;
-            outline: none;
-          }
-          .input:focus {
-            border-color: rgb(16 185 129);
-          }
-        `}</style>
       </div>
     </div>
   );

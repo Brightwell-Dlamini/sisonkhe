@@ -20,6 +20,14 @@ import { writeAudit } from "@/lib/domain/audit";
 
 export type DispatchAction = MarshalAction;
 
+export interface SmartDispatchRecommendation {
+  score: number;
+  status: "approve" | "review" | "hold";
+  title: string;
+  reason: string;
+  nextBestAction: DispatchAction | "none";
+}
+
 export interface DispatchResult {
   success: boolean;
   error?: string;
@@ -27,6 +35,7 @@ export interface DispatchResult {
   newStatus?: VehicleStatus;
   warning?: string;
   revenueEstimated?: boolean;
+  smartRecommendation?: SmartDispatchRecommendation;
 }
 
 type AuthVehicle = {
@@ -178,6 +187,104 @@ function gatePayload(v: AuthVehicle) {
     roadworthinessExpiry: v.roadworthinessExpiry,
     vehicleStatus: v.status,
     printPending: v.printPending,
+  };
+}
+
+function daysUntil(dateLike: string | null | undefined): number | null {
+  if (!dateLike) return null;
+  const value = new Date(dateLike);
+  if (Number.isNaN(value.getTime())) return null;
+  const diffMs = value.getTime() - Date.now();
+  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+}
+
+export function buildSmartDispatchRecommendation(
+  vehicle: Pick<
+    AuthVehicle,
+    | "driverId"
+    | "driverStatus"
+    | "permitStatus"
+    | "permitExpiryDate"
+    | "cofExpiryDate"
+    | "insuranceExpiry"
+    | "roadworthinessExpiry"
+    | "status"
+    | "currentQueuePosition"
+    | "printPending"
+  >,
+  action: DispatchAction
+): SmartDispatchRecommendation {
+  let score = 0;
+  const reasons: string[] = [];
+
+  if (!vehicle.driverId) {
+    score += 35;
+    reasons.push("No assigned driver");
+  }
+
+  if (vehicle.driverStatus && /suspended|leave|off-duty|inactive/i.test(vehicle.driverStatus)) {
+    score += 40;
+    reasons.push(`Driver status: ${vehicle.driverStatus}`);
+  }
+
+  if (vehicle.permitStatus && /expired|suspended|revoked/i.test(vehicle.permitStatus)) {
+    score += 45;
+    reasons.push(`Permit status: ${vehicle.permitStatus}`);
+  } else {
+    const permitDays = daysUntil(vehicle.permitExpiryDate);
+    if (permitDays !== null && permitDays <= 7) {
+      score += permitDays <= 0 ? 45 : 18;
+      reasons.push(`Permit expires in ${permitDays} day${permitDays === 1 ? "" : "s"}`);
+    }
+  }
+
+  const cofDays = daysUntil(vehicle.cofExpiryDate);
+  if (cofDays !== null && cofDays <= 14) {
+    score += cofDays <= 0 ? 35 : 12;
+    reasons.push(`COF expires in ${cofDays} day${cofDays === 1 ? "" : "s"}`);
+  }
+
+  const insuranceDays = daysUntil(vehicle.insuranceExpiry);
+  if (insuranceDays !== null && insuranceDays <= 14) {
+    score += 12;
+    reasons.push(`Insurance expires in ${insuranceDays} day${insuranceDays === 1 ? "" : "s"}`);
+  }
+
+  const roadworthyDays = daysUntil(vehicle.roadworthinessExpiry);
+  if (roadworthyDays !== null && roadworthyDays <= 14) {
+    score += 12;
+    reasons.push(`Roadworthiness expires in ${roadworthyDays} day${roadworthyDays === 1 ? "" : "s"}`);
+  }
+
+  if (vehicle.printPending) {
+    score += 10;
+    reasons.push("Permit print is still pending");
+  }
+
+  if (vehicle.currentQueuePosition && vehicle.currentQueuePosition > 8) {
+    score += 8;
+    reasons.push("Vehicle is deep in queue");
+  }
+
+  const actionRiskBoost = action === "depart" || action === "full_cabin" ? 8 : 0;
+  score += actionRiskBoost;
+
+  const status = score >= 60 ? "hold" : score >= 30 ? "review" : "approve";
+  const nextBestAction: SmartDispatchRecommendation["nextBestAction"] =
+    status === "hold" ? "delay" : status === "review" ? "delay" : "none";
+
+  return {
+    score: Math.min(score, 100),
+    status,
+    title:
+      status === "hold"
+        ? "Hold this dispatch"
+        : status === "review"
+          ? "Review before dispatch"
+          : "Dispatch is operationally sound",
+    reason:
+      reasons.length > 0 ? reasons.join("; ") : "No major compliance or readiness issues detected.",
+    nextBestAction,
   };
 }
 
@@ -365,6 +472,8 @@ export async function applyDispatchAction(
     return { success: false, error: (transition as { ok: false; reason: string }).reason };
   }
 
+  const smartRecommendation = buildSmartDispatchRecommendation(vehicle, action);
+
   const reg = vehicle.reg;
   const admin = createSupabaseAdminClient();
   const nowIso = new Date().toISOString();
@@ -397,7 +506,12 @@ export async function applyDispatchAction(
         entityId: reg,
         summary: `Load ${reg}`,
       });
-      return { success: true, newStatus: "Loading", warning: gate.warning };
+      return {
+        success: true,
+        newStatus: "Loading",
+        warning: gate.warning,
+        smartRecommendation,
+      };
     }
 
     case "full_cabin":
@@ -439,6 +553,7 @@ export async function applyDispatchAction(
         rankFeeWritten: fee.written,
         warning: gate.warning,
         revenueEstimated: estimated,
+        smartRecommendation,
       };
     }
 
@@ -456,7 +571,7 @@ export async function applyDispatchAction(
         entityId: reg,
         summary: `Delay ${reg}${reason ? `: ${reason}` : ""}`,
       });
-      return { success: true, newStatus: "Delayed" };
+      return { success: true, newStatus: "Delayed", smartRecommendation };
     }
 
     case "breakdown": {
@@ -480,7 +595,7 @@ export async function applyDispatchAction(
         entityId: reg,
         summary: `Breakdown ${reg}`,
       });
-      return { success: true, newStatus: "Breakdown" };
+      return { success: true, newStatus: "Breakdown", smartRecommendation };
     }
 
     case "reset_to_waiting": {
@@ -500,7 +615,7 @@ export async function applyDispatchAction(
         entityId: reg,
         summary: `Reset ${reg} to Waiting`,
       });
-      return { success: true, newStatus: "Waiting" };
+      return { success: true, newStatus: "Waiting", smartRecommendation };
     }
 
     default:
