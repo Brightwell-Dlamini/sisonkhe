@@ -11,11 +11,14 @@ import { useRef, useState } from "react";
 import { Search, QrCode, Loader2, AlertCircle } from "lucide-react";
 import { useQrScanner } from "@/hooks/useQrScanner";
 import { useInspectorTickets } from "@/hooks/useInspectorTickets";
+import { useAuth } from "@/hooks/useAuth";
 import type { InspectorVehicleView } from "@/lib/inspector/queries";
+import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
 import VehicleCompliancePanel from "./VehicleCompliancePanel";
 import TicketForm from "./TicketForm";
 
 export default function InspectorDashboard() {
+  const { user } = useAuth();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scanner = useQrScanner(videoRef);
   const { lookupVehicle, createTicket } = useInspectorTickets();
@@ -111,6 +114,13 @@ export default function InspectorDashboard() {
 
   return (
     <div className="space-y-4 max-w-2xl mx-auto">
+      <RoleWelcomeBanner
+        title={`Inspection desk ready${user?.fullName ? `, ${user.fullName}` : ""}`}
+        subtitle="Check permit validity, roadside compliance, and vehicle status quickly before issuing any action or ticket."
+        actionLabel="Scan QR"
+        actionHref="/inspector/scan"
+      />
+
       {toast && (
         <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-200 rounded-xl px-4 py-3 text-xs font-bold">
           {toast}

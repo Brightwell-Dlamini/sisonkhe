@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader, Badge, Button } from "@/components/ui";
+import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
 import type {
   IntelligenceSnapshot,
   RiskSignal,
@@ -198,6 +199,13 @@ export default function CommandCentre() {
 
   return (
     <div className="space-y-6">
+      <RoleWelcomeBanner
+        title={`Command centre ready${user?.fullName ? `, ${user.fullName}` : ""}`}
+        subtitle="Monitor system health, high-risk exposures, and operational priorities before the next operational cycle."
+        actionLabel="Open queue"
+        actionHref="/admin/queue"
+      />
+
       <PageHeader
         title="Command Centre"
         description={
