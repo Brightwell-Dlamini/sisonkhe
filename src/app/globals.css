@@ -4,6 +4,26 @@
 @variant dark (&:where(.dark, .dark *));
 
 @layer base {
+  :root {
+    --field-bg: rgba(15, 23, 42, 0.02);
+    --field-border: rgba(15, 23, 42, 0.12);
+    --field-text: #0f172a;
+    --field-placeholder: #64748b;
+    --field-focus: rgba(16, 185, 129, 0.75);
+    --field-shadow: rgba(16, 185, 129, 0.12);
+    --field-arrow: #475569;
+  }
+
+  .dark {
+    --field-bg: rgba(255, 255, 255, 0.03);
+    --field-border: rgba(255, 255, 255, 0.1);
+    --field-text: #f8fafc;
+    --field-placeholder: #94a3b8;
+    --field-focus: rgba(16, 185, 129, 0.8);
+    --field-shadow: rgba(16, 185, 129, 0.14);
+    --field-arrow: #94a3b8;
+  }
+
   body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     background-color: #f9fafb;
@@ -27,13 +47,13 @@
     width: 100%;
     min-height: 2.75rem;
     border-radius: 0.8rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background-color: rgba(255, 255, 255, 0.03);
-    color: #f8fafc;
+    border: 1px solid var(--field-border);
+    background-color: var(--field-bg);
+    color: var(--field-text);
     padding: 0.7rem 0.9rem;
-    transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+    transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, transform 180ms ease;
     outline: none;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
 
   select {
@@ -41,10 +61,14 @@
     -webkit-appearance: none;
     -moz-appearance: none;
     padding-right: 2.75rem;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.9rem center;
     background-size: 1rem;
+  }
+
+  .dark select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
 
   select option,
@@ -53,12 +77,17 @@
     color: #f8fafc;
   }
 
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--field-placeholder);
+  }
+
   select:focus,
   input:focus,
   textarea:focus {
-    border-color: rgba(16, 185, 129, 0.8);
-    background-color: rgba(255, 255, 255, 0.045);
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+    border-color: var(--field-focus);
+    background-color: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 0 0 3px var(--field-shadow);
   }
 
   select:disabled,

@@ -76,11 +76,12 @@ export function homePathForRole(role: string | undefined | null): string {
     case "driver":
       return "/driver";
     case "operator":
-      return "/operator";
+      return "/operator/renewals";
+    case "inspector":
+      return "/inspector/scan";
     case "super-admin":
     case "admin":
     case "fleet-manager":
-    case "inspector":
       return "/admin";
     default:
       return "/";

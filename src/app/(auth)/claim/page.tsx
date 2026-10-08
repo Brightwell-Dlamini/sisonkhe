@@ -20,7 +20,10 @@ import {
   CheckCircle2,
   ArrowLeft,
   User,
+  Monitor,
+  LogIn,
 } from "lucide-react";
+import { RoleGuidance } from "@/components/common/RoleGuidance";
 import { homeRouteForRole, toNavRole } from "@/lib/navigation/resolve";
 
 type Step = "verify" | "credentials" | "success";
@@ -182,6 +185,25 @@ export default function ClaimPage() {
           );
         })}
       </div>
+
+      <RoleGuidance
+        title="Useful links"
+        className="mb-6 border-white/[0.08] bg-[#111214] text-white"
+        items={[
+          {
+            label: "Public kiosk",
+            detail: "Browse live route and transport information while you wait for account access.",
+            href: "/kiosk",
+            icon: Monitor,
+          },
+          {
+            label: "Sign in",
+            detail: "Use your issued username and password to access your dashboard once the claim is complete.",
+            href: "/login",
+            icon: LogIn,
+          },
+        ]}
+      />
 
       <div className="mb-6">
         <h2 className="text-lg font-black text-white uppercase tracking-wide flex items-center gap-2">
