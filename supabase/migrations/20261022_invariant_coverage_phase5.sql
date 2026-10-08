@@ -1,7 +1,7 @@
 -- =============================================================================
--- Phase 5 — Expanded invariant coverage
--- NOTE: Prefer applying 20261025_fix_username_uuid_cast.sql after this file.
--- Identity section below uses u.id::text = un.auth_user_id (TEXT column).
+-- Phase 5 — money + identity (ops/compliance already in earlier migrations).
+-- Username orphan uses u.id::text = un.auth_user_id (TEXT column).
+-- Also apply 20261025_fix_username_uuid_cast.sql if this file was applied broken.
 -- =============================================================================
 
 BEGIN;
@@ -58,7 +58,7 @@ AS $$
       WHERE t.vehicle_reg = mt.vehicle_reg
         AND mt.timestamp
             BETWEEN (t.date::timestamptz + COALESCE(NULLIF(t.departure_time, '')::time, time '00:00') - interval '60 seconds')
-                AND (t.date::timestamptz + COALESCE(NULLIF(t.departure_time::time, time '00:00') + interval '60 seconds')
+                AND (t.date::timestamptz + COALESCE(NULLIF(t.departure_time, '')::time, time '00:00') + interval '60 seconds')
     )
 
   UNION ALL
@@ -190,9 +190,6 @@ AS $$
 $$;
 
 GRANT EXECUTE ON FUNCTION public.check_money_chain() TO service_role;
-
--- Ops + compliance left to 20261022 original / 20261024 runner path.
--- Identity fixed here so a partial re-run of this file does not break on uuid=text.
 
 CREATE OR REPLACE FUNCTION public.check_identity_chain()
 RETURNS TABLE (
