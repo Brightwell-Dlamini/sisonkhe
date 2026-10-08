@@ -3,11 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * POST /api/sync/replay — client offline outbox → event-log apply.
+ * Requires authenticated session; mutations are role-scoped via authorizeSyncEvent.
  */
 
 import type { NextRequest } from "next/server";
 import { applyEvents } from "@/lib/sync/server";
 import type { SyncEvent } from "@/lib/sync/protocol";
+import { requireServerSession } from "@/lib/auth/session";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
 
@@ -27,6 +29,8 @@ interface ReplayEntry {
 }
 
 export const POST = withApiHandler(async (request: NextRequest) => {
+  const session = await requireServerSession();
+
   const body = await request.json();
   const entries: ReplayEntry[] = body.entries ?? [];
 
@@ -37,7 +41,7 @@ export const POST = withApiHandler(async (request: NextRequest) => {
     throw AppError.validation("Maximum 50 entries per batch");
   }
 
-  const clientId = entries[0]?.clientId ?? "unknown";
+  const clientId = entries[0]?.clientId ?? session.authUserId;
 
   const events: SyncEvent[] = entries.map((e) => ({
     id: e.id,
@@ -46,12 +50,12 @@ export const POST = withApiHandler(async (request: NextRequest) => {
     operation: e.action,
     payload: e.payload,
     idempotencyKey: e.idempotencyKey,
-    clientId: e.clientId,
+    clientId: e.clientId || clientId,
     occurredAt: e.createdAt,
     baseVersion: e.baseVersion,
   }));
 
-  const result = await applyEvents(events, clientId);
+  const result = await applyEvents(events, clientId, session);
 
   return ok({
     accepted: result.accepted.map((id) => {

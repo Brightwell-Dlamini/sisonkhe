@@ -5,6 +5,7 @@
  * GET /api/sync/watermark
  */
 
+import { requireServerSession } from "@/lib/auth/session";
 import { getLatestSeq } from "@/lib/sync/server";
 import { ok, withApiHandler } from "@/lib/api/response";
 
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export const GET = withApiHandler(async () => {
+  await requireServerSession();
   const seq = await getLatestSeq();
   return ok({ seq, ts: Date.now() });
 });
