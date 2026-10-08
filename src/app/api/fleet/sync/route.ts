@@ -8,6 +8,9 @@
  * - POST always requires FLEET_SYNC_SECRET when FLEET_SYNC_REQUIRE_SECRET=true
  *   (fail closed if secret is missing).
  * - GET requires the same secret, or an authenticated staff session.
+ *
+ * Deprecation: every access is logged. Plan full removal after clients migrate.
+ * Sunset target: 2026-11-01 (or earlier once usage is confirmed zero).
  */
 
 import type { NextRequest } from "next/server";
@@ -16,6 +19,7 @@ import { getFleetState, updateFleetState } from "@/lib/fleetStore";
 import { getServerSession } from "@/lib/auth/session";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
+import { log } from "@/lib/observability/log";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,8 +30,9 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers":
     "Content-Type, Authorization, X-Fleet-Sync-Secret",
   Deprecation: "true",
-  Sunset: "Sat, 01 Nov 2026 00:00:00 GMT",
+  Sunset: "Sun, 01 Nov 2026 00:00:00 GMT",
   Link: '</api/sync/push>; rel="successor-version"',
+  Warning: '299 - "Deprecated endpoint. Migrate to /api/sync/push (event-log protocol)."',
 };
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -85,17 +90,31 @@ async function assertFleetReadAccess(request: NextRequest): Promise<void> {
   assertFleetSecret(request);
 }
 
+function logLegacyAccess(method: string, request: NextRequest): void {
+  log.warn("fleet.legacy.used", {
+    method,
+    path: "/api/fleet/sync",
+    hasSecretHeader: Boolean(
+      request.headers.get("x-fleet-sync-secret") ||
+        request.headers.get("authorization")
+    ),
+    userAgent: request.headers.get("user-agent")?.slice(0, 120) ?? null,
+  });
+}
+
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
 
 export const GET = withApiHandler(async (request: NextRequest) => {
+  logLegacyAccess("GET", request);
   await assertFleetReadAccess(request);
   const state = await getFleetState();
   return ok(state, { headers: CORS_HEADERS });
 });
 
 export const POST = withApiHandler(async (request: NextRequest) => {
+  logLegacyAccess("POST", request);
   assertFleetSecret(request);
 
   const contentLength = request.headers.get("content-length");
@@ -116,19 +135,16 @@ export const POST = withApiHandler(async (request: NextRequest) => {
 
   const newState = await updateFleetState(body as Record<string, unknown>);
 
-  if (process.env.FLEET_API_DEBUG === "true") {
-    console.log(
-      "[fleet/sync] POST updated (LEGACY), lastUpdated=",
-      newState.lastUpdated
-    );
-  }
+  log.info("fleet.legacy.updated", {
+    lastUpdated: newState.lastUpdated,
+  });
 
   return ok(
     {
       success: true,
       lastUpdated: newState.lastUpdated,
       deprecation:
-        "This endpoint is deprecated. Migrate to /api/sync/push (event-log protocol).",
+        "This endpoint is deprecated. Migrate to /api/sync/push (event-log protocol). Removal planned after 2026-11-01 or earlier once usage is zero.",
     },
     { headers: CORS_HEADERS }
   );

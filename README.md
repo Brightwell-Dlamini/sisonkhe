@@ -30,7 +30,7 @@ Next.js 15 (App Router)
 ```
 
 **Preferred data path:** relational tables + `/api/sync/{push,pull,replay}` event protocol.  
-**Legacy path:** `/api/fleet/sync` blob store — retained only for older clients; disabled when `FLEET_SYNC_REQUIRE_SECRET=true` and no secret is presented.
+**Legacy path:** `/api/fleet/sync` blob store — retained only for older clients. Every access is logged as `fleet.legacy.used`. Planned removal after 2026-11-01 (or earlier once usage reaches zero). Disabled when `FLEET_SYNC_REQUIRE_SECRET=true` and no secret is presented.
 
 ## Key modules
 
@@ -46,6 +46,7 @@ Next.js 15 (App Router)
 | `src/lib/queue/` | Dispatch suggestion / fairness helpers |
 | `src/lib/payments/reconciliation.ts` | Intent ↔ ledger matching helpers |
 | `src/lib/pagination.ts` | Shared cursor/limit helpers for list APIs |
+| `src/lib/observability/` | Structured logging helpers for operational telemetry |
 
 ## Environment
 
@@ -91,6 +92,10 @@ Marshals and drivers can work offline via Dexie outbox. On reconnect, clients pu
 - Role gates live in `src/lib/auth/` and middleware.
 - Money and permit mutations should always write audit-friendly rows (permit_audit_logs, card transactions).
 - Never commit `.env.local` or service-role keys.
+
+## Improvement roadmap (in progress)
+
+Phase 1 (foundation) focuses on completing the migration away from the legacy blob store, strengthening event-log sync, offline resilience, invariants, payment reconciliation, and structured observability. Changes are committed directly to `main`.
 
 ## License
 
