@@ -4,7 +4,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Admin home: counts, work queue, risks, shortcuts.
+ * Admin home: welcome, counts, work queue, risks, shortcuts.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader, Badge, Button } from "@/components/ui";
+import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
 import type {
   IntelligenceSnapshot,
   RiskSignal,
@@ -197,12 +198,16 @@ export default function CommandCentre() {
 
   return (
     <div className="space-y-6">
+      <RoleWelcomeBanner
+        title={user?.fullName ? `Welcome, ${user.fullName}` : "Welcome"}
+        subtitle="Work queue, risks, and shortcuts for this rank cycle."
+        actionLabel="Open queue"
+        actionHref="/admin/queue"
+      />
+
       <PageHeader
         title="Dashboard"
-        description={
-          snap?.briefing ??
-          (user?.fullName ? `${user.fullName}` : "Admin")
-        }
+        description={snap?.briefing ?? "Rank overview"}
         actions={
           <Button
             variant="secondary"
