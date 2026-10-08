@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Search, Loader2, Edit2, Trash2 } from "lucide-react";
+import { useToast } from "@/components/ui";
 import type { RouteRow } from "@/lib/admin/routes";
 import RouteFormModal from "./RouteFormModal";
 
@@ -16,6 +17,7 @@ export default function RoutesList() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<RouteRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const uiToast = useToast();
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -59,7 +61,7 @@ export default function RoutesList() {
     });
     const data = await res.json();
     if (!res.ok) {
-      alert(data.error ?? "Delete failed");
+      uiToast.error("Delete failed", data.error ?? "The corridor could not be removed.");
       return;
     }
     showToast("Route deleted");

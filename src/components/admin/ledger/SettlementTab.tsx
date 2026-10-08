@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
+import { useToast } from "@/components/ui";
 import { useSettlement, type LedgerFilters } from "@/hooks/useLedger";
 import FilterBar from "./FilterBar";
 import SettlementCards from "./SettlementCards";
@@ -23,6 +24,7 @@ export default function SettlementTab() {
     to: today(),
   });
   const [exporting, setExporting] = useState(false);
+  const toast = useToast();
 
   const { data, loading, error } = useSettlement(filters);
 
@@ -40,7 +42,7 @@ export default function SettlementTab() {
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        alert(body.error ?? "Export failed");
+        toast.error("Export failed", body.error ?? "Settlement export could not be generated.");
         return;
       }
       const blob = await res.blob();

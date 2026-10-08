@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { Loader2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { useToast } from "@/components/ui";
 import { useTrips, type LedgerFilters } from "@/hooks/useLedger";
 import FilterBar from "./FilterBar";
 import TripsTable from "./TripsTable";
@@ -21,6 +22,7 @@ export default function TripsTab() {
     to: today(),
   });
   const [exporting, setExporting] = useState(false);
+  const toast = useToast();
 
   const { data, loading, error, page, setPage } = useTrips(filters, 50);
 
@@ -39,7 +41,7 @@ export default function TripsTab() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        alert(body.error ?? "Export failed");
+        toast.error("Export failed", body.error ?? "Trip export could not be generated.");
         return;
       }
 

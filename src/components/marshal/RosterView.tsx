@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, Calendar, RotateCw } from "lucide-react";
+import { useToast } from "@/components/ui";
 import { useMarshalRoster } from "@/hooks/useMarshalRoster";
 
 export default function RosterView() {
@@ -9,6 +10,7 @@ export default function RosterView() {
   const initialMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const { roster, loading, error, advance } = useMarshalRoster(initialMonth);
   const [advancing, setAdvancing] = useState(false);
+  const toast = useToast();
 
   const handleAdvance = async () => {
     if (!roster) return;
@@ -18,7 +20,11 @@ export default function RosterView() {
     setAdvancing(true);
     const res = await advance(target);
     setAdvancing(false);
-    if (!res.success) alert(res.error ?? "Advance failed");
+    if (!res.success) {
+      toast.error("Advance failed", res.error ?? "The rotation could not be advanced.");
+      return;
+    }
+    toast.success("Rotation advanced", `Moved to ${target}.`);
   };
 
   if (loading && !roster) {

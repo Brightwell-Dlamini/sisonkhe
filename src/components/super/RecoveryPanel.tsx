@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Database, Plus, RotateCw } from "lucide-react";
+import { useToast } from "@/components/ui";
 import type { Snapshot } from "@/lib/super/snapshots";
 
 export default function RecoveryPanel() {
@@ -9,6 +10,7 @@ export default function RecoveryPanel() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState<string | null>(null);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     const res = await fetch("/api/super/snapshots");
@@ -30,6 +32,7 @@ export default function RecoveryPanel() {
       body: JSON.stringify({ label }),
     });
     setCreating(false);
+    toast.success("Snapshot created", `Saved as “${label}”.`);
     void load();
   };
 
@@ -38,7 +41,7 @@ export default function RecoveryPanel() {
     setRestoring(s.id);
     await fetch(`/api/super/snapshots/${s.id}/restore`, { method: "POST" });
     setRestoring(null);
-    alert("Restore complete");
+    toast.success("Restore complete", `${s.label} is now active.`);
   };
 
   if (loading) {
