@@ -4,7 +4,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Decision-first admin home. Work queue + risk radar, not a link farm.
+ * Admin home: counts, work queue, risks, shortcuts.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -34,8 +34,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader, Badge, Button } from "@/components/ui";
-import { RoleGuidance } from "@/components/common/RoleGuidance";
-import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
 import type {
   IntelligenceSnapshot,
   RiskSignal,
@@ -44,21 +42,21 @@ import type {
 } from "@/lib/intelligence/types";
 
 const NAV_LINKS = [
-  { href: "/admin/staff", label: "Staff", desc: "Administrators & inspectors", icon: Users },
+  { href: "/admin/staff", label: "Staff", desc: "Admins & inspectors", icon: Users },
   { href: "/admin/drivers", label: "Drivers", desc: "Registry & assignment", icon: UserCircle },
-  { href: "/admin/operators", label: "Operators", desc: "Owners & Master Cards", icon: Building2 },
-  { href: "/admin/marshals", label: "Marshals", desc: "Rank dispatch staff", icon: BadgeCheck },
-  { href: "/admin/vehicles", label: "Vehicles", desc: "Commercial registry", icon: Car },
+  { href: "/admin/operators", label: "Operators", desc: "Owners & master cards", icon: Building2 },
+  { href: "/admin/marshals", label: "Marshals", desc: "Rank dispatch", icon: BadgeCheck },
+  { href: "/admin/vehicles", label: "Vehicles", desc: "Fleet registry", icon: Car },
   { href: "/admin/routes", label: "Routes", desc: "Corridors & fares", icon: RouteIcon },
   { href: "/admin/terminals", label: "Terminals", desc: "Regional terminals", icon: MapPin },
   { href: "/admin/queue", label: "30-Day Queue", desc: "Rotation cycle", icon: Calendar },
-  { href: "/admin/yoy", label: "YoY", desc: "Year-over-year metrics", icon: Scale },
+  { href: "/admin/yoy", label: "YoY", desc: "Year-over-year", icon: Scale },
   { href: "/admin/ledger", label: "Ledger", desc: "Trips & settlement", icon: Receipt },
-  { href: "/admin/permits", label: "Permits", desc: "Renewal requests", icon: Award },
-  { href: "/admin/permits/print", label: "Print Queue", desc: "A4 + signed QR", icon: Printer },
-  { href: "/admin/audits", label: "Audits", desc: "Security trail", icon: Shield },
-  { href: "/admin/reports", label: "Reports", desc: "CSV compliance", icon: FileText },
-  { href: "/admin/config", label: "Config", desc: "Rank fee & settings", icon: Settings },
+  { href: "/admin/permits", label: "Permits", desc: "Renewals", icon: Award },
+  { href: "/admin/permits/print", label: "Print Queue", desc: "A4 + QR", icon: Printer },
+  { href: "/admin/audits", label: "Audits", desc: "Change log", icon: Shield },
+  { href: "/admin/reports", label: "Reports", desc: "CSV export", icon: FileText },
+  { href: "/admin/config", label: "Config", desc: "Rank fee", icon: Settings },
 ];
 
 function severityBadge(sev: Severity): "danger" | "warning" | "success" | "default" | "info" {
@@ -117,8 +115,8 @@ function KpiChip({
         href ? "hover:border-emerald-500/40 transition-colors" : ""
       }`}
     >
-      <div className="text-[10px] uppercase font-black tracking-widest opacity-70">{label}</div>
-      <div className="text-xl font-black tabular-nums mt-0.5">{value}</div>
+      <div className="text-[10px] uppercase font-bold tracking-wide opacity-70">{label}</div>
+      <div className="text-xl font-bold tabular-nums mt-0.5">{value}</div>
     </div>
   );
   return href ? <Link href={href}>{inner}</Link> : inner;
@@ -155,7 +153,7 @@ function RiskRow({ risk }: { risk: RiskSignal }) {
           <div className="text-[10px] text-zinc-500 truncate">{risk.detail}</div>
         </div>
       </div>
-      <div className="text-sm font-black tabular-nums text-white shrink-0">{risk.value}</div>
+      <div className="text-sm font-bold tabular-nums text-white shrink-0">{risk.value}</div>
     </div>
   );
   return risk.href ? <Link href={risk.href}>{body}</Link> : body;
@@ -182,7 +180,7 @@ export default function CommandCentre() {
       const data = (await res.json()) as IntelligenceSnapshot;
       setSnap(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load intelligence");
+      setError(e instanceof Error ? e.message : "Failed to load dashboard");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -199,18 +197,11 @@ export default function CommandCentre() {
 
   return (
     <div className="space-y-6">
-      <RoleWelcomeBanner
-        title={`${user?.fullName ? user.fullName : "Administrator"}`}
-        subtitle="Work queue, risk signals, and the next action for this rank cycle."
-        actionLabel="Open queue"
-        actionHref="/admin/queue"
-      />
-
       <PageHeader
-        title="Command Centre"
+        title="Dashboard"
         description={
           snap?.briefing ??
-          `Welcome back, ${user?.fullName ?? "Administrator"}. Loading operational data…`
+          (user?.fullName ? `${user.fullName}` : "Admin")
         }
         actions={
           <Button
@@ -232,78 +223,34 @@ export default function CommandCentre() {
       {isSuperAdmin && (
         <Link
           href="/admin/super"
-          className="group block bg-[#0F0F10] border border-white/[0.08] text-white rounded-2xl p-5 hover:border-zinc-500 transition-all"
+          className="group flex items-center gap-3 bg-[#0F0F10] border border-white/[0.08] rounded-xl p-3 hover:border-zinc-500 transition-all"
         >
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-white/[0.06] flex items-center justify-center">
-                <ShieldCheck className="w-6 h-6 text-zinc-300" />
-              </div>
-              <div>
-                <div className="text-[10px] uppercase font-black tracking-widest text-zinc-500">
-                  Elevated access
-                </div>
-                <h2 className="text-base font-black uppercase mt-0.5">
-                  Super Admin Control Centre
-                </h2>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  Analytics, security, telemetry, recovery, and system config.
-                </p>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-zinc-500 group-hover:translate-x-1 transition-transform" />
+          <div className="w-9 h-9 rounded-lg bg-white/[0.06] flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-4.5 h-4.5 text-zinc-300" />
           </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold text-white">Platform admin</div>
+            <p className="text-[11px] text-zinc-500">Security, telemetry, recovery, config</p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:translate-x-0.5 transition-transform" />
         </Link>
       )}
 
       {snap?.primaryAction && (
         <Link
           href={snap.primaryAction.href}
-          className="group flex items-center gap-4 bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4 hover:border-emerald-400/50 transition-all"
+          className="group flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/25 rounded-xl p-3 hover:border-emerald-400/50 transition-all"
         >
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-            <ArrowRight className="w-5 h-5" />
+          <div className="w-9 h-9 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+            <ArrowRight className="w-4 h-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] uppercase font-black tracking-widest text-emerald-400/80">
-              Next action
-            </div>
-            <div className="text-sm font-black text-white mt-0.5">{snap.primaryAction.label}</div>
-            <p className="text-[11px] text-zinc-400 mt-0.5">{snap.primaryAction.reason}</p>
+            <div className="text-sm font-semibold text-white">{snap.primaryAction.label}</div>
+            <p className="text-[11px] text-zinc-400">{snap.primaryAction.reason}</p>
           </div>
-          <ArrowRight className="w-5 h-5 text-emerald-400 group-hover:translate-x-1 transition-transform shrink-0" />
+          <ArrowRight className="w-4 h-4 text-emerald-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
         </Link>
       )}
-
-      <RoleGuidance
-        title="Operational priorities"
-        items={[
-          {
-            label: "Review the queue",
-            detail: "Open the live queue to triage urgent renewals, expired permits, and at-risk vehicles first.",
-            href: "/admin/queue",
-            icon: Calendar,
-          },
-          {
-            label: "Inspect permits",
-            detail: "Resolve expired, expiring, or print-backlogged permits before the next compliance cycle.",
-            href: "/admin/permits",
-            icon: Award,
-          },
-          {
-            label: "Check vehicles",
-            detail: "Review fleet health, COF status, and unassigned vehicles to close risk gaps quickly.",
-            href: "/admin/vehicles",
-            icon: Car,
-          },
-          {
-            label: "Review staff and drivers",
-            detail: "Check staffing coverage, roster changes, and any suspended driver or staff issues.",
-            href: "/admin/drivers",
-            icon: Users,
-          },
-        ]}
-      />
 
       {k && (
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
@@ -354,14 +301,14 @@ export default function CommandCentre() {
       )}
 
       {loading && !snap && (
-        <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-10 flex flex-col items-center gap-3 text-zinc-400">
+        <div className="bg-[#0F0F10] border border-white/[0.06] rounded-xl p-10 flex flex-col items-center gap-3 text-zinc-400">
           <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
-          <p className="text-xs font-medium">Loading operational data…</p>
+          <p className="text-xs">Loading…</p>
         </div>
       )}
 
       {error && !snap && (
-        <div className="bg-[#0F0F10] border border-red-500/30 rounded-2xl p-6 flex items-start gap-3">
+        <div className="bg-[#0F0F10] border border-red-500/30 rounded-xl p-5 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
           <div>
             <div className="text-sm font-semibold text-white">Could not load dashboard</div>
@@ -375,14 +322,14 @@ export default function CommandCentre() {
 
       {snap && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          <section className="lg:col-span-3 bg-[#0F0F10] border border-white/[0.06] rounded-2xl overflow-hidden">
+          <section className="lg:col-span-3 bg-[#0F0F10] border border-white/[0.06] rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
               <div>
-                <h2 className="text-xs font-black uppercase tracking-widest text-white">
+                <h2 className="text-xs font-bold uppercase tracking-wide text-white">
                   Work queue
                 </h2>
                 <p className="text-[10px] text-zinc-500 mt-0.5">
-                  Ranked by urgency · {snap.queue.length} open · {snap.scope}
+                  {snap.queue.length} open
                   {snap.region ? ` · ${snap.region}` : ""}
                 </p>
               </div>
@@ -395,9 +342,9 @@ export default function CommandCentre() {
             <div className="p-2 max-h-[28rem] overflow-y-auto">
               {snap.queue.length === 0 ? (
                 <div className="px-3 py-8 text-center">
-                  <p className="text-sm font-semibold text-white">Queue clear</p>
+                  <p className="text-sm font-semibold text-white">Nothing urgent</p>
                   <p className="text-[11px] text-zinc-500 mt-1">
-                    No critical compliance or assignment items in the 30-day horizon.
+                    No open compliance or assignment items.
                   </p>
                 </div>
               ) : (
@@ -406,17 +353,16 @@ export default function CommandCentre() {
             </div>
           </section>
 
-          <section className="lg:col-span-2 bg-[#0F0F10] border border-white/[0.06] rounded-2xl overflow-hidden">
+          <section className="lg:col-span-2 bg-[#0F0F10] border border-white/[0.06] rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-white/[0.06]">
-              <h2 className="text-xs font-black uppercase tracking-widest text-white">
-                Risk radar
+              <h2 className="text-xs font-bold uppercase tracking-wide text-white">
+                Risks
               </h2>
-              <p className="text-[10px] text-zinc-500 mt-0.5">Aggregate exposure signals</p>
             </div>
             <div className="p-2">
               {snap.risks.length === 0 ? (
                 <div className="px-3 py-8 text-center text-[11px] text-zinc-500">
-                  No elevated risk signals.
+                  No elevated risks.
                 </div>
               ) : (
                 snap.risks.map((r) => <RiskRow key={r.id} risk={r} />)
@@ -427,8 +373,8 @@ export default function CommandCentre() {
       )}
 
       <div>
-        <h2 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 px-0.5">
-          Registry & tools
+        <h2 className="text-[10px] font-bold uppercase tracking-wide text-zinc-500 mb-2 px-0.5">
+          Shortcuts
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {NAV_LINKS.map((link) => {
@@ -444,7 +390,7 @@ export default function CommandCentre() {
                     <Icon className="w-3.5 h-3.5" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-[11px] font-black text-white uppercase tracking-tight truncate">
+                    <div className="text-[11px] font-semibold text-white truncate">
                       {link.label}
                     </div>
                     <div className="text-[10px] text-zinc-500 truncate">{link.desc}</div>
