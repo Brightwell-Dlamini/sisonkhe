@@ -5,24 +5,12 @@
   "installCommand": "npm install",
   "crons": [
     {
-      "path": "/api/super/invariants/cron",
+      "path": "/api/cron/daily",
       "schedule": "0 2 * * *"
     },
     {
       "path": "/api/cron/compliance-digest",
       "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/payment-reconcile",
-      "schedule": "30 3 * * *"
-    },
-    {
-      "path": "/api/cron/payment-stale-sweep",
-      "schedule": "0 4 * * *"
-    },
-    {
-      "path": "/api/cron/departed-reset",
-      "schedule": "*/30 * * * *"
     }
   ]
 }
