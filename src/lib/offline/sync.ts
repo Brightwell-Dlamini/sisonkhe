@@ -14,10 +14,14 @@ import {
   markInFlight,
   markSuccess,
   markFailure,
+  requeueForRetry,
+  recoverStuckInFlight,
+  MAX_OUTBOX_ATTEMPTS,
 } from "./outbox";
-import { isOnline } from "./network";
+import { isOnline, subscribeNetwork } from "./network";
 
 let syncInProgress = false;
+let networkUnsub: (() => void) | null = null;
 
 /**
  * Replay all pending outbox entries. Runs batches of 20.
@@ -41,12 +45,19 @@ export async function replayOutbox(): Promise<{
   let failed = 0;
 
   try {
-    // Loop until no more entries or we hit a failure
+    // Recover entries left in_flight by a previous crash
+    await recoverStuckInFlight();
+
+    // Loop until no more entries or we hit a hard stop
     while (true) {
       const pending = await listPending();
-      if (pending.length === 0) break;
+      // Skip entries that already exceeded the attempt cap
+      const eligible = pending.filter(
+        (e) => (e.attempts ?? 0) < MAX_OUTBOX_ATTEMPTS
+      );
+      if (eligible.length === 0) break;
 
-      const batch = pending.slice(0, 20);
+      const batch = eligible.slice(0, 20);
       if (batch.length === 0) break;
 
       // Mark all as in-flight (so a crash mid-batch is detectable)
@@ -54,12 +65,28 @@ export async function replayOutbox(): Promise<{
         await markInFlight(entry.id);
       }
 
+      // Re-check: some may have been marked failed by markInFlight if over cap
+      const stillInFlight = [];
+      for (const entry of batch) {
+        const row = await offlineDB.outbox.get(entry.id);
+        if (row && row.status === "in_flight") {
+          stillInFlight.push(entry);
+        } else if (row && row.status === "failed") {
+          failed++;
+          processed++;
+        }
+      }
+      if (stillInFlight.length === 0) {
+        if (batch.length < 20) break;
+        continue;
+      }
+
       try {
         const res = await fetch("/api/sync/replay", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            entries: batch.map((e) => ({
+            entries: stillInFlight.map((e) => ({
               id: e.id,
               action: e.action,
               entityType: e.entityType,
@@ -68,16 +95,20 @@ export async function replayOutbox(): Promise<{
               idempotencyKey: e.idempotencyKey,
               clientId: e.clientId,
               createdAt: e.createdAt,
+              baseVersion: e.baseVersion,
             })),
           }),
         });
 
         if (!res.ok) {
-          // Whole batch failed — mark all, don't loop
           const text = await res.text().catch(() => "");
-          for (const entry of batch) {
-            await markFailure(entry.id, `HTTP ${res.status}: ${text.slice(0, 200)}`);
-            failed++;
+          for (const entry of stillInFlight) {
+            // Network/server errors are retriable unless attempts exhausted
+            const requeued = await requeueForRetry(
+              entry.id,
+              `HTTP ${res.status}: ${text.slice(0, 200)}`
+            );
+            if (!requeued) failed++;
             processed++;
           }
           break;
@@ -88,50 +119,45 @@ export async function replayOutbox(): Promise<{
         const rejected: Array<{ idempotencyKey: string; reason: string }> =
           data.rejected ?? [];
 
-        for (const entry of batch) {
+        for (const entry of stillInFlight) {
           const wasRejected = rejected.find(
             (r) => r.idempotencyKey === entry.idempotencyKey
           );
           if (wasRejected) {
-            // If the failure is permanent (e.g. validation), mark as failed.
-            // If it's retriable (e.g. version conflict), let it retry.
-            const isPermanent =
-              !wasRejected.reason.toLowerCase().includes("conflict") &&
-              !wasRejected.reason.toLowerCase().includes("retry");
-            if (isPermanent) {
+            const reason = wasRejected.reason.toLowerCase();
+            const isRetriable =
+              reason.includes("conflict") ||
+              reason.includes("retry") ||
+              reason.includes("version");
+
+            if (isRetriable) {
+              await requeueForRetry(entry.id, wasRejected.reason);
+            } else {
               await markFailure(entry.id, wasRejected.reason);
               failed++;
-            } else {
-              // Retriable — back to pending
-              await offlineDB.outbox.update(entry.id, {
-                status: "pending",
-                lastError: wasRejected.reason,
-              });
             }
             processed++;
-          } else if (accepted.includes(entry.idempotencyKey)) {
+          } else if (
+            accepted.includes(entry.idempotencyKey) ||
+            accepted.includes(entry.id)
+          ) {
             await markSuccess(entry.id);
             succeeded++;
             processed++;
           } else {
-            // Ambiguous — leave in-flight, will retry next cycle
-            await offlineDB.outbox.update(entry.id, {
-              status: "pending",
-              lastError: "Unacknowledged",
-            });
+            // Ambiguous — requeue for another attempt
+            await requeueForRetry(entry.id, "Unacknowledged");
+            processed++;
           }
         }
 
-        // If we processed fewer than we sent, something is wrong — stop looping
-        if (accepted.length + rejected.length < batch.length) break;
-
-        // If batch was smaller than 20, we're done
+        if (accepted.length + rejected.length < stillInFlight.length) break;
         if (batch.length < 20) break;
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
-        for (const entry of batch) {
-          await markFailure(entry.id, msg);
-          failed++;
+        for (const entry of stillInFlight) {
+          const requeued = await requeueForRetry(entry.id, msg);
+          if (!requeued) failed++;
           processed++;
         }
         break;
@@ -160,6 +186,17 @@ let daemonTimer: number | null = null;
 export function startSyncDaemon(intervalMs: number = 15000): void {
   if (daemonTimer !== null) return;
 
+  // Immediately attempt sync when connectivity is restored
+  if (!networkUnsub) {
+    networkUnsub = subscribeNetwork((online) => {
+      if (online) {
+        void replayOutbox().catch((err) =>
+          console.error("[sync] reconnect replay error:", err)
+        );
+      }
+    });
+  }
+
   daemonTimer = window.setInterval(async () => {
     if (typeof document !== "undefined" && document.visibilityState !== "visible") {
       return;
@@ -176,5 +213,9 @@ export function stopSyncDaemon(): void {
   if (daemonTimer !== null) {
     window.clearInterval(daemonTimer);
     daemonTimer = null;
+  }
+  if (networkUnsub) {
+    networkUnsub();
+    networkUnsub = null;
   }
 }

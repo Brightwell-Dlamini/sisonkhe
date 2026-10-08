@@ -12,6 +12,15 @@ import { offlineDB, type OutboxEntry } from "./db";
 
 const CLIENT_ID_KEY = "sisonkhe:clientId";
 
+/** Maximum delivery attempts before an entry is considered permanently failed. */
+export const MAX_OUTBOX_ATTEMPTS = 8;
+
+/**
+ * Entries left in_flight longer than this (ms) are treated as stuck
+ * (e.g. tab crash mid-batch) and reset to pending for retry.
+ */
+export const STUCK_IN_FLIGHT_MS = 2 * 60 * 1000; // 2 minutes
+
 /** Listeners notified when outbox rows change (best-effort, same-tab). */
 type OutboxListener = () => void;
 const listeners = new Set<OutboxListener>();
@@ -91,12 +100,50 @@ export async function listPending(): Promise<OutboxEntry[]> {
     .sortBy("createdAt");
 }
 
+/**
+ * Reset entries stuck in_flight longer than STUCK_IN_FLIGHT_MS back to pending.
+ * Protects against tab crashes mid-batch.
+ */
+export async function recoverStuckInFlight(): Promise<number> {
+  const cutoff = Date.now() - STUCK_IN_FLIGHT_MS;
+  const inFlight = await offlineDB.outbox
+    .where("status")
+    .equals("in_flight")
+    .toArray();
+
+  let recovered = 0;
+  for (const row of inFlight) {
+    const created = new Date(row.createdAt).getTime();
+    // Prefer last touch; fall back to createdAt
+    const touched = Number.isFinite(created) ? created : 0;
+    if (touched > 0 && touched < cutoff) {
+      await offlineDB.outbox.update(row.id, {
+        status: "pending",
+        lastError: "Recovered from stuck in_flight",
+      });
+      recovered++;
+    }
+  }
+  if (recovered > 0) notifyOutbox();
+  return recovered;
+}
+
 export async function markInFlight(id: string): Promise<void> {
   const row = await offlineDB.outbox.get(id);
-  await offlineDB.outbox.update(id, {
-    status: "in_flight",
-    attempts: (row?.attempts ?? 0) + 1,
-  });
+  const nextAttempts = (row?.attempts ?? 0) + 1;
+
+  if (nextAttempts > MAX_OUTBOX_ATTEMPTS) {
+    await offlineDB.outbox.update(id, {
+      status: "failed",
+      attempts: nextAttempts,
+      lastError: `Exceeded max attempts (${MAX_OUTBOX_ATTEMPTS})`,
+    });
+  } else {
+    await offlineDB.outbox.update(id, {
+      status: "in_flight",
+      attempts: nextAttempts,
+    });
+  }
   notifyOutbox();
 }
 
@@ -106,11 +153,45 @@ export async function markSuccess(id: string): Promise<void> {
 }
 
 export async function markFailure(id: string, reason: string): Promise<void> {
+  const row = await offlineDB.outbox.get(id);
+  const attempts = row?.attempts ?? 0;
+
+  if (attempts >= MAX_OUTBOX_ATTEMPTS) {
+    await offlineDB.outbox.update(id, {
+      status: "failed",
+      lastError: reason,
+    });
+  } else {
+    // Leave as failed for permanent errors; caller decides permanent vs retriable
+    await offlineDB.outbox.update(id, {
+      status: "failed",
+      lastError: reason,
+    });
+  }
+  notifyOutbox();
+}
+
+/** Requeue a failed or rejected entry for another attempt (if under cap). */
+export async function requeueForRetry(
+  id: string,
+  reason?: string
+): Promise<boolean> {
+  const row = await offlineDB.outbox.get(id);
+  if (!row) return false;
+  if ((row.attempts ?? 0) >= MAX_OUTBOX_ATTEMPTS) {
+    await offlineDB.outbox.update(id, {
+      status: "failed",
+      lastError: reason ?? row.lastError ?? "Max attempts reached",
+    });
+    notifyOutbox();
+    return false;
+  }
   await offlineDB.outbox.update(id, {
-    status: "failed",
-    lastError: reason,
+    status: "pending",
+    lastError: reason ?? row.lastError,
   });
   notifyOutbox();
+  return true;
 }
 
 /** Pending + in-flight count (waiting to sync). */
