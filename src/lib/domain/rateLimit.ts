@@ -57,6 +57,15 @@ function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
+function allowBypass(): boolean {
+  // Allow bypass in non-production when explicitly requested by env var.
+  // Default to true in local dev for rapid testing, but honor explicit false.
+  if (isProduction()) return false;
+  const v = process.env.DEV_ALLOW_RATE_LIMIT_BYPASS;
+  if (typeof v === "undefined") return true;
+  return v === "1" || v.toLowerCase() === "true";
+}
+
 /**
  * Sliding fixed-window rate limit.
  * Prefer Upstash when configured; otherwise local (dev only).
@@ -67,6 +76,9 @@ export async function rateLimitAsync(
   limit: number,
   windowMs: number
 ): Promise<{ ok: boolean; remaining: number; retryAfterSec: number }> {
+  if (allowBypass()) {
+    return { ok: true, remaining: Infinity, retryAfterSec: 0 };
+  }
   if (!upstashConfigured()) {
     if (isProduction()) {
       console.error(
