@@ -9,6 +9,7 @@ import { runInvariantChecks } from "@/lib/invariants/runner";
 import { notifyStaff } from "@/lib/notifications/service";
 import { requireCronSecret } from "@/lib/api/cronAuth";
 import { ok, withApiHandler } from "@/lib/api/response";
+import { log } from "@/lib/observability/log";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,7 +21,24 @@ export const GET = withApiHandler(async (request: Request) => {
   const summary = await runInvariantChecks();
   const total = Number(summary.total ?? 0);
 
+  log.info("cron.invariants.completed", {
+    total,
+    money: Number(summary.money ?? 0),
+    identity: Number(summary.identity ?? 0),
+    operational: Number(summary.operational ?? 0),
+    authority: Number(summary.authority ?? 0),
+    compliance: Number(summary.compliance ?? 0),
+    runId: summary.run_id ?? null,
+  });
+
   if (total > 0) {
+    log.warn("cron.invariants.open_issues", {
+      total,
+      money: Number(summary.money ?? 0),
+      identity: Number(summary.identity ?? 0),
+      operational: Number(summary.operational ?? 0),
+    });
+
     await notifyStaff(
       { roles: ["super-admin"] },
       {
