@@ -5,6 +5,7 @@
  * Server-side event application.
  *
  * Apply order (per event):
+ *   0. Authorize caller against entityType / operation / ownership.
  *   1. Claim idempotency via insert into sync_events (unique key).
  *   2. Apply mutation to entity table.
  *   3. On mutation failure, delete the claimed event so the client can retry.
@@ -15,7 +16,9 @@
 
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import type { ResolvedUser } from "@/lib/auth/roles";
 import type { SyncEvent, SyncPushResult } from "./protocol";
+import { authorizeSyncEvent } from "./authorize";
 
 const ENTITY_TABLE: Record<string, string> = {
   vehicle: "vehicles",
@@ -37,7 +40,8 @@ function primaryKeyColumn(entityType: string): string {
 
 export async function applyEvents(
   events: SyncEvent[],
-  clientId: string
+  clientId: string,
+  actor: ResolvedUser
 ): Promise<SyncPushResult> {
   const admin = createSupabaseAdminClient();
   const accepted: string[] = [];
@@ -45,6 +49,12 @@ export async function applyEvents(
 
   for (const event of events) {
     try {
+      const authReason = authorizeSyncEvent(actor, event);
+      if (authReason) {
+        rejected.push({ id: event.id, reason: authReason });
+        continue;
+      }
+
       const table = ENTITY_TABLE[event.entityType];
       if (!table) {
         rejected.push({
@@ -65,16 +75,14 @@ export async function applyEvents(
         client_id: clientId,
         occurred_at: event.occurredAt,
         base_version: event.baseVersion ?? null,
+        actor_auth_user_id: actor.authUserId,
+        actor_role: actor.role,
       });
 
       if (claimErr) {
-        // Unique violation on idempotency_key → already applied
         const code = (claimErr as { code?: string }).code;
         const msg = claimErr.message ?? "";
-        if (
-          code === "23505" ||
-          /duplicate|unique/i.test(msg)
-        ) {
+        if (code === "23505" || /duplicate|unique/i.test(msg)) {
           accepted.push(event.id);
           continue;
         }
@@ -82,7 +90,7 @@ export async function applyEvents(
         continue;
       }
 
-      // 2. Optimistic concurrency for UPDATE
+      // 2. Optimistic concurrency for UPDATE (baseVersion required by authorize)
       if (event.operation === "UPDATE" && event.baseVersion != null) {
         const { data: row } = await admin
           .from(table)
@@ -91,10 +99,7 @@ export async function applyEvents(
           .maybeSingle();
 
         if (row && row.version !== event.baseVersion) {
-          await admin
-            .from("sync_events")
-            .delete()
-            .eq("id", event.id);
+          await admin.from("sync_events").delete().eq("id", event.id);
           rejected.push({
             id: event.id,
             reason: `Version conflict: expected ${event.baseVersion}, found ${row.version}`,
@@ -133,7 +138,6 @@ export async function applyEvents(
       }
 
       if (mutationError) {
-        // Rollback claim so client can retry cleanly
         await admin.from("sync_events").delete().eq("id", event.id);
         rejected.push({ id: event.id, reason: mutationError });
         continue;
@@ -142,7 +146,6 @@ export async function applyEvents(
       accepted.push(event.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
-      // Best-effort rollback of claim
       try {
         await admin.from("sync_events").delete().eq("id", event.id);
       } catch {
