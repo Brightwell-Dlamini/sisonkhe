@@ -11,7 +11,9 @@
  * POST whole state to /api/fleet/sync. New code must use /api/sync/push
  * and the offline outbox.
  *
- * Removal target: once all clients are on the event protocol.
+ * Removal target: once all clients are on the event protocol
+ * (tracked via fleet.legacy.used structured logs). Planned sunset 2026-11-01
+ * or earlier.
  */
 
 const MAX_STATE_BYTES = 4 * 1024 * 1024; // 4 MB safety limit
