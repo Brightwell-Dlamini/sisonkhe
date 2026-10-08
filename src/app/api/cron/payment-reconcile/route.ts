@@ -5,7 +5,7 @@
  * Payment reconciliation cron. Authorization: Bearer $CRON_SECRET
  */
 
-import { runPaymentReconcile } from "@/lib/payments/reconciliation";
+import { runPaymentReconciliation } from "@/lib/payments/reconciliation";
 import { requireCronSecret } from "@/lib/api/cronAuth";
 import { ok, withApiHandler } from "@/lib/api/response";
 
@@ -15,6 +15,6 @@ export const maxDuration = 60;
 
 export const GET = withApiHandler(async (request: Request) => {
   requireCronSecret(request);
-  const summary = await runPaymentReconcile();
+  const summary = await runPaymentReconciliation();
   return ok({ summary });
 });

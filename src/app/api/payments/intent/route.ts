@@ -56,6 +56,33 @@ export const POST = withApiHandler(async (request: NextRequest) => {
     throw AppError.validation("amountSzl must be a positive number");
   }
 
+  // Operators may only target their own master card / own vehicles
+  if (session.role === "operator") {
+    if (!session.operatorId) {
+      throw AppError.forbidden("Operator profile required");
+    }
+    if (purpose === "master_card_topup") {
+      if (targetEntityId !== session.operatorId) {
+        throw AppError.forbidden("Operators may only top up their own master card");
+      }
+    } else if (purpose === "vehicle_card_topup") {
+      // Ownership is enforced downstream in transfer flows; for intents we
+      // require the vehicle to belong to this operator when we can look it up.
+      const { createSupabaseAdminClient } = await import("@/lib/supabase/server");
+      const admin = createSupabaseAdminClient();
+      const { data: vehicle } = await admin
+        .from("vehicles")
+        .select("owner_operator_id")
+        .eq("registration_number", targetEntityId)
+        .maybeSingle();
+      if (!vehicle || vehicle.owner_operator_id !== session.operatorId) {
+        throw AppError.forbidden("Operators may only top up their own vehicles");
+      }
+    } else {
+      throw AppError.forbidden(`Operators cannot initiate purpose ${purpose}`);
+    }
+  }
+
   const result = await createIntent({
     providerId,
     amountSzl,

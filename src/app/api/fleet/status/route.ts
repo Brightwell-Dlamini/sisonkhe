@@ -1,6 +1,8 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Public heartbeat for legacy clients — returns lastUpdated only.
  */
 
 import { NextResponse } from "next/server";
@@ -12,7 +14,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "same-origin",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
