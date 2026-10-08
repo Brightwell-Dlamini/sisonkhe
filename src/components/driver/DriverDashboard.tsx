@@ -5,6 +5,7 @@ import { Car, Calendar, CreditCard, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useDriverSummary } from "@/hooks/useDriverSummary";
 import { useDriverSignal } from "@/hooks/useDriverSignal";
+import { signalLabel } from "@/lib/domain/driverCoach";
 import DriverHeader from "./DriverHeader";
 import DriverVehicleCard from "./DriverVehicleCard";
 import DriverSummaryCards from "./DriverSummaryCards";
@@ -108,7 +109,16 @@ export default function DriverDashboard() {
           onMessageMarshal={() => setShowMessage(true)}
           onEmitSignal={async (kind, note) => {
             const res = await emitSignal(kind, note);
-            if (res.ok && !res.queued) await refresh();
+            if (!res.ok) {
+              toast.error("Signal failed", res.error ?? "Could not send to marshal.");
+              return res;
+            }
+            if (res.queued) {
+              toast.warning("Signal queued", "It will send when you are back online.");
+              return res;
+            }
+            toast.success("Signal sent", `${signalLabel(kind)} sent to marshal.`);
+            await refresh();
             return res;
           }}
           online={online}

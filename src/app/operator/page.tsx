@@ -22,6 +22,7 @@ import {
 import { useOperatorMasterCard } from "@/hooks/useOperatorMasterCard";
 import { useOperatorFleetCards } from "@/hooks/useOperatorFleetCards";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/components/ui";
 import TopUpModal from "@/components/payments/TopUpModal";
 import MasterCardView from "@/components/operator/MasterCardView";
 import FleetCardsGrid from "@/components/operator/FleetCardsGrid";
@@ -33,6 +34,7 @@ export default function OperatorHome() {
   const { card, loading: cardLoading, toggleFreeze, refresh } = useOperatorMasterCard();
   const { vehicles } = useOperatorFleetCards();
   const { user } = useAuth();
+  const toast = useToast();
   const [showTopUp, setShowTopUp] = useState(false);
   const router = useRouter();
 
@@ -54,7 +56,15 @@ export default function OperatorHome() {
           onSend={() => router.push("/operator/wallet")}
           onToggleFreeze={async () => {
             const ok = await toggleFreeze();
-            if (ok) await refresh();
+            if (ok) {
+              await refresh();
+              toast.success(
+                card.status === "Frozen" ? "Master card reactivated" : "Master card frozen",
+                card.status === "Frozen" ? "Fleet operations can continue." : "Transfers and renewals are now paused."
+              );
+            } else {
+              toast.error("Freeze update failed", "Please try again in a moment.");
+            }
             return ok;
           }}
         />

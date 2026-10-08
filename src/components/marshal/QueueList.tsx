@@ -67,8 +67,23 @@ export default function QueueList({
     );
   }, [sorted, search]);
 
+  const blockedCount = sorted.filter((v) => rankCoach(v).blocked).length;
+  const delayedCount = sorted.filter((v) => v.status === "Delayed").length;
+
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300">
+        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-200">
+          {blockedCount} blocked
+        </span>
+        <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-blue-200">
+          {delayedCount} delayed
+        </span>
+        <span className="rounded-full border border-white/10 bg-white/[0.02] px-2 py-1 text-zinc-300">
+          {sorted.length} total
+        </span>
+      </div>
+
       <div className="relative">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
         <input

@@ -1,9 +1,17 @@
 "use client";
 
 import { useState, useRef } from "react";
+import {
+  Bus,
+  CircleDollarSign,
+  MapPinned,
+  ShieldAlert,
+  Ticket,
+} from "lucide-react";
 import type { KioskSnapshot } from "@/lib/public/kiosk";
 import type { KioskMode } from "@/app/kiosk/page";
 import { useVoiceAnnouncements } from "@/hooks/useVoiceAnnouncements";
+import { RoleGuidance } from "@/components/common/RoleGuidance";
 import Link from "next/link";
 import KioskHeader from "./KioskHeader";
 import KioskModeTabs from "./KioskModeTabs";
@@ -66,7 +74,39 @@ export default function KioskShell({
           region={snapshot.region}
         />
 
-        <div className="mt-5">
+        <div className="mt-5 space-y-5">
+          <RoleGuidance
+            title="Transit quick actions"
+            items={[
+              {
+                label: "Track routes",
+                detail: "Switch to the live transit view to see current route availability and next departures.",
+                icon: Bus,
+              },
+              {
+                label: "Check fares",
+                detail: "Open fare calculations for route pricing before the rider boards.",
+                icon: CircleDollarSign,
+              },
+              {
+                label: "Find a stop",
+                detail: "Use the regional map view to confirm the nearest active bus stop and route coverage.",
+                icon: MapPinned,
+              },
+              {
+                label: "Verify a permit",
+                detail: "Confirm the rider status and permit details before completing a transaction or boarding decision.",
+                href: "/verify",
+                icon: Ticket,
+              },
+              {
+                label: "Report an issue",
+                detail: "Escalate lost property or route concerns quickly from the terminal menu.",
+                icon: ShieldAlert,
+              },
+            ]}
+          />
+
           {mode === "transit" && (
             <KioskModeTransit
               snapshot={snapshot}

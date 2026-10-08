@@ -50,13 +50,14 @@ export default function OperatorReadinessCard({
 
   return (
     <div className={`rounded-2xl border p-4 ${tone}`}>
-      <div className="flex items-center justify-end mb-3">
-        <div className="flex gap-2">
+      <div className="mb-3 flex items-center justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
           {onReload ? (
             <button
+              type="button"
               onClick={onReload}
               aria-label="Top up master wallet"
-              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black text-[10px] font-black uppercase tracking-[0.14em] transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400"
             >
               Top up
             </button>
@@ -64,7 +65,7 @@ export default function OperatorReadinessCard({
             <Link
               href="/operator/wallet"
               aria-label="Open wallet"
-              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black text-[10px] font-black uppercase tracking-[0.14em] transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400"
             >
               Top up
             </Link>
@@ -72,24 +73,26 @@ export default function OperatorReadinessCard({
 
           {onSend ? (
             <button
+              type="button"
               onClick={onSend}
-              aria-label="Go to fleet"
-              className="px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-zinc-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-white/20"
+              aria-label="Open wallet"
+              className="px-3 py-2 rounded-xl border border-white/[0.10] bg-white/[0.03] hover:bg-white/[0.06] text-zinc-200 text-[10px] font-black uppercase tracking-[0.14em] transition-colors focus:outline-none focus:ring-2 focus:ring-white/20"
             >
-              Fleet
+              Wallet
             </button>
           ) : (
             <Link
-              href="/operator/fleet"
-              aria-label="Open fleet"
-              className="px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-zinc-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-white/20"
+              href="/operator/wallet"
+              aria-label="Open wallet"
+              className="px-3 py-2 rounded-xl border border-white/[0.10] bg-white/[0.03] hover:bg-white/[0.06] text-zinc-200 text-[10px] font-black uppercase tracking-[0.14em] transition-colors focus:outline-none focus:ring-2 focus:ring-white/20"
             >
-              Fleet
+              Wallet
             </Link>
           )}
 
           {onToggleFreeze && (
             <button
+              type="button"
               onClick={async () => {
                 try {
                   setFreezing(true);
@@ -99,13 +102,14 @@ export default function OperatorReadinessCard({
                 }
               }}
               disabled={freezing}
-              className={`px-3 py-2 rounded-xl font-bold text-xs ${
+              className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${
                 status === "Frozen"
-                  ? "bg-emerald-600 text-black"
-                  : "bg-white/[0.03] border border-white/[0.08] text-zinc-200"
-              }`}
+                  ? "bg-emerald-600 text-black hover:bg-emerald-500"
+                  : "bg-white/[0.03] border border-white/[0.08] text-zinc-200 hover:bg-white/[0.06]"
+              } ${freezing ? "cursor-wait opacity-80" : ""}`}
+              aria-label={status === "Frozen" ? "Unfreeze master card" : "Freeze master card"}
             >
-              {freezing ? <Loader2 className="w-4 h-4 animate-spin" /> : status === "Frozen" ? "Unfreeze" : "Freeze"}
+              {freezing ? <Loader2 className="h-4 w-4 animate-spin" /> : status === "Frozen" ? "Unfreeze" : "Freeze"}
             </button>
           )}
         </div>

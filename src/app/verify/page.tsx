@@ -18,8 +18,11 @@ import {
   Car,
   FileText,
   Calendar,
+  QrCode,
+  LogIn,
 } from "lucide-react";
 import BrandMark from "@/components/common/BrandMark";
+import { RoleGuidance } from "@/components/common/RoleGuidance";
 
 interface VerifyResult {
   valid: boolean;
@@ -101,6 +104,33 @@ function VerifyInner() {
             <div className="text-xs text-zinc-500">Verifying signature\u2026</div>
           </div>
         )}
+
+        <div className="mt-6">
+          <RoleGuidance
+            title="Quick actions"
+            className="border-zinc-200 bg-white text-zinc-900 shadow-sm dark:border-white/[0.08] dark:bg-[#0F0F10] dark:text-white"
+            items={[
+              {
+                label: "Scan again",
+                detail: "Re-check another permit QR from the same verification page.",
+                href: "/verify",
+                icon: QrCode,
+              },
+              {
+                label: "Staff sign-in",
+                detail: "Use the operator and marshal dashboard access flow for live operational tasks.",
+                href: "/login",
+                icon: LogIn,
+              },
+              {
+                label: "Public kiosk",
+                detail: "Open the live public transport dashboard for route and regional information.",
+                href: "/kiosk",
+                icon: ShieldCheck,
+              },
+            ]}
+          />
+        </div>
 
         {!loading && result && result.valid && (
           <div className="bg-white dark:bg-zinc-900 border-2 border-emerald-500 rounded-2xl overflow-hidden">

@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader, Badge, Button } from "@/components/ui";
+import { RoleGuidance } from "@/components/common/RoleGuidance";
 import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
 import type {
   IntelligenceSnapshot,
@@ -274,6 +275,36 @@ export default function CommandCentre() {
           <ArrowRight className="w-5 h-5 text-emerald-400 group-hover:translate-x-1 transition-transform shrink-0" />
         </Link>
       )}
+
+      <RoleGuidance
+        title="Operational priorities"
+        items={[
+          {
+            label: "Review the queue",
+            detail: "Open the live queue to triage urgent renewals, expired permits, and at-risk vehicles first.",
+            href: "/admin/queue",
+            icon: Calendar,
+          },
+          {
+            label: "Inspect permits",
+            detail: "Resolve expired, expiring, or print-backlogged permits before the next compliance cycle.",
+            href: "/admin/permits",
+            icon: Award,
+          },
+          {
+            label: "Check vehicles",
+            detail: "Review fleet health, COF status, and unassigned vehicles to close risk gaps quickly.",
+            href: "/admin/vehicles",
+            icon: Car,
+          },
+          {
+            label: "Review staff and drivers",
+            detail: "Check staffing coverage, roster changes, and any suspended driver or staff issues.",
+            href: "/admin/drivers",
+            icon: Users,
+          },
+        ]}
+      />
 
       {k && (
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">

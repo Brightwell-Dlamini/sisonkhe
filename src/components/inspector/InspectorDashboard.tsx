@@ -8,12 +8,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Search, QrCode, Loader2, AlertCircle } from "lucide-react";
+import { Search, QrCode, Loader2, AlertCircle, FileText, ShieldCheck } from "lucide-react";
 import { useQrScanner } from "@/hooks/useQrScanner";
 import { useInspectorTickets } from "@/hooks/useInspectorTickets";
 import { useAuth } from "@/hooks/useAuth";
 import type { InspectorVehicleView } from "@/lib/inspector/queries";
 import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
+import { RoleGuidance } from "@/components/common/RoleGuidance";
 import VehicleCompliancePanel from "./VehicleCompliancePanel";
 import TicketForm from "./TicketForm";
 
@@ -216,6 +217,36 @@ export default function InspectorDashboard() {
           {lookupError}
         </div>
       )}
+
+      <RoleGuidance
+        title="Inspection flow"
+        items={[
+          {
+            label: "Lookup roadside vehicle",
+            detail: "Check a plate or VIC for permit, compliance, and driver details before action.",
+            href: "/inspector/scan",
+            icon: Search,
+          },
+          {
+            label: "Scan a permit QR",
+            detail: "Use the camera flow for quick roadside verification when the permit code is available.",
+            href: "/inspector/scan",
+            icon: QrCode,
+          },
+          {
+            label: "Issue a ticket",
+            detail: "Open the ticket form after the vehicle passes the compliance review, then submit the required evidence.",
+            href: "/inspector/scan",
+            icon: FileText,
+          },
+          {
+            label: "Review recent tickets",
+            detail: "Check what has already been issued to confirm the current enforcement history.",
+            href: "/inspector/tickets",
+            icon: ShieldCheck,
+          },
+        ]}
+      />
 
       {vehicle && (
         <>
