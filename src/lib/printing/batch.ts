@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Batch permit HTML — one permit per A4 sheet, page-broken.
+ * QR encodes production verify URL (https://…/verify?token=…).
  */
 
 import "server-only";
@@ -11,10 +12,10 @@ import type { PermitDocument } from "./permit";
 
 function esc(value: unknown): string {
   return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
+    .replace(/&/g, "&")
+    .replace(/</g, "<")
+    .replace(/>/g, ">")
+    .replace(/"/g, """)
     .replace(/'/g, "&#39;");
 }
 
@@ -29,7 +30,7 @@ async function renderQrSvg(data: string, size: number): Promise<string> {
 }
 
 async function renderSinglePermit(doc: PermitDocument): Promise<string> {
-  const qrSvg = await renderQrSvg(doc.signedQrToken, 200);
+  const qrSvg = await renderQrSvg(doc.verifyUrl, 200);
 
   return `
 <div class="page">
@@ -61,7 +62,7 @@ async function renderSinglePermit(doc: PermitDocument): Promise<string> {
         <div class="section">
           <div class="section-title">2. Commercial Vehicle Particulars</div>
           <div class="grid-2">
-            <div class="pair"><strong>Make &amp; Model:</strong> ${esc(doc.make)} ${esc(doc.model)}</div>
+            <div class="pair"><strong>Make & Model:</strong> ${esc(doc.make)} ${esc(doc.model)}</div>
             <div class="pair"><strong>Classification:</strong> ${esc(doc.classification)}</div>
             <div class="pair"><strong>Seating Capacity:</strong> ${esc(doc.seatingCapacity)} passengers</div>
             <div class="pair"><strong>Loading Bay:</strong> ${esc(doc.loadingBay)}</div>
@@ -87,7 +88,7 @@ async function renderSinglePermit(doc: PermitDocument): Promise<string> {
         <div class="qr-block">
           <div class="qr-label">Official Cryptographic QR</div>
           <div class="qr-frame">${qrSvg}</div>
-          <div class="qr-caption">Scan via Eswatini Police, Road Safety Officers &amp; Commuter Kiosks</div>
+          <div class="qr-caption">Scan via Eswatini Police, Road Safety Officers & Commuter Kiosks</div>
         </div>
         <div class="validity-block">
           <div class="validity-row"><span class="label">Issue Date</span><strong class="mono">${esc(doc.permitIssueDate)}</strong></div>
