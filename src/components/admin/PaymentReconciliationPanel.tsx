@@ -2,7 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Surfaces payment mismatches and allows retry of failed card credits.
+ * Surfaces payment mismatches, allows retry of failed card credits,
+ * and shows recent webhook delivery outcomes.
  */
 
 "use client";
@@ -14,6 +15,7 @@ import {
   RefreshCw,
   Wallet,
   RotateCcw,
+  Radio,
 } from "lucide-react";
 
 interface ReconIssue {
@@ -34,8 +36,20 @@ interface Report {
   counts: Record<string, number>;
 }
 
+interface WebhookEvent {
+  id: string;
+  providerId: string;
+  providerReference: string | null;
+  status: string | null;
+  outcome: string;
+  applied: boolean;
+  errorMessage: string | null;
+  receivedAt: string;
+}
+
 export default function PaymentReconciliationPanel() {
   const [report, setReport] = useState<Report | null>(null);
+  const [webhooks, setWebhooks] = useState<WebhookEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
@@ -45,10 +59,20 @@ export default function PaymentReconciliationPanel() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/reconciliation", { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      setReport(data.data ?? data);
+      const [reconRes, whRes] = await Promise.all([
+        fetch("/api/admin/reconciliation", { cache: "no-store" }),
+        fetch("/api/admin/payments/webhooks", { cache: "no-store" }),
+      ]);
+      const reconData = await reconRes.json();
+      if (!reconRes.ok) throw new Error(reconData.error ?? `HTTP ${reconRes.status}`);
+      setReport(reconData.data ?? reconData);
+
+      if (whRes.ok) {
+        const whData = await whRes.json();
+        setWebhooks((whData.data ?? whData).events ?? []);
+      } else {
+        setWebhooks([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
@@ -87,7 +111,7 @@ export default function PaymentReconciliationPanel() {
   const counts = report?.counts ?? {};
 
   return (
-    <div className="space-y-4 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-lg font-black uppercase tracking-tight text-white flex items-center gap-2">
@@ -95,7 +119,7 @@ export default function PaymentReconciliationPanel() {
             Payment reconciliation
           </h1>
           <p className="text-xs text-zinc-500 mt-1">
-            Stale intents, completed payments without card credit, pending rank fees.
+            Stale intents, completed payments without card credit, pending rank fees, webhook deliveries.
           </p>
         </div>
         <button
@@ -189,6 +213,60 @@ export default function PaymentReconciliationPanel() {
           ))}
         </ul>
       )}
+
+      {/* Recent webhook deliveries */}
+      <div className="space-y-3 pt-2">
+        <h2 className="text-sm font-black uppercase tracking-tight text-white flex items-center gap-2">
+          <Radio className="w-4 h-4 text-sky-500" />
+          Recent webhooks
+        </h2>
+        <p className="text-[11px] text-zinc-500">
+          Verified provider callbacks. "already terminal" means the intent was already completed/failed — idempotent skip.
+        </p>
+        {webhooks.length === 0 ? (
+          <div className="rounded-xl border border-white/[0.06] bg-[#0F0F10] px-4 py-6 text-center text-xs text-zinc-500">
+            No webhook events recorded yet (table may still need migration).
+          </div>
+        ) : (
+          <ul className="space-y-1.5 max-h-80 overflow-y-auto">
+            {webhooks.map((ev) => (
+              <li
+                key={ev.id}
+                className="rounded-lg border border-white/[0.06] bg-[#0F0F10] px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]"
+              >
+                <span className="font-mono text-zinc-400 shrink-0">
+                  {new Date(ev.receivedAt).toLocaleString()}
+                </span>
+                <span className="font-bold uppercase text-zinc-300">{ev.providerId}</span>
+                <span
+                  className={
+                    ev.outcome === "applied"
+                      ? "text-emerald-400 font-bold"
+                      : ev.outcome === "already_terminal"
+                        ? "text-sky-400"
+                        : ev.outcome === "error"
+                          ? "text-red-400"
+                          : "text-zinc-500"
+                  }
+                >
+                  {ev.outcome}
+                </span>
+                {ev.status && (
+                  <span className="text-zinc-400">status={ev.status}</span>
+                )}
+                {ev.providerReference && (
+                  <span className="font-mono text-zinc-500 truncate max-w-[12rem]">
+                    {ev.providerReference}
+                  </span>
+                )}
+                {ev.errorMessage && (
+                  <span className="text-red-300 truncate max-w-full">{ev.errorMessage}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
