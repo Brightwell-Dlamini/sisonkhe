@@ -2,10 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * QR signing — server-only.
- *
- * Uses Web Crypto's HMAC-SHA256. The secret comes from the QR_HMAC_SECRET
- * environment variable and is NEVER sent to the client.
+ * QR signing — server-only (HMAC-SHA256 via Web Crypto).
  */
 
 import "server-only";
@@ -13,11 +10,10 @@ import {
   TOKEN_VERSION,
   toBase64Url,
   type QrPayload,
+  type VehicleQrPayload,
+  type OperatorQrPayload,
+  type DriverQrPayload,
 } from "./payload";
-
-// ---------------------------------------------------------------------------
-// Secret loading
-// ---------------------------------------------------------------------------
 
 let cachedKey: CryptoKey | null = null;
 
@@ -31,20 +27,15 @@ async function getSigningKey(): Promise<CryptoKey> {
     );
   }
 
-  const keyBytes = new TextEncoder().encode(secret);
   cachedKey = await crypto.subtle.importKey(
     "raw",
-    keyBytes,
+    new TextEncoder().encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"]
   );
   return cachedKey;
 }
-
-// ---------------------------------------------------------------------------
-// Signing
-// ---------------------------------------------------------------------------
 
 async function hmacSign(input: string): Promise<string> {
   const key = await getSigningKey();
@@ -53,33 +44,20 @@ async function hmacSign(input: string): Promise<string> {
     key,
     new TextEncoder().encode(input)
   );
-
-  // signature is ArrayBuffer -> base64url
   const bytes = new Uint8Array(signature);
   let binary = "";
   for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+    binary += String.fromCharCode(bytes[i]!);
   }
-  const base64 = btoa(binary);
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/**
- * Sign a QR payload. Returns the full token string.
- *
- * Token format: v1.<base64url(payload)>.<base64url(hmac)>
- */
 export async function signQrPayload(payload: QrPayload): Promise<string> {
-  const payloadJson = JSON.stringify(payload);
-  const payloadB64 = toBase64Url(payloadJson);
+  const payloadB64 = toBase64Url(JSON.stringify(payload));
   const signingInput = `${TOKEN_VERSION}.${payloadB64}`;
   const signatureB64 = await hmacSign(signingInput);
   return `${signingInput}.${signatureB64}`;
 }
-
-// ---------------------------------------------------------------------------
-// Convenience: build a vehicle QR token from a vehicle row
-// ---------------------------------------------------------------------------
 
 export interface VehicleQrInput {
   registrationNumber: string;
@@ -89,16 +67,50 @@ export interface VehicleQrInput {
   permitExpiryDate: string | null;
 }
 
-export async function signVehicleQr(
-  vehicle: VehicleQrInput
-): Promise<string> {
-  const payload: QrPayload = {
+export async function signVehicleQr(vehicle: VehicleQrInput): Promise<string> {
+  const payload: VehicleQrPayload = {
     t: "vehicle",
     r: vehicle.registrationNumber.toUpperCase(),
     v: vehicle.vic ?? "",
     p: vehicle.permitNumber ?? "",
     s: vehicle.permitStatus ?? "Active",
     e: vehicle.permitExpiryDate ?? "",
+    i: Math.floor(Date.now() / 1000),
+  };
+  return signQrPayload(payload);
+}
+
+export interface OperatorQrInput {
+  id: string;
+  name: string;
+  operatorLicenseNumber: string | null;
+}
+
+export async function signOperatorQr(op: OperatorQrInput): Promise<string> {
+  const payload: OperatorQrPayload = {
+    t: "operator",
+    id: op.id,
+    n: op.name,
+    l: op.operatorLicenseNumber ?? "",
+    i: Math.floor(Date.now() / 1000),
+  };
+  return signQrPayload(payload);
+}
+
+export interface DriverQrInput {
+  id: string;
+  fullName: string;
+  pdpStatus: string | null;
+  pdpExpiryDate: string | null;
+}
+
+export async function signDriverQr(driver: DriverQrInput): Promise<string> {
+  const payload: DriverQrPayload = {
+    t: "driver",
+    id: driver.id,
+    n: driver.fullName,
+    s: driver.pdpStatus ?? "Valid",
+    e: driver.pdpExpiryDate ?? "",
     i: Math.floor(Date.now() / 1000),
   };
   return signQrPayload(payload);

@@ -4,49 +4,71 @@
  *
  * QR token payload schema and encoding.
  *
- * A token is:
- *   v1.<base64url(payloadJSON)>.<base64url(hmac)>
- *
- * Where payloadJSON is the compact JSON of QrPayload below.
- * Where hmac is HMAC-SHA256(signingInput, secret) — see sign.ts.
+ * Token format:
+ *   v1.<base64url(payloadJSON)>.<base64url(hmac-sha256)>
  */
 
 export const TOKEN_VERSION = "v1";
 
-export interface QrPayload {
-  /** Token type: 'vehicle' | 'operator' | 'marshal' (future) */
+export type QrEntityType = "vehicle" | "operator" | "driver";
+
+/** Vehicle / PSV permit QR (printed on permits). */
+export interface VehicleQrPayload {
   t: "vehicle";
-  /** Registration number, e.g. "HSD 101 BM" */
+  /** Registration plate */
   r: string;
-  /** VIC, e.g. "HBM-101" */
+  /** VIC */
   v: string;
-  /** Permit number, e.g. "G1090/2026" */
+  /** Permit number */
   p: string;
-  /** Permit status at time of issue: 'Active' | 'Expired' | 'Suspended' */
+  /** Permit status snapshot at issue */
   s: string;
-  /** Permit expiry date, YYYY-MM-DD */
+  /** Permit expiry YYYY-MM-DD */
   e: string;
-  /** Issued-at timestamp, Unix seconds */
+  /** Issued-at unix seconds */
   i: number;
 }
 
-// ---------------------------------------------------------------------------
-// Base64URL encoding (no padding, safe for URLs and QR)
-// ---------------------------------------------------------------------------
+/** Fleet operator identity QR. */
+export interface OperatorQrPayload {
+  t: "operator";
+  /** Operator id */
+  id: string;
+  /** Display name */
+  n: string;
+  /** Operator licence number */
+  l: string;
+  /** Issued-at unix seconds */
+  i: number;
+}
+
+/** Driver identity / PDP QR. */
+export interface DriverQrPayload {
+  t: "driver";
+  /** Driver id */
+  id: string;
+  /** Full name */
+  n: string;
+  /** PDP status snapshot */
+  s: string;
+  /** PDP expiry YYYY-MM-DD */
+  e: string;
+  /** Issued-at unix seconds */
+  i: number;
+}
+
+export type QrPayload = VehicleQrPayload | OperatorQrPayload | DriverQrPayload;
 
 export function toBase64Url(input: string): string {
-  // Encode as UTF-8 -> base64 -> base64url
   const bytes = new TextEncoder().encode(input);
   let binary = "";
   for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+    binary += String.fromCharCode(bytes[i]!);
   }
-  const base64 = btoa(binary);
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 export function fromBase64Url(input: string): string {
-  // Restore padding
   let base64 = input.replace(/-/g, "+").replace(/_/g, "/");
   while (base64.length % 4) base64 += "=";
   const binary = atob(base64);
@@ -57,11 +79,7 @@ export function fromBase64Url(input: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-// ---------------------------------------------------------------------------
-// Payload validation
-// ---------------------------------------------------------------------------
-
-export function isQrPayload(x: unknown): x is QrPayload {
+export function isVehicleQrPayload(x: unknown): x is VehicleQrPayload {
   if (!x || typeof x !== "object") return false;
   const o = x as Record<string, unknown>;
   return (
@@ -73,4 +91,33 @@ export function isQrPayload(x: unknown): x is QrPayload {
     typeof o.e === "string" &&
     typeof o.i === "number"
   );
+}
+
+export function isOperatorQrPayload(x: unknown): x is OperatorQrPayload {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  return (
+    o.t === "operator" &&
+    typeof o.id === "string" &&
+    typeof o.n === "string" &&
+    typeof o.l === "string" &&
+    typeof o.i === "number"
+  );
+}
+
+export function isDriverQrPayload(x: unknown): x is DriverQrPayload {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  return (
+    o.t === "driver" &&
+    typeof o.id === "string" &&
+    typeof o.n === "string" &&
+    typeof o.s === "string" &&
+    typeof o.e === "string" &&
+    typeof o.i === "number"
+  );
+}
+
+export function isQrPayload(x: unknown): x is QrPayload {
+  return isVehicleQrPayload(x) || isOperatorQrPayload(x) || isDriverQrPayload(x);
 }
