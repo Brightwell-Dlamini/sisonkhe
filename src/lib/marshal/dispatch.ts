@@ -17,6 +17,8 @@ import { canDispatchLoad, canDispatchDepart } from "@/lib/domain/eligibility";
 import { normalizePlate } from "@/lib/domain/identity";
 import { getRankFeeConfig } from "@/lib/domain/rankFee";
 import { writeAudit } from "@/lib/domain/audit";
+import { postJournal, rankFeeJournalLines } from "@/lib/ledger/journal";
+import { log } from "@/lib/observability/log";
 
 export type DispatchAction = MarshalAction;
 
@@ -140,7 +142,6 @@ async function authorizeVehicle(
       (r) => !(r as { printed_at?: string | null }).printed_at
     );
   } catch {
-    // Column may not exist — fall back to any Approved row
     try {
       const { data: pendingPrint } = await admin
         .from("permit_renewal_requests")
@@ -322,6 +323,10 @@ async function writeRankFee(
   });
 
   if (error) {
+    log.warn("rank_fee.rpc_failed", {
+      vehicleReg: registrationNumber,
+      err: error.message,
+    });
     return { written: false, error: error.message };
   }
 
@@ -332,6 +337,54 @@ async function writeRankFee(
   } | null;
   if (!result || result.written !== true) {
     return { written: false };
+  }
+
+  const ref = result.tx_id ?? `rankfee_${registrationNumber}_${Date.now()}`;
+
+  try {
+    await postJournal(admin, {
+      reference: ref,
+      description: `Rank fee ${feeCfg.rankFee} SZL — ${registrationNumber} (${triggerSource})`,
+      actorId: context.marshalId,
+      actorRole: "marshal",
+      entityType: "rank_fee_payment",
+      entityId: ref,
+      lines: rankFeeJournalLines({
+        amountSzl: feeCfg.rankFee,
+        vehicleReg: registrationNumber,
+        splitOperational: feeCfg.splitOperational,
+        splitNrtc: feeCfg.splitNRTC,
+        splitMaintenance: feeCfg.splitMaintenance,
+      }),
+      meta: { triggerSource, marshalId: context.marshalId },
+    });
+
+    await writeAudit(admin, {
+      action: "payment.rank_fee.recorded",
+      actorId: context.marshalId,
+      actorRole: "marshal",
+      entityType: "vehicle",
+      entityId: registrationNumber,
+      summary: `Rank fee ${feeCfg.rankFee} SZL recorded for ${registrationNumber}`,
+      meta: {
+        triggerSource,
+        txId: result.tx_id ?? null,
+        splitOperational: feeCfg.splitOperational,
+        splitNRTC: feeCfg.splitNRTC,
+        splitMaintenance: feeCfg.splitMaintenance,
+      },
+    });
+
+    log.info("rank_fee.recorded", {
+      vehicleReg: registrationNumber,
+      amount: feeCfg.rankFee,
+      triggerSource,
+    });
+  } catch (err) {
+    log.warn("rank_fee.journal_failed", {
+      vehicleReg: registrationNumber,
+      err: err instanceof Error ? err.message : String(err),
+    });
   }
 
   return { written: true };
@@ -362,7 +415,6 @@ async function recordTrip(
     : Math.max(1, vehicle.seatingCapacity);
   const revenue = hasCount ? fare * passengers : null;
 
-  // Never use sentinel "unassigned" — null is honest
   await admin.from("trips").insert({
     id: `trip_${Date.now()}_${vehicle.reg.replace(/\s+/g, "")}`,
     date: now.toISOString().slice(0, 10),
