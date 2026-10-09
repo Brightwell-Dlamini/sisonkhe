@@ -20,6 +20,8 @@ import {
   Calendar,
   QrCode,
   LogIn,
+  User,
+  Building2,
 } from "lucide-react";
 import BrandMark from "@/components/common/BrandMark";
 import { RoleGuidance } from "@/components/common/RoleGuidance";
@@ -28,16 +30,9 @@ interface VerifyResult {
   valid: boolean;
   reason?: string;
   message?: string;
-  payload?: {
-    t: string;
-    r: string;
-    v: string;
-    p: string;
-    s: string;
-    e: string;
-    i: number;
-  };
-  vehicleExists?: boolean;
+  entityType?: string;
+  payload?: Record<string, unknown>;
+  summary?: Record<string, string | null>;
   permitStatus?: string;
   permitExpiry?: string | null;
   issuedAt?: string;
@@ -55,7 +50,7 @@ function VerifyInner() {
       setResult({
         valid: false,
         reason: "MALFORMED",
-        message: "No token provided in URL.",
+        message: "No token provided in URL. Scan an official signed QR.",
       });
       setLoading(false);
       return;
@@ -66,10 +61,10 @@ function VerifyInner() {
         const res = await fetch("/api/qr/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
+          body: JSON.stringify({ token, source: "public-verify-page" }),
         });
         const data = await res.json();
-        setResult(data);
+        setResult(data.data ?? data);
       } catch {
         setResult({
           valid: false,
@@ -93,44 +88,15 @@ function VerifyInner() {
           <h1 className="text-lg font-black uppercase tracking-tight text-zinc-900 dark:text-white mt-2">
             QR Verification
           </h1>
-          <p className="text-xs text-zinc-500 mt-1">
-            NRTC Official Verification
-          </p>
+          <p className="text-xs text-zinc-500 mt-1">NRTC Official Verification</p>
         </div>
 
         {loading && (
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-10 text-center">
             <Loader2 className="w-6 h-6 animate-spin text-emerald-600 mx-auto mb-3" />
-            <div className="text-xs text-zinc-500">Verifying signature\u2026</div>
+            <div className="text-xs text-zinc-500">Verifying signature…</div>
           </div>
         )}
-
-        <div className="mt-6">
-          <RoleGuidance
-            title="Quick actions"
-            className="border-zinc-200 bg-white text-zinc-900 shadow-sm dark:border-white/[0.08] dark:bg-[#0F0F10] dark:text-white"
-            items={[
-              {
-                label: "Scan again",
-                detail: "Re-check another permit QR from the same verification page.",
-                href: "/verify",
-                icon: QrCode,
-              },
-              {
-                label: "Staff sign-in",
-                detail: "Use the operator and marshal dashboard access flow for live operational tasks.",
-                href: "/login",
-                icon: LogIn,
-              },
-              {
-                label: "Public kiosk",
-                detail: "Open the live public transport dashboard for route and regional information.",
-                href: "/kiosk",
-                icon: ShieldCheck,
-              },
-            ]}
-          />
-        </div>
 
         {!loading && result && result.valid && (
           <div className="bg-white dark:bg-zinc-900 border-2 border-emerald-500 rounded-2xl overflow-hidden">
@@ -144,22 +110,114 @@ function VerifyInner() {
                     Verified Authentic
                   </div>
                   <div className="text-base font-black uppercase text-emerald-900 dark:text-emerald-100">
-                    Valid Permit
+                    {titleForEntity(result.entityType)}
                   </div>
                 </div>
               </div>
             </div>
 
             <div className="p-5 space-y-3 text-xs">
-              <Row icon={<Car className="w-4 h-4 text-zinc-400" />} label="Vehicle" value={result.payload!.r} mono />
-              <Row icon={<FileText className="w-4 h-4 text-zinc-400" />} label="VIC" value={result.payload!.v || "\u2014"} mono />
-              <Row icon={<FileText className="w-4 h-4 text-zinc-400" />} label="Permit" value={result.payload!.p || "\u2014"} mono />
-              <Row icon={<CheckCircle2 className="w-4 h-4 text-emerald-500" />} label="Status" value={result.permitStatus ?? result.payload!.s} />
-              {result.permitExpiry && (
-                <Row icon={<Calendar className="w-4 h-4 text-zinc-400" />} label="Expires" value={result.permitExpiry} mono />
+              {result.entityType === "vehicle" && (
+                <>
+                  <Row
+                    icon={<Car className="w-4 h-4 text-zinc-400" />}
+                    label="Vehicle"
+                    value={str(result.summary?.plate)}
+                    mono
+                  />
+                  <Row
+                    icon={<FileText className="w-4 h-4 text-zinc-400" />}
+                    label="VIC"
+                    value={str(result.summary?.vic)}
+                    mono
+                  />
+                  <Row
+                    icon={<FileText className="w-4 h-4 text-zinc-400" />}
+                    label="Permit"
+                    value={str(result.summary?.permit)}
+                    mono
+                  />
+                  {(result.summary?.make || result.summary?.model) && (
+                    <Row
+                      icon={<Car className="w-4 h-4 text-zinc-400" />}
+                      label="Make / model"
+                      value={`${result.summary?.make ?? ""} ${result.summary?.model ?? ""}`.trim()}
+                    />
+                  )}
+                  <Row
+                    icon={<CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                    label="Status"
+                    value={str(result.permitStatus ?? result.summary?.status)}
+                  />
+                  {result.permitExpiry && (
+                    <Row
+                      icon={<Calendar className="w-4 h-4 text-zinc-400" />}
+                      label="Expires"
+                      value={result.permitExpiry}
+                      mono
+                    />
+                  )}
+                </>
               )}
+
+              {result.entityType === "operator" && (
+                <>
+                  <Row
+                    icon={<Building2 className="w-4 h-4 text-zinc-400" />}
+                    label="Operator"
+                    value={str(result.summary?.name)}
+                  />
+                  <Row
+                    icon={<Building2 className="w-4 h-4 text-zinc-400" />}
+                    label="Company"
+                    value={str(result.summary?.company)}
+                  />
+                  <Row
+                    icon={<FileText className="w-4 h-4 text-zinc-400" />}
+                    label="Licence"
+                    value={str(result.summary?.licence)}
+                    mono
+                  />
+                </>
+              )}
+
+              {result.entityType === "driver" && (
+                <>
+                  <Row
+                    icon={<User className="w-4 h-4 text-zinc-400" />}
+                    label="Driver"
+                    value={str(result.summary?.name)}
+                  />
+                  <Row
+                    icon={<CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                    label="PDP"
+                    value={str(result.summary?.pdpStatus)}
+                  />
+                  {result.summary?.pdpExpiry && (
+                    <Row
+                      icon={<Calendar className="w-4 h-4 text-zinc-400" />}
+                      label="PDP expires"
+                      value={result.summary.pdpExpiry}
+                      mono
+                    />
+                  )}
+                  {result.summary?.assignedVehicle && (
+                    <Row
+                      icon={<Car className="w-4 h-4 text-zinc-400" />}
+                      label="Assigned vehicle"
+                      value={result.summary.assignedVehicle}
+                      mono
+                    />
+                  )}
+                </>
+              )}
+
               {result.issuedAt && (
-                <Row icon={<Calendar className="w-4 h-4 text-zinc-400" />} label="QR Issued" value={new Date(result.issuedAt).toLocaleString()} />
+                <Row
+                  icon={<Calendar className="w-4 h-4 text-zinc-400" />}
+                  label="QR issued"
+                  value={new Date(result.issuedAt).toLocaleString()}
+                />
               )}
             </div>
           </div>
@@ -167,7 +225,7 @@ function VerifyInner() {
 
         {!loading && result && !result.valid && (
           <div className="bg-white dark:bg-zinc-900 border-2 border-red-500 rounded-2xl overflow-hidden">
-            <div className="bg-red-50 dark:bg-red-950/40 p-5 border-b border-red-200 dark:border-red-800">
+            <div className="bg-red-50 dark:bg-red-950/40 p-5 border-b border-red-200 dark:border-red-900/50">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-red-600 text-white flex items-center justify-center">
                   <ShieldAlert className="w-6 h-6" />
@@ -189,28 +247,69 @@ function VerifyInner() {
                 <span>{result.message ?? "Unknown error."}</span>
               </div>
 
-              {result.payload && (
-                <div className="pt-3 mt-3 border-t border-red-100 dark:border-red-900/50">
-                  <div className="text-[10px] uppercase text-zinc-400 font-bold mb-2">
-                    Token Contents (for reference)
-                  </div>
-                  <div className="font-mono text-[10px] text-zinc-500 space-y-0.5">
-                    <div>Vehicle: {result.payload.r}</div>
-                    <div>VIC: {result.payload.v || "\u2014"}</div>
-                    <div>Permit: {result.payload.p || "\u2014"}</div>
-                  </div>
+              {result.summary && Object.keys(result.summary).length > 0 && (
+                <div className="pt-3 mt-3 border-t border-red-100 dark:border-red-900/50 space-y-1">
+                  {Object.entries(result.summary).map(([k, v]) =>
+                    v ? (
+                      <div key={k} className="font-mono text-[10px] text-zinc-500">
+                        {k}: {v}
+                      </div>
+                    ) : null
+                  )}
                 </div>
               )}
             </div>
           </div>
         )}
 
+        <div className="mt-6">
+          <RoleGuidance
+            title="Quick actions"
+            className="border-zinc-200 bg-white text-zinc-900 shadow-sm dark:border-white/[0.08] dark:bg-[#0F0F10] dark:text-white"
+            items={[
+              {
+                label: "Scan again",
+                detail: "Open a fresh verification for another official QR.",
+                href: "/verify",
+                icon: QrCode,
+              },
+              {
+                label: "Staff sign-in",
+                detail: "Operator and marshal dashboards for live operations.",
+                href: "/login",
+                icon: LogIn,
+              },
+              {
+                label: "Public kiosk",
+                detail: "Live public transport board.",
+                href: "/kiosk",
+                icon: ShieldCheck,
+              },
+            ]}
+          />
+        </div>
+
         <div className="mt-6 text-center text-[10px] text-zinc-400">
-          Cryptographic verification by Sisonkhe In Transit \u2022 NRTC
+          Cryptographic verification by Sisonkhe In Transit · NRTC
         </div>
       </div>
     </div>
   );
+}
+
+function str(v: string | null | undefined): string {
+  return v && String(v).trim() ? String(v) : "—";
+}
+
+function titleForEntity(t?: string): string {
+  switch (t) {
+    case "operator":
+      return "Valid Operator";
+    case "driver":
+      return "Valid Driver";
+    default:
+      return "Valid Permit";
+  }
 }
 
 function Row({
@@ -230,7 +329,9 @@ function Row({
         {icon}
         <span>{label}</span>
       </div>
-      <span className={`font-bold text-zinc-900 dark:text-white text-right ${mono ? "font-mono" : ""}`}>
+      <span
+        className={`font-bold text-zinc-900 dark:text-white text-right ${mono ? "font-mono" : ""}`}
+      >
         {value}
       </span>
     </div>
@@ -249,12 +350,22 @@ function labelForReason(reason?: string): string {
       return "Invalid Payload";
     case "VEHICLE_NOT_FOUND":
       return "Unknown Vehicle";
+    case "OPERATOR_NOT_FOUND":
+      return "Unknown Operator";
+    case "DRIVER_NOT_FOUND":
+      return "Unknown Driver";
     case "PERMIT_SUSPENDED":
       return "Permit Suspended";
     case "PERMIT_EXPIRED":
       return "Permit Expired";
+    case "PERMIT_SUPERSEDED":
+      return "Permit Superseded";
+    case "PDP_INVALID":
+      return "PDP Invalid";
+    case "PDP_EXPIRED":
+      return "PDP Expired";
     case "QR_TOO_OLD":
-      return "QR Expired";
+      return "QR Too Old";
     default:
       return "Verification Failed";
   }
