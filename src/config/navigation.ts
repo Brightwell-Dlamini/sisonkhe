@@ -173,10 +173,47 @@ export const OPERATOR_NAV: NavGroup[] = [
 ];
 
 export const INSPECTOR_NAV: NavGroup[] = [
-  { label: "Enforcement", items: [
-    { href: "/inspector/scan", label: "Roadside Lookup", icon: ScanLine, emphasis: "primary", hint: "Plate, VIC, or QR — permit & licence check" },
-    { href: "/inspector/tickets", label: "My Tickets", icon: FileWarning, hint: "Tickets you issued" },
-  ]},
+  {
+    label: "Enforcement",
+    items: [
+      {
+        href: "/inspector/scan",
+        label: "Roadside Lookup",
+        icon: ScanLine,
+        emphasis: "primary",
+        hint: "Plate, VIC, or QR — permit & licence check",
+      },
+      {
+        href: "/inspector/tickets",
+        label: "My Tickets",
+        icon: FileWarning,
+        hint: "Tickets you issued",
+      },
+    ],
+  },
+  {
+    label: "Registry",
+    items: [
+      {
+        href: "/inspector/vehicles",
+        label: "All Vehicles",
+        icon: Car,
+        hint: "Full fleet list (read-only)",
+      },
+      {
+        href: "/inspector/drivers",
+        label: "All Drivers",
+        icon: UserCircle,
+        hint: "Full driver registry (read-only)",
+      },
+      {
+        href: "/inspector/permits",
+        label: "All Permits",
+        icon: Award,
+        hint: "Permit status across the fleet",
+      },
+    ],
+  },
 ];
 
 export const PUBLIC_NAV: NavGroup[] = [

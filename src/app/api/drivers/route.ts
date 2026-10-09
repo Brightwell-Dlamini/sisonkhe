@@ -2,8 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * GET  /api/drivers — list
- * POST /api/drivers — create driver + auth account
+ * GET  /api/drivers — list (admin + inspector read)
+ * POST /api/drivers — create driver + auth account (admin only)
  */
 
 import type { NextRequest } from "next/server";
@@ -28,7 +28,8 @@ import { ok, withApiHandler } from "@/lib/api/response";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const ALLOWED_ROLES = ["super-admin", "admin", "fleet-manager"] as const;
+const WRITE_ROLES = ["super-admin", "admin", "fleet-manager"] as const;
+const LIST_ROLES = ["super-admin", "admin", "fleet-manager", "inspector"] as const;
 
 async function generateUniqueUsername(fullName: string): Promise<string> {
   const admin = createSupabaseAdminClient();
@@ -53,14 +54,20 @@ async function generateUniqueUsername(fullName: string): Promise<string> {
 }
 
 export const GET = withApiHandler(async () => {
-  const user = await requireServerRole([...ALLOWED_ROLES]);
-  const regionScope = regionScopeOrThrow(user);
+  const user = await requireServerRole([...LIST_ROLES]);
+  // Inspector: national read-only list
+  const regionScope =
+    user.role === "inspector" ? null : regionScopeOrThrow(user);
   const drivers = await listDrivers(regionScope);
-  return ok({ drivers, regionScope });
+  return ok({
+    drivers,
+    regionScope,
+    readOnly: user.role === "inspector",
+  });
 });
 
 export const POST = withApiHandler(async (request: NextRequest) => {
-  const user = await requireServerRole([...ALLOWED_ROLES]);
+  const user = await requireServerRole([...WRITE_ROLES]);
   regionScopeOrThrow(user);
 
   const body = await request.json();

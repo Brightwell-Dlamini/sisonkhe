@@ -21,6 +21,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const ADMIN_ROLES = ["super-admin", "admin", "fleet-manager"] as const;
+const LIST_ROLES = ["super-admin", "admin", "fleet-manager", "inspector"] as const;
 
 function generateVIC(reg: string): string {
   if (!reg) return "";
@@ -96,13 +97,15 @@ export const GET = withApiHandler(async () => {
     return ok({ vehicles });
   }
 
-  if (!ADMIN_ROLES.includes(session.role as (typeof ADMIN_ROLES)[number])) {
+  if (!LIST_ROLES.includes(session.role as (typeof LIST_ROLES)[number])) {
     throw AppError.forbidden();
   }
 
-  const regionScope = regionScopeOrThrow(session);
+  // Inspector: national read-only list (same surface as super-admin browse)
+  const regionScope =
+    session.role === "inspector" ? null : regionScopeOrThrow(session);
   const vehicles = await listVehicles(regionScope);
-  return ok({ vehicles, regionScope });
+  return ok({ vehicles, regionScope, readOnly: session.role === "inspector" });
 });
 
 export const POST = withApiHandler(async (request: NextRequest) => {
