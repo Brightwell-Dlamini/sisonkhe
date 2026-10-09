@@ -7,7 +7,8 @@
 
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Search, QrCode, Loader2, AlertCircle, FileText, ShieldCheck } from "lucide-react";
 import { useQrScanner } from "@/hooks/useQrScanner";
 import { useInspectorTickets } from "@/hooks/useInspectorTickets";
@@ -20,9 +21,11 @@ import TicketForm from "./TicketForm";
 
 export default function InspectorDashboard() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scanner = useQrScanner(videoRef);
   const { lookupVehicle, createTicket } = useInspectorTickets();
+  const autoLookupDone = useRef(false);
 
   const [manualQ, setManualQ] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -54,6 +57,16 @@ export default function InspectorDashboard() {
 
     setVehicle(result);
   };
+
+  // Deep link from registry lists: /inspector/scan?q=HSD+101+BM
+  useEffect(() => {
+    const q = searchParams.get("q")?.trim();
+    if (!q || autoLookupDone.current) return;
+    autoLookupDone.current = true;
+    setManualQ(q.toUpperCase());
+    void handleLookup(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,10 +129,10 @@ export default function InspectorDashboard() {
   return (
     <div className="space-y-4 max-w-2xl mx-auto">
       <RoleWelcomeBanner
-        title={`Inspection desk ready${user?.fullName ? `, ${user.fullName}` : ""}`}
-        subtitle="Check permit validity, roadside compliance, and vehicle status quickly before issuing any action or ticket."
-        actionLabel="Scan QR"
-        actionHref="/inspector/scan"
+        title={`Inspection desk${user?.fullName ? `, ${user.fullName}` : ""}`}
+        subtitle="Look up a plate, browse the full registry, or issue a ticket."
+        actionLabel="All vehicles"
+        actionHref="/inspector/vehicles"
       />
 
       {toast && (
@@ -135,7 +148,7 @@ export default function InspectorDashboard() {
           </h2>
           <p className="text-[11px] text-zinc-500 mb-3">
             Enter number plate or VIC. Results show permit, COF, and driver
-            licence validity only — no admin tools.
+            licence validity.
           </p>
 
           <form onSubmit={handleManualSubmit} className="flex gap-2">
@@ -219,31 +232,31 @@ export default function InspectorDashboard() {
       )}
 
       <RoleGuidance
-        title="Inspection flow"
+        title="Inspection tools"
         items={[
           {
-            label: "Lookup roadside vehicle",
-            detail: "Check a plate or VIC for permit, compliance, and driver details before action.",
-            href: "/inspector/scan",
+            label: "All vehicles",
+            detail: "Browse the full fleet list, then open any plate for a full compliance check.",
+            href: "/inspector/vehicles",
             icon: Search,
           },
           {
-            label: "Scan a permit QR",
-            detail: "Use the camera flow for quick roadside verification when the permit code is available.",
-            href: "/inspector/scan",
-            icon: QrCode,
+            label: "All drivers",
+            detail: "PDP and assignment status for every registered driver.",
+            href: "/inspector/drivers",
+            icon: ShieldCheck,
           },
           {
-            label: "Issue a ticket",
-            detail: "Open the ticket form after the vehicle passes the compliance review, then submit the required evidence.",
-            href: "/inspector/scan",
+            label: "All permits",
+            detail: "Filter expired and soon-to-expire permits across the system.",
+            href: "/inspector/permits",
             icon: FileText,
           },
           {
-            label: "Review recent tickets",
-            detail: "Check what has already been issued to confirm the current enforcement history.",
+            label: "My tickets",
+            detail: "Review tickets you have already issued.",
             href: "/inspector/tickets",
-            icon: ShieldCheck,
+            icon: FileText,
           },
         ]}
       />
