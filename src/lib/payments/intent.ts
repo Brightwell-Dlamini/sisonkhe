@@ -9,6 +9,7 @@
  * - creditTarget is idempotent via payment_credits.
  * - Card balance updates use optimistic concurrency (eq balance_szl) to prevent lost updates.
  * - If credit fails after status=completed, we mark credit_status=failed and audit.
+ * - Successful credits post a balanced journal entry for auditability.
  */
 
 import "server-only";
@@ -21,6 +22,7 @@ import {
   newCardTxId,
 } from "@/lib/domain/ids";
 import { writeAudit } from "@/lib/domain/audit";
+import { postJournal, topUpJournalLines } from "@/lib/ledger/journal";
 import type {
   PaymentIntent,
   PaymentPurpose,
@@ -108,6 +110,19 @@ export async function createIntent(
     throw new Error(`Failed to create intent: ${insertErr?.message}`);
   }
 
+  await writeAudit(admin, {
+    action: "payment.intent.created",
+    actorId: input.initiatedBy,
+    entityType: "payment_intent",
+    entityId: id,
+    summary: `Intent ${id} created (${input.amountSzl} SZL via ${provider.id})`,
+    meta: {
+      purpose: input.purpose,
+      targetEntityId: input.targetEntityId,
+      clientReference,
+    },
+  });
+
   try {
     const initiated = await provider.initiate({
       amountSzl: input.amountSzl,
@@ -156,6 +171,14 @@ export async function createIntent(
         updated_at: new Date().toISOString(),
       })
       .eq("id", id);
+
+    await writeAudit(admin, {
+      action: "payment.failed",
+      actorId: input.initiatedBy,
+      entityType: "payment_intent",
+      entityId: id,
+      summary: `Intent ${id} failed: ${message}`,
+    });
 
     return {
       intent: {
@@ -266,6 +289,28 @@ export async function applyProviderStatus(
 
   if (intent.status === "completed") {
     await creditTarget(intent);
+    await writeAudit(admin, {
+      action: "payment.settled",
+      actorId: intent.initiatedBy,
+      actorRole: "system",
+      entityType: "payment_intent",
+      entityId: intent.id,
+      summary: `Payment settled ${intent.amountSzl} SZL (${intent.providerId})`,
+      meta: { purpose: intent.purpose, targetEntityId: intent.targetEntityId },
+    });
+  } else if (
+    intent.status === "failed" ||
+    intent.status === "cancelled" ||
+    intent.status === "expired"
+  ) {
+    await writeAudit(admin, {
+      action: "payment.failed",
+      actorId: intent.initiatedBy,
+      actorRole: "system",
+      entityType: "payment_intent",
+      entityId: intent.id,
+      summary: `Payment ${intent.status}: ${failureReason ?? "n/a"}`,
+    });
   }
 
   return { applied: true, intent };
@@ -384,6 +429,21 @@ async function creditTarget(intent: PaymentIntent): Promise<void> {
       });
 
       if (txErr) throw new Error(txErr.message);
+
+      await postJournal(admin, {
+        reference: intent.clientReference,
+        description: `Operator master card top-up via ${intent.providerId}`,
+        actorId: intent.initiatedBy,
+        actorRole: "system",
+        entityType: "operator_master_card",
+        entityId: String(card.id),
+        lines: topUpJournalLines({
+          provider: intent.providerId,
+          cardAccount: `card.operator:${intent.targetEntityId}`,
+          amountSzl: intent.amountSzl,
+        }),
+        meta: { intentId: intent.id, purpose: intent.purpose },
+      });
     } else if (intent.purpose === "vehicle_card_topup") {
       const { data: card } = await admin
         .from("vehicle_virtual_cards")
@@ -424,6 +484,21 @@ async function creditTarget(intent: PaymentIntent): Promise<void> {
       });
 
       if (txErr) throw new Error(txErr.message);
+
+      await postJournal(admin, {
+        reference: intent.clientReference,
+        description: `Vehicle card top-up via ${intent.providerId}`,
+        actorId: intent.initiatedBy,
+        actorRole: "system",
+        entityType: "vehicle_virtual_card",
+        entityId: String(card.id),
+        lines: topUpJournalLines({
+          provider: intent.providerId,
+          cardAccount: `card.vehicle:${intent.targetEntityId}`,
+          amountSzl: intent.amountSzl,
+        }),
+        meta: { intentId: intent.id, purpose: intent.purpose },
+      });
     }
 
     const { error: creditErr } = await admin.from("payment_credits").insert({
