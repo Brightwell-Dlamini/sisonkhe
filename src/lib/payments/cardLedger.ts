@@ -9,6 +9,7 @@
 
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { log } from "@/lib/observability/log";
 
 export type CardLedgerKind = "vehicle" | "operator";
 
@@ -115,9 +116,30 @@ export async function auditCardLedgers(opts?: {
 
   drifts.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
 
-  return {
+  const report: CardLedgerReport = {
     generatedAt: new Date().toISOString(),
     scanned: { vehicle: vehicleScanned, operator: operatorScanned },
     drifts,
   };
+
+  log.info("card_ledger.audit", {
+    vehicleScanned,
+    operatorScanned,
+    driftCount: drifts.length,
+    maxAbsDelta: drifts.length
+      ? Math.max(...drifts.map((d) => Math.abs(d.delta)))
+      : 0,
+  });
+
+  if (drifts.length > 0) {
+    log.warn("card_ledger.drifts", {
+      count: drifts.length,
+      samples: drifts
+        .slice(0, 5)
+        .map((d) => `${d.kind}:${d.entityId} Δ${d.delta}`)
+        .join(" | "),
+    });
+  }
+
+  return report;
 }
