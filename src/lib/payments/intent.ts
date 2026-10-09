@@ -272,6 +272,60 @@ export async function applyProviderStatus(
 }
 
 /**
+ * Admin repair: re-run credit for a completed intent that has no payment_credits row.
+ */
+export async function retryCreditForIntent(
+  intentId: string,
+  actor: { actorId?: string; actorName?: string }
+): Promise<{ success: boolean; credited?: boolean; error?: string }> {
+  const admin = createSupabaseAdminClient();
+  const intent = await getIntent(intentId);
+  if (!intent) return { success: false, error: "Intent not found." };
+  if (intent.status !== "completed") {
+    return {
+      success: false,
+      error: `Intent status is ${intent.status}; only completed intents can be credited.`,
+    };
+  }
+
+  const { data: existingCredit } = await admin
+    .from("payment_credits")
+    .select("id")
+    .eq("intent_id", intent.id)
+    .maybeSingle();
+
+  if (existingCredit) {
+    return { success: true, credited: false, error: undefined };
+  }
+
+  await creditTarget(intent);
+
+  const { data: after } = await admin
+    .from("payment_credits")
+    .select("id")
+    .eq("intent_id", intent.id)
+    .maybeSingle();
+
+  if (!after) {
+    return {
+      success: false,
+      error: "Credit still failed — check intent failure_reason / provider_payload.",
+    };
+  }
+
+  await writeAudit(admin, {
+    action: "payment.credit_retry",
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+    entityType: "payment_intent",
+    entityId: intent.id,
+    summary: `Admin retried credit for intent ${intent.id} (${intent.amountSzl} SZL)`,
+  });
+
+  return { success: true, credited: true };
+}
+
+/**
  * Credit the target entity. Idempotent via payment_credits.
  * Balance writes are optimistic (eq on previous balance) to prevent lost updates
  * under concurrent webhooks.
