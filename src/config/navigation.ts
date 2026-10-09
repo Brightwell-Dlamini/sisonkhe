@@ -3,9 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Job-first navigation. Ordered by what each role does on a normal day.
- *
- * Role type lives in src/lib/auth/roles.ts. This file consumes NavRole
- * (= AuthRole | "commuter") so there is exactly one place that names roles.
  */
 
 import type { LucideIcon } from "lucide-react";
@@ -41,6 +38,7 @@ import {
   Wallet,
   MessageSquare,
   Activity as ActivityIcon,
+  ListChecks,
 } from "lucide-react";
 import type { NavRole } from "@/lib/auth/roles";
 
@@ -52,7 +50,6 @@ export interface NavItem {
   icon: LucideIcon;
   badge?: "live" | "count";
   exact?: boolean;
-  /** Roles that can see this item. Undefined = all roles in this shell. */
   roles?: NavRole[];
   emphasis?: "primary";
   hint?: string;
@@ -62,10 +59,6 @@ export interface NavGroup {
   label: string;
   items: NavItem[];
 }
-
-// ---------------------------------------------------------------------------
-// Admin / fleet-manager — rank ops
-// ---------------------------------------------------------------------------
 
 export const ADMIN_NAV: NavGroup[] = [
   {
@@ -79,6 +72,13 @@ export const ADMIN_NAV: NavGroup[] = [
         emphasis: "primary",
         hint: "Ranked work queue and risk radar",
       },
+      {
+        href: "/admin/compliance",
+        label: "Compliance Queue",
+        icon: ListChecks,
+        emphasis: "primary",
+        hint: "Expired permits, COF, PDP, print backlog",
+      },
     ],
   },
   {
@@ -86,6 +86,7 @@ export const ADMIN_NAV: NavGroup[] = [
     items: [
       { href: "/admin/permits", label: "Permit Renewals", icon: Award, emphasis: "primary", hint: "Approve or reject operator requests" },
       { href: "/admin/permits/print", label: "Print Queue", icon: Printer, emphasis: "primary", hint: "A4 permits with signed QR" },
+      { href: "/admin/payments", label: "Payment Recon", icon: Wallet, hint: "Mismatches and retry credit" },
       { href: "/admin/reports", label: "Reports", icon: FileText, hint: "CSV compliance exports" },
       { href: "/admin/audits", label: "Audit Trail", icon: Shield, hint: "Security and change log" },
     ],
