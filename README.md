@@ -39,12 +39,12 @@ Next.js 15 (App Router)
 | `src/lib/intelligence/` | Command-centre KPIs, ranked work items, deep links |
 | `src/lib/sync/` | Event-log apply/pull with idempotency + optimistic concurrency |
 | `src/lib/marshal/` | Dispatch, roster, queue queries |
-| `src/lib/payments/` | Payment intents and provider webhooks |
+| `src/lib/payments/` | Payment intents, webhooks, reconciliation, exception queue |
+| `src/lib/ledger/` | Trip/settlement queries + double-entry journal helper |
 | `src/lib/notifications/` | In-app notifications (staff, drivers, operators, marshals) |
 | `src/lib/invariants/` | Nightly money/identity/ops integrity checks |
 | `src/lib/compliance/` | Proactive expiry digests and operator alerts |
 | `src/lib/queue/` | Dispatch suggestion / fairness helpers |
-| `src/lib/payments/reconciliation.ts` | Intent ↔ ledger matching helpers |
 | `src/lib/pagination.ts` | Shared cursor/limit helpers for list APIs |
 | `src/lib/observability/` | Structured logging helpers for operational telemetry |
 | `src/lib/offline/` | Dexie outbox, network heartbeat, background sync daemon |
@@ -94,23 +94,29 @@ Marshals and drivers can work offline via Dexie outbox. On reconnect, clients au
 - Immediate replay when network connectivity is restored
 - Version-conflict requeue for optimistic concurrency
 
+## Financial integrity
+
+- Payment intents use cryptographic ids and optimistic card-balance updates.
+- Successful card top-ups post balanced journal entries (`ledger.journal.post`) for auditability.
+- `GET /api/admin/ops/exceptions` returns a unified exception queue (reconciliation + card-ledger drifts).
+- Card ledger audit reconstructs balances from completed transactions and reports drift.
+
 ## Security notes
 
 - Role gates live in `src/lib/auth/` and middleware.
-- Money and permit mutations should always write audit-friendly rows (permit_audit_logs, card transactions).
+- Money and permit mutations should always write audit-friendly rows (permit_audit_logs, card transactions, operational_audit).
 - Payment webhooks require shared secrets (`MOMO_WEBHOOK_SECRET`, `EMLANGENI_WEBHOOK_SECRET`) and fail closed in production.
 - Never commit `.env.local` or service-role keys.
 
 ## Improvement roadmap
 
-**Phase 1 (foundation) — complete**
-- Legacy fleet-blob path hardened and instrumented for measured removal
-- Event-log sync strengthened with structured telemetry
-- Offline outbox hardened (attempt limits, stuck recovery, reconnect sync)
-- Invariants and payment reconciliation crons registered and logged
-- Structured observability applied across sync, payments, and invariants
+**Phase 1 (foundation) — complete**  
+Legacy deprecation telemetry, event-log hardening, offline outbox resilience, invariants/payment crons, structured observability.
 
-Subsequent phases will cover financial ledger maturity, intelligence enhancements, finer-grained permissions, and UX/localisation.
+**Phase 2 (financial & ledger maturity) — in progress**  
+Double-entry journal helper, expanded money audit actions, unified exception queue API, journal posts on card top-ups, card-ledger drift telemetry.
+
+Subsequent phases: intelligence enhancements, finer-grained permissions, UX/localisation.
 
 ## License
 
