@@ -5,32 +5,24 @@
  * HTML renderer for permit documents.
  *
  * Produces a complete printable HTML page with inline CSS + inline SVG QR.
- * No external resources — everything in one string.
+ * QR encodes the public verify URL (https://…/verify?token=v1.…) so phone
+ * cameras open the verification page directly.
  */
 
 import "server-only";
 import QRCode from "qrcode";
 import type { PermitDocument } from "./permit";
 
-// ---------------------------------------------------------------------------
-// HTML escaping
-// ---------------------------------------------------------------------------
-
 function esc(value: unknown): string {
   return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
+    .replace(/&/g, "&")
+    .replace(/</g, "<")
+    .replace(/>/g, ">")
+    .replace(/"/g, """)
     .replace(/'/g, "&#39;");
 }
 
-// ---------------------------------------------------------------------------
-// QR SVG generation
-// ---------------------------------------------------------------------------
-
 async function renderQrSvg(data: string, sizePx: number = 200): Promise<string> {
-  // QRCode.toString returns a complete <svg>...</svg>
   const svg = await QRCode.toString(data, {
     type: "svg",
     errorCorrectionLevel: "M",
@@ -44,16 +36,12 @@ async function renderQrSvg(data: string, sizePx: number = 200): Promise<string> 
   return svg;
 }
 
-// ---------------------------------------------------------------------------
-// Permit body (one A4 permit)
-// ---------------------------------------------------------------------------
-
 async function renderPermitBody(doc: PermitDocument): Promise<string> {
-  const qrSvg = await renderQrSvg(doc.signedQrToken, 200);
+  // Phone cameras open URLs; inspectors can still extract token from the URL.
+  const qrSvg = await renderQrSvg(doc.verifyUrl, 200);
 
   return `
     <div class="permit">
-      <!-- Watermark -->
       <div class="watermark" aria-hidden="true">
         <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
           <circle cx="100" cy="100" r="90" fill="none" stroke="#0f766e" stroke-width="1"/>
@@ -62,7 +50,6 @@ async function renderPermitBody(doc: PermitDocument): Promise<string> {
         </svg>
       </div>
 
-      <!-- Header -->
       <header class="permit-header">
         <div class="kingdom">${esc(doc.kingdomTitle)}</div>
         <h1 class="ministry">${esc(doc.ministryTitle)}</h1>
@@ -71,7 +58,6 @@ async function renderPermitBody(doc: PermitDocument): Promise<string> {
         <div class="legal-ref">Issued under the Provisions of the Road Transportation Act of 1974 and National Passenger Regulations</div>
       </header>
 
-      <!-- Identity strip -->
       <section class="identity-strip">
         <div class="field">
           <span class="label">Permit Serial No.</span>
@@ -87,7 +73,6 @@ async function renderPermitBody(doc: PermitDocument): Promise<string> {
         </div>
       </section>
 
-      <!-- Body grid -->
       <section class="permit-body">
         <div class="left-column">
 
@@ -103,7 +88,7 @@ async function renderPermitBody(doc: PermitDocument): Promise<string> {
           <div class="section">
             <div class="section-title">2. Commercial Vehicle Particulars</div>
             <div class="grid-2">
-              <div class="pair"><strong>Make &amp; Model:</strong> ${esc(doc.make)} ${esc(doc.model)}</div>
+              <div class="pair"><strong>Make & Model:</strong> ${esc(doc.make)} ${esc(doc.model)}</div>
               <div class="pair"><strong>Classification:</strong> ${esc(doc.classification)}</div>
               <div class="pair"><strong>Seating Capacity:</strong> ${esc(doc.seatingCapacity)} passengers</div>
               <div class="pair"><strong>Loading Bay:</strong> ${esc(doc.loadingBay)}</div>
@@ -133,7 +118,7 @@ async function renderPermitBody(doc: PermitDocument): Promise<string> {
           <div class="qr-block">
             <div class="qr-label">Official Cryptographic QR</div>
             <div class="qr-frame">${qrSvg}</div>
-            <div class="qr-caption">Scan via Eswatini Police, Road Safety Officers &amp; Commuter Kiosks</div>
+            <div class="qr-caption">Scan via Eswatini Police, Road Safety Officers & Commuter Kiosks</div>
           </div>
 
           <div class="validity-block">
@@ -153,7 +138,6 @@ async function renderPermitBody(doc: PermitDocument): Promise<string> {
         </aside>
       </section>
 
-      <!-- Conditions & signatures -->
       <footer class="permit-footer">
         <div class="conditions">
           <div class="conditions-title">Statutory Conditions:</div>
@@ -181,10 +165,6 @@ async function renderPermitBody(doc: PermitDocument): Promise<string> {
     </div>
   `;
 }
-
-// ---------------------------------------------------------------------------
-// Full HTML document (print-ready)
-// ---------------------------------------------------------------------------
 
 export async function renderPermitHtml(doc: PermitDocument): Promise<string> {
   const body = await renderPermitBody(doc);
@@ -226,7 +206,6 @@ export async function renderPermitHtml(doc: PermitDocument): Promise<string> {
   }
   .watermark svg { width: 60%; height: 60%; }
 
-  /* Header */
   .permit-header { text-align: center; padding-bottom: 4mm; border-bottom: 2px solid #065f46; position: relative; z-index: 1; }
   .kingdom { font-size: 9pt; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; color: #065f46; }
   .ministry { font-size: 16pt; font-weight: 900; text-transform: uppercase; color: #111; margin-top: 2mm; letter-spacing: -0.01em; }
@@ -234,7 +213,6 @@ export async function renderPermitHtml(doc: PermitDocument): Promise<string> {
   .doc-title { font-size: 10pt; font-weight: 900; text-transform: uppercase; color: #065f46; margin-top: 3mm; letter-spacing: 0.05em; }
   .legal-ref { font-size: 7pt; color: #666; margin-top: 2mm; font-style: italic; }
 
-  /* Identity strip */
   .identity-strip {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
@@ -250,7 +228,6 @@ export async function renderPermitHtml(doc: PermitDocument): Promise<string> {
   .identity-strip .label { font-size: 7pt; text-transform: uppercase; letter-spacing: 0.08em; color: #666; font-weight: 700; display: block; }
   .identity-strip .value { font-size: 12pt; font-weight: 900; color: #065f46; }
 
-  /* Body */
   .permit-body { display: grid; grid-template-columns: 1fr 70mm; gap: 6mm; margin-top: 5mm; flex: 1; position: relative; z-index: 1; }
   .left-column { display: flex; flex-direction: column; gap: 4mm; }
 
@@ -263,7 +240,6 @@ export async function renderPermitHtml(doc: PermitDocument): Promise<string> {
   .pair strong { color: #111; }
   .pair.col-span-2 { grid-column: span 2; }
 
-  /* QR column */
   .right-column { display: flex; flex-direction: column; gap: 4mm; }
   .qr-block { text-align: center; padding: 3mm; border: 1px solid #d4d4d8; border-radius: 3px; background: #fafafa; }
   .qr-label { font-size: 7pt; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #065f46; margin-bottom: 2mm; }
@@ -278,7 +254,6 @@ export async function renderPermitHtml(doc: PermitDocument): Promise<string> {
   .validity-row .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-weight: 700; color: #111; }
   .validity-row .highlight { color: #065f46; }
 
-  /* Footer */
   .permit-footer {
     display: grid;
     grid-template-columns: 2fr 1fr;
@@ -300,7 +275,6 @@ export async function renderPermitHtml(doc: PermitDocument): Promise<string> {
 
   .print-meta { position: absolute; bottom: 4mm; left: 8mm; right: 8mm; text-align: center; font-size: 6pt; color: #999; font-family: ui-monospace, monospace; }
 
-  /* Print rules */
   @media print {
     html, body { background: #fff; }
     .page { box-shadow: none; margin: 0; padding: 10mm; }
@@ -308,7 +282,6 @@ export async function renderPermitHtml(doc: PermitDocument): Promise<string> {
     @page { size: A4; margin: 0; }
   }
 
-  /* Screen-only toolbar */
   .toolbar {
     max-width: 210mm;
     margin: 4mm auto;
