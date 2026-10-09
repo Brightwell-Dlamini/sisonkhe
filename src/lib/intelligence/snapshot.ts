@@ -22,6 +22,7 @@ import type {
   WorkItem,
 } from "./types";
 import { DeepLink } from "./deepLinks";
+import { consequenceForWorkItem } from "./workItemConsequences";
 
 function emptyKpis(): IntelligenceKpis {
   return {
@@ -38,7 +39,15 @@ function emptyKpis(): IntelligenceKpis {
     vehiclesUnassigned: 0,
     driversSuspended: 0,
     masterCardsFrozen: 0,
+    financialExceptionsHigh: 0,
   };
+}
+
+function withConsequences(items: WorkItem[]): WorkItem[] {
+  return items.map((item) => ({
+    ...item,
+    consequence: item.consequence ?? consequenceForWorkItem(item.kind),
+  }));
 }
 
 function buildBriefing(kpis: IntelligenceKpis, queueLen: number): string {
@@ -50,6 +59,8 @@ function buildBriefing(kpis: IntelligenceKpis, queueLen: number): string {
   if (kpis.renewalsPending > 0)
     crises.push(`${kpis.renewalsPending} renewal${kpis.renewalsPending === 1 ? "" : "s"} waiting`);
   if (kpis.printQueueOpen > 0) crises.push(`${kpis.printQueueOpen} ready to print`);
+  if ((kpis.financialExceptionsHigh ?? 0) > 0)
+    crises.push(`${kpis.financialExceptionsHigh} high financial exception${kpis.financialExceptionsHigh === 1 ? "" : "s"}`);
   if (crises.length === 0 && queueLen === 0)
     return "All clear within the 30-day horizon. Registry is quiet — use the time for audits and roster hygiene.";
   if (crises.length === 0)
@@ -71,7 +82,11 @@ function pickPrimary(
     };
   }
   if (top.kind === "permit_expired" || top.kind === "cof_expired") {
-    return { label: "Clear expired compliance", href: top.href, reason: top.detail };
+    return {
+      label: "Clear expired compliance",
+      href: top.href,
+      reason: top.consequence ?? top.detail,
+    };
   }
   if (kpis.printQueueOpen > 0) {
     return {
@@ -80,7 +95,11 @@ function pickPrimary(
       reason: "Approved renewals are waiting on paper with signed QR.",
     };
   }
-  return { label: top.title, href: top.href, reason: top.detail };
+  return {
+    label: top.title,
+    href: top.href,
+    reason: top.consequence ?? top.detail,
+  };
 }
 
 export async function buildIntelligenceSnapshot(
@@ -392,7 +411,7 @@ export async function buildIntelligenceSnapshot(
   }
 
   queue.sort((a, b) => b.score - a.score);
-  const trimmed = queue.slice(0, 40);
+  const trimmed = withConsequences(queue.slice(0, 40));
 
   const pushRisk = (
     id: string,
@@ -414,6 +433,28 @@ export async function buildIntelligenceSnapshot(
   pushRisk("risk-suspended", "Suspended drivers", kpis.driversSuspended, "high", "Confirm still intended", DeepLink.driversSuspended);
   if (national) {
     pushRisk("risk-frozen-cards", "Frozen Master Cards", kpis.masterCardsFrozen, "high", "Money movement halted", DeepLink.operatorsFrozen);
+  }
+
+  // Best-effort financial exception signal for command-centre visibility
+  if (national || user.role === "admin" || user.role === "fleet-manager") {
+    try {
+      const { buildExceptionQueue } = await import("@/lib/payments/exceptions");
+      const fin = await buildExceptionQueue({
+        includeCardLedger: national,
+        reconLookbackDays: 7,
+      });
+      kpis.financialExceptionsHigh = fin.counts.high;
+      pushRisk(
+        "risk-financial-exceptions",
+        "High financial exceptions",
+        fin.counts.high,
+        fin.counts.high >= 3 ? "critical" : "high",
+        `${fin.counts.high} high · ${fin.counts.medium} medium — recon and card ledger`,
+        "/admin/ops"
+      );
+    } catch {
+      // Non-fatal: payments tables may be unavailable in some environments
+    }
   }
 
   risks.sort((a, b) => {

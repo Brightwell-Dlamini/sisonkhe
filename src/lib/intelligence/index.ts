@@ -9,3 +9,4 @@
 export * from "./types";
 export * from "./rules";
 export * from "./consequences";
+export * from "./workItemConsequences";
