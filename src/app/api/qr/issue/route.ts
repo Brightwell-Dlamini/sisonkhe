@@ -9,6 +9,7 @@ import type { NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { requireServerRole } from "@/lib/auth/session";
 import { signVehicleQr } from "@/lib/qr/sign";
+import { buildQrVerifyUrl } from "@/lib/appUrl";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
 
@@ -52,8 +53,11 @@ export const POST = withApiHandler(async (request: NextRequest) => {
     permitExpiryDate: (vehicle.permit_expiry_date as string | null) ?? null,
   });
 
+  const verifyUrl = buildQrVerifyUrl(token);
+
   return ok({
     token,
+    verifyUrl,
     registrationNumber: vehicle.registration_number,
     issuedAt: new Date().toISOString(),
   });

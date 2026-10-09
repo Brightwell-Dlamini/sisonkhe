@@ -17,22 +17,20 @@
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 import { signVehicleQr } from "../qr/sign";
+import { buildQrVerifyUrl } from "../appUrl";
 
 export interface PermitDocument {
-  // Header
   kingdomTitle: string;
   ministryTitle: string;
   boardTitle: string;
   documentTitle: string;
 
-  // Permit identity
   permitNumber: string;
   permitStatus: string;
   permitIssueDate: string;
   permitExpiryDate: string;
   lastInspectionDate: string;
 
-  // Vehicle
   registrationNumber: string;
   vic: string;
   make: string;
@@ -40,31 +38,27 @@ export interface PermitDocument {
   classification: string;
   seatingCapacity: number;
 
-  // Fitness
   cofNumber: string;
   cofIssueDate: string;
   cofExpiryDate: string;
 
-  // Operator
   operatorName: string;
   operatorPhone: string;
   association: string;
 
-  // Route
   routeOrigin: string;
   routeDestination: string;
   routeRegion: string;
   loadingBay: string;
 
-  // Driver (optional)
   driverName: string;
   driverPdpStatus: string;
 
-  // Signing
+  /** Raw signed token (v1.…). Prefer verifyUrl for phone camera QR. */
   signedQrToken: string;
+  /** Full https://…/verify?token=… — encoded into the printed QR. */
   verifyUrl: string;
 
-  // Meta
   issuedAt: string;
   printTimestamp: string;
 }
@@ -100,7 +94,6 @@ export async function buildPermitDocument(
   }
   if (!vehicle) return null;
 
-  // Route
   let routeOrigin = "—";
   let routeDestination = "—";
   let routeRegion = "—";
@@ -117,7 +110,6 @@ export async function buildPermitDocument(
     }
   }
 
-  // Driver
   let driverName = "—";
   let driverPdpStatus = "—";
   if (vehicle.driver_id) {
@@ -132,7 +124,6 @@ export async function buildPermitDocument(
     }
   }
 
-  // Signed QR
   const signedQrToken = await signVehicleQr({
     registrationNumber: vehicle.registration_number as string,
     vic: (vehicle.vic as string | null) ?? null,
@@ -141,9 +132,7 @@ export async function buildPermitDocument(
     permitExpiryDate: (vehicle.permit_expiry_date as string | null) ?? null,
   });
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const verifyUrl = `${baseUrl}/verify?token=${encodeURIComponent(signedQrToken)}`;
-
+  const verifyUrl = buildQrVerifyUrl(signedQrToken);
   const now = new Date();
 
   return {
