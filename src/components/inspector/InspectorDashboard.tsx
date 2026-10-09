@@ -2,26 +2,36 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Government / traffic roadside lookup — plate, VIC, or QR.
+ * Roadside inspection desk — scan → verdict → ticket.
  */
 
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Search, QrCode, Loader2, AlertCircle, FileText, ShieldCheck } from "lucide-react";
+import {
+  Search,
+  QrCode,
+  Loader2,
+  AlertCircle,
+  FileText,
+  Car,
+  UserCircle,
+  WifiOff,
+} from "lucide-react";
 import { useQrScanner } from "@/hooks/useQrScanner";
 import { useInspectorTickets } from "@/hooks/useInspectorTickets";
 import { useAuth } from "@/hooks/useAuth";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import type { InspectorVehicleView } from "@/lib/inspector/queries";
 import { parseQrScanInput } from "@/lib/qr/parse";
-import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
-import { RoleGuidance } from "@/components/common/RoleGuidance";
 import VehicleCompliancePanel from "./VehicleCompliancePanel";
 import TicketForm from "./TicketForm";
 
 export default function InspectorDashboard() {
   const { user } = useAuth();
+  const online = useOnlineStatus();
   const searchParams = useSearchParams();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scanner = useQrScanner(videoRef);
@@ -41,25 +51,43 @@ export default function InspectorDashboard() {
   };
 
   const handleLookup = async (raw: string) => {
+    if (!online) {
+      setLookupError(
+        "You are offline. Plate lookup needs a connection. Try again when signal returns."
+      );
+      return;
+    }
+
     setLookupError(null);
     setLookupLoading(true);
     setVehicle(null);
     setShowTicketForm(false);
 
-    const result = await lookupVehicle(raw);
-
-    setLookupLoading(false);
-    if (!result) {
+    try {
+      const result = await lookupVehicle(raw);
+      setLookupLoading(false);
+      if (!result) {
+        setLookupError(
+          `No vehicle for "${raw.trim()}". Check plate or VIC and try again.`
+        );
+        return;
+      }
+      setVehicle(result);
+    } catch {
+      setLookupLoading(false);
       setLookupError(
-        `No vehicle found for "${raw.trim()}". Try plate (e.g. HSD 101 BM) or VIC.`
+        online
+          ? "Lookup failed. Check connection and try again."
+          : "Offline — cannot reach the registry."
       );
-      return;
     }
-
-    setVehicle(result);
   };
 
   const verifyTokenThenLookup = async (token: string) => {
+    if (!online) {
+      setLookupError("Offline — cannot verify QR signature. Use plate entry when online.");
+      return;
+    }
     try {
       const res = await fetch("/api/qr/verify", {
         method: "POST",
@@ -86,22 +114,21 @@ export default function InspectorDashboard() {
 
       if (data.valid && data.entityType === "operator") {
         setLookupError(
-          `Operator QR verified: ${data.summary?.name ?? "operator"}. Use a vehicle permit QR for roadside vehicle checks.`
+          `Operator verified: ${data.summary?.name ?? "operator"}. Scan a vehicle permit for roadside checks.`
         );
         return;
       }
 
       setLookupError(
         data.message
-          ? `QR not valid: ${data.message}`
-          : "QR token is not valid for vehicle lookup."
+          ? `QR invalid: ${data.message}`
+          : "QR is not valid for vehicle lookup."
       );
     } catch {
-      setLookupError("Failed to verify QR.");
+      setLookupError("Could not verify QR — network error.");
     }
   };
 
-  // Deep link from registry lists: /inspector/scan?q=HSD+101+BM
   useEffect(() => {
     const q = searchParams.get("q")?.trim();
     if (!q || autoLookupDone.current) return;
@@ -128,79 +155,100 @@ export default function InspectorDashboard() {
         void handleLookup(parsed.query);
         return;
       }
-      setLookupError("Could not parse QR payload.");
+      setLookupError("Could not read QR.");
     });
-
     await scanner.start();
   };
 
   return (
-    <div className="space-y-4 max-w-2xl mx-auto">
-      <RoleWelcomeBanner
-        title={`Inspection desk${user?.fullName ? `, ${user.fullName}` : ""}`}
-        subtitle="Look up a plate, browse the full registry, or issue a ticket."
-        actionLabel="All vehicles"
-        actionHref="/inspector/vehicles"
-      />
+    <div className="space-y-5 max-w-2xl mx-auto pb-8">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-white">
+            Roadside
+          </h1>
+          <p className="text-sm text-zinc-400 mt-0.5">
+            {user?.fullName ? user.fullName : "Inspector"} · plate, VIC, or QR
+          </p>
+        </div>
+        {!online && (
+          <div className="flex items-center gap-1.5 text-amber-300 text-xs font-bold bg-amber-950/50 border border-amber-500/40 rounded-lg px-2.5 py-1.5">
+            <WifiOff className="w-3.5 h-3.5" />
+            Offline
+          </div>
+        )}
+      </div>
+
+      {/* Field actions — real links, not guidance theatre */}
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href="/inspector/vehicles"
+          className="px-3 py-2 rounded-xl bg-white/[0.06] border border-white/[0.08] text-zinc-200 text-xs font-bold flex items-center gap-1.5"
+        >
+          <Car className="w-3.5 h-3.5" />
+          Vehicles
+        </Link>
+        <Link
+          href="/inspector/drivers"
+          className="px-3 py-2 rounded-xl bg-white/[0.06] border border-white/[0.08] text-zinc-200 text-xs font-bold flex items-center gap-1.5"
+        >
+          <UserCircle className="w-3.5 h-3.5" />
+          Drivers
+        </Link>
+        <Link
+          href="/inspector/tickets"
+          className="px-3 py-2 rounded-xl bg-white/[0.06] border border-white/[0.08] text-zinc-200 text-xs font-bold flex items-center gap-1.5"
+        >
+          <FileText className="w-3.5 h-3.5" />
+          Tickets
+        </Link>
+      </div>
 
       {toast && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-200 rounded-xl px-4 py-3 text-xs font-bold">
+        <div className="bg-emerald-500/15 border border-emerald-500/40 text-emerald-100 rounded-xl px-4 py-3 text-sm font-bold">
           {toast}
         </div>
       )}
 
-      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-5 space-y-4">
-        <div>
-          <h2 className="text-sm font-black uppercase tracking-wide text-white mb-1">
-            Roadside lookup
-          </h2>
-          <p className="text-[11px] text-zinc-500 mb-3">
-            Enter number plate or VIC. Results show permit, COF, and driver
-            licence validity.
-          </p>
-
-          <form onSubmit={handleManualSubmit} className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-              <input
-                type="text"
-                placeholder="Plate or VIC (e.g. HSD 101 BM)"
-                value={manualQ}
-                onChange={(e) => setManualQ(e.target.value.toUpperCase())}
-                autoComplete="off"
-                className="w-full bg-[#0A0A0A] border border-white/[0.08] rounded-xl pl-10 pr-4 py-3 text-sm font-mono text-white focus:outline-none focus:border-red-500/60"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={lookupLoading || !manualQ.trim()}
-              className="px-4 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0"
-            >
-              {lookupLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Search className="w-3.5 h-3.5" />
-              )}
-              Look up
-            </button>
-          </form>
-
-          <div className="mt-3 flex items-center justify-between">
-            <span className="text-[10px] text-zinc-500">or</span>
-            <button
-              type="button"
-              onClick={handleScanClick}
-              disabled={scanner.scanning}
-              className="text-xs font-bold text-red-500 hover:text-red-400 flex items-center gap-1.5"
-            >
-              <QrCode className="w-3.5 h-3.5" />
-              {scanner.scanning ? "Scanning…" : "Scan permit QR"}
-            </button>
+      <div className="bg-[#0F0F10] border border-white/[0.08] rounded-2xl p-5 space-y-4">
+        <form onSubmit={handleManualSubmit} className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
+            <input
+              type="text"
+              placeholder="Plate or VIC"
+              value={manualQ}
+              onChange={(e) => setManualQ(e.target.value.toUpperCase())}
+              autoComplete="off"
+              className="w-full bg-[#0A0A0A] border border-white/[0.1] rounded-2xl pl-12 pr-4 py-4 text-base sm:text-lg font-mono text-white focus:outline-none focus:border-red-500/70"
+            />
           </div>
-        </div>
+          <button
+            type="submit"
+            disabled={lookupLoading || !manualQ.trim()}
+            className="px-6 py-4 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-2xl text-sm font-black uppercase tracking-wider flex items-center justify-center gap-2 shrink-0 min-h-[3.25rem]"
+          >
+            {lookupLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Search className="w-5 h-5" />
+            )}
+            Look up
+          </button>
+        </form>
+
+        <button
+          type="button"
+          onClick={handleScanClick}
+          disabled={scanner.scanning || !online}
+          className="w-full py-3.5 rounded-2xl border border-red-500/40 bg-red-950/30 hover:bg-red-950/50 disabled:opacity-40 text-red-200 text-sm font-black uppercase tracking-wider flex items-center justify-center gap-2"
+        >
+          <QrCode className="w-5 h-5" />
+          {scanner.scanning ? "Scanning…" : "Scan permit QR"}
+        </button>
 
         {scanner.scanning && (
-          <div className="relative aspect-square max-h-72 rounded-xl overflow-hidden bg-black mx-auto">
+          <div className="relative aspect-square max-h-80 rounded-2xl overflow-hidden bg-black mx-auto">
             <video
               ref={videoRef}
               autoPlay
@@ -211,63 +259,26 @@ export default function InspectorDashboard() {
             <button
               type="button"
               onClick={scanner.stop}
-              className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-black/70 text-white rounded-lg text-xs font-bold"
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-black/80 text-white rounded-xl text-sm font-bold"
             >
-              Stop scanning
+              Stop
             </button>
           </div>
         )}
 
         {scanner.error && (
-          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-200 rounded-xl p-3 text-xs flex items-start gap-2">
+          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-100 rounded-xl p-3 text-sm flex items-start gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <span>{scanner.error}</span>
-          </div>
-        )}
-
-        {!scanner.supported && !scanner.scanning && (
-          <div className="text-[11px] text-zinc-500 text-center">
-            Camera scanning needs Chrome or Edge. Use plate / VIC entry on this
-            device.
           </div>
         )}
       </div>
 
       {lookupError && (
-        <div className="bg-red-500/10 border border-red-500/30 text-red-300 rounded-xl px-4 py-3 text-xs">
+        <div className="bg-red-500/15 border border-red-500/40 text-red-100 rounded-2xl px-4 py-4 text-sm font-medium">
           {lookupError}
         </div>
       )}
-
-      <RoleGuidance
-        title="Inspection tools"
-        items={[
-          {
-            label: "All vehicles",
-            detail: "Browse the full fleet list, then open any plate for a full compliance check.",
-            href: "/inspector/vehicles",
-            icon: Search,
-          },
-          {
-            label: "All drivers",
-            detail: "PDP and assignment status for every registered driver.",
-            href: "/inspector/drivers",
-            icon: ShieldCheck,
-          },
-          {
-            label: "All permits",
-            detail: "Filter expired and soon-to-expire permits across the system.",
-            href: "/inspector/permits",
-            icon: FileText,
-          },
-          {
-            label: "My tickets",
-            detail: "Review tickets you have already issued.",
-            href: "/inspector/tickets",
-            icon: FileText,
-          },
-        ]}
-      />
 
       {vehicle && (
         <>
@@ -281,6 +292,12 @@ export default function InspectorDashboard() {
               vehicle={vehicle}
               onCancel={() => setShowTicketForm(false)}
               onSubmit={async (input) => {
+                if (!online) {
+                  return {
+                    success: false,
+                    error: "Offline — ticket cannot be issued until you reconnect.",
+                  };
+                }
                 const result = await createTicket(input);
                 if (result.success) {
                   showToast(
