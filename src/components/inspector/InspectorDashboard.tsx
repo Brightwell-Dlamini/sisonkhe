@@ -14,6 +14,7 @@ import { useQrScanner } from "@/hooks/useQrScanner";
 import { useInspectorTickets } from "@/hooks/useInspectorTickets";
 import { useAuth } from "@/hooks/useAuth";
 import type { InspectorVehicleView } from "@/lib/inspector/queries";
+import { parseQrScanInput } from "@/lib/qr/parse";
 import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
 import { RoleGuidance } from "@/components/common/RoleGuidance";
 import VehicleCompliancePanel from "./VehicleCompliancePanel";
@@ -58,6 +59,48 @@ export default function InspectorDashboard() {
     setVehicle(result);
   };
 
+  const verifyTokenThenLookup = async (token: string) => {
+    try {
+      const res = await fetch("/api/qr/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          source: "inspector-scan",
+          actorUserId: user?.id ?? null,
+          actorRole: user?.role ?? "inspector",
+        }),
+      });
+      const body = await res.json();
+      const data = body.data ?? body;
+
+      if (data.valid && data.entityType === "vehicle" && data.payload?.r) {
+        void handleLookup(String(data.payload.r));
+        return;
+      }
+
+      if (data.valid && data.entityType === "driver" && data.summary?.assignedVehicle) {
+        void handleLookup(String(data.summary.assignedVehicle));
+        return;
+      }
+
+      if (data.valid && data.entityType === "operator") {
+        setLookupError(
+          `Operator QR verified: ${data.summary?.name ?? "operator"}. Use a vehicle permit QR for roadside vehicle checks.`
+        );
+        return;
+      }
+
+      setLookupError(
+        data.message
+          ? `QR not valid: ${data.message}`
+          : "QR token is not valid for vehicle lookup."
+      );
+    } catch {
+      setLookupError("Failed to verify QR.");
+    }
+  };
+
   // Deep link from registry lists: /inspector/scan?q=HSD+101+BM
   useEffect(() => {
     const q = searchParams.get("q")?.trim();
@@ -76,51 +119,16 @@ export default function InspectorDashboard() {
 
   const handleScanClick = async () => {
     scanner.onDetected((payload) => {
-      try {
-        if (payload.startsWith("http")) {
-          const url = new URL(payload);
-          const token = url.searchParams.get("token");
-          if (token) {
-            fetch("/api/qr/verify", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ token }),
-            })
-              .then((r) => r.json())
-              .then((data) => {
-                if (data.valid && data.payload?.r) {
-                  void handleLookup(data.payload.r);
-                } else {
-                  setLookupError("QR token is not valid.");
-                }
-              })
-              .catch(() => setLookupError("Failed to verify QR."));
-            return;
-          }
-        }
-
-        if (payload.startsWith("v1.")) {
-          fetch("/api/qr/verify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token: payload }),
-          })
-            .then((r) => r.json())
-            .then((data) => {
-              if (data.valid && data.payload?.r) {
-                void handleLookup(data.payload.r);
-              } else {
-                setLookupError("QR token is not valid.");
-              }
-            })
-            .catch(() => setLookupError("Failed to verify QR."));
-          return;
-        }
-
-        void handleLookup(payload);
-      } catch {
-        setLookupError("Could not parse QR payload.");
+      const parsed = parseQrScanInput(payload);
+      if (parsed.kind === "token") {
+        void verifyTokenThenLookup(parsed.token);
+        return;
       }
+      if (parsed.kind === "lookup") {
+        void handleLookup(parsed.query);
+        return;
+      }
+      setLookupError("Could not parse QR payload.");
     });
 
     await scanner.start();
