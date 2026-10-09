@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Roadside inspection desk — scan → verdict → ticket.
+ * Supports offline plate lookup from IndexedDB cache of prior successful lookups.
  */
 
 "use client";
@@ -19,6 +20,7 @@ import {
   Car,
   UserCircle,
   WifiOff,
+  Database,
 } from "lucide-react";
 import { useQrScanner } from "@/hooks/useQrScanner";
 import { useInspectorTickets } from "@/hooks/useInspectorTickets";
@@ -26,6 +28,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import type { InspectorVehicleView } from "@/lib/inspector/queries";
 import { parseQrScanInput } from "@/lib/qr/parse";
+import { formatCacheAge } from "@/lib/offline/inspectorCache";
 import VehicleCompliancePanel from "./VehicleCompliancePanel";
 import TicketForm from "./TicketForm";
 
@@ -41,6 +44,8 @@ export default function InspectorDashboard() {
   const [manualQ, setManualQ] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
   const [vehicle, setVehicle] = useState<InspectorVehicleView | null>(null);
+  const [fromCache, setFromCache] = useState(false);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [showTicketForm, setShowTicketForm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -51,41 +56,42 @@ export default function InspectorDashboard() {
   };
 
   const handleLookup = async (raw: string) => {
-    if (!online) {
-      setLookupError(
-        "You are offline. Plate lookup needs a connection. Try again when signal returns."
-      );
-      return;
-    }
-
     setLookupError(null);
     setLookupLoading(true);
     setVehicle(null);
+    setFromCache(false);
+    setCachedAt(null);
     setShowTicketForm(false);
 
     try {
       const result = await lookupVehicle(raw);
       setLookupLoading(false);
-      if (!result) {
+      if (!result.vehicle) {
         setLookupError(
-          `No vehicle for "${raw.trim()}". Check plate or VIC and try again.`
+          online
+            ? `No vehicle for "${raw.trim()}". Check plate or VIC and try again.`
+            : `No cached record for "${raw.trim()}". Look this plate up while online first.`
         );
         return;
       }
-      setVehicle(result);
+      setVehicle(result.vehicle);
+      setFromCache(result.fromCache);
+      setCachedAt(result.cachedAt ?? null);
     } catch {
       setLookupLoading(false);
       setLookupError(
         online
           ? "Lookup failed. Check connection and try again."
-          : "Offline — cannot reach the registry."
+          : "Offline — no cached record for this plate."
       );
     }
   };
 
   const verifyTokenThenLookup = async (token: string) => {
     if (!online) {
-      setLookupError("Offline — cannot verify QR signature. Use plate entry when online.");
+      setLookupError(
+        "Offline — cannot verify QR signature. Enter the plate manually if you looked it up before."
+      );
       return;
     }
     try {
@@ -179,7 +185,6 @@ export default function InspectorDashboard() {
         )}
       </div>
 
-      {/* Field actions — real links, not guidance theatre */}
       <div className="flex flex-wrap gap-2">
         <Link
           href="/inspector/vehicles"
@@ -277,6 +282,17 @@ export default function InspectorDashboard() {
       {lookupError && (
         <div className="bg-red-500/15 border border-red-500/40 text-red-100 rounded-2xl px-4 py-4 text-sm font-medium">
           {lookupError}
+        </div>
+      )}
+
+      {vehicle && fromCache && (
+        <div className="bg-amber-500/10 border border-amber-500/40 text-amber-100 rounded-2xl px-4 py-3 text-sm font-medium flex items-start gap-2">
+          <Database className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>
+            Showing <strong>cached</strong> data
+            {cachedAt ? ` · last updated ${formatCacheAge(cachedAt)}` : ""}.
+            May be stale — reconnect for live registry status.
+          </span>
         </div>
       )}
 
