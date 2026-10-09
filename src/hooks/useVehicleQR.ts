@@ -9,6 +9,7 @@ import { useCallback, useState } from "react";
 
 interface UseVehicleQRResult {
   token: string | null;
+  verifyUrl: string | null;
   loading: boolean;
   error: string | null;
   issue: (registrationNumber: string) => Promise<string | null>;
@@ -17,6 +18,7 @@ interface UseVehicleQRResult {
 
 export function useVehicleQR(): UseVehicleQRResult {
   const [token, setToken] = useState<string | null>(null);
+  const [verifyUrl, setVerifyUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,6 +39,7 @@ export function useVehicleQR(): UseVehicleQRResult {
       }
 
       setToken(data.token);
+      setVerifyUrl(data.verifyUrl ?? null);
       return data.token as string;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Network error");
@@ -48,8 +51,9 @@ export function useVehicleQR(): UseVehicleQRResult {
 
   const reset = useCallback(() => {
     setToken(null);
+    setVerifyUrl(null);
     setError(null);
   }, []);
 
-  return { token, loading, error, issue, reset };
+  return { token, verifyUrl, loading, error, issue, reset };
 }
