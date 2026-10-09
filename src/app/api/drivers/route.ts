@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * GET  /api/drivers — list (admin + inspector read)
+ * GET  /api/drivers — list (admin + inspector read), paginated
  * POST /api/drivers — create driver + auth account (admin only)
  */
 
@@ -22,6 +22,7 @@ import { normalizePlate } from "@/lib/domain/identity";
 import { writeAudit } from "@/lib/domain/audit";
 import { claimUsername, isUsernameTaken } from "@/lib/domain/usernames";
 import { provisionAuthUser } from "@/lib/auth/provision";
+import { parsePageParams, buildPageMeta } from "@/lib/pagination";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
 
@@ -40,30 +41,35 @@ async function generateUniqueUsername(fullName: string): Promise<string> {
       if (r.username) taken.add(String(r.username).toLowerCase());
     }
   } catch {
-    try {
-      const { data } = await admin.auth.admin.listUsers({ perPage: 200 });
-      for (const u of data?.users ?? []) {
-        const uname = u.user_metadata?.username as string | undefined;
-        if (uname) taken.add(uname.toLowerCase());
-      }
-    } catch {
-      /* */
-    }
+    /* */
   }
   return generateUsername(fullName, taken).toLowerCase();
 }
 
-export const GET = withApiHandler(async () => {
+export const GET = withApiHandler(async (request: NextRequest) => {
   const user = await requireServerRole([...LIST_ROLES]);
-  // Inspector: national read-only list
+  const { page, limit, offset } = parsePageParams(request.nextUrl.searchParams, {
+    limit: 100,
+    maxLimit: 500,
+  });
+
   const regionScope =
     user.role === "inspector" ? null : regionScopeOrThrow(user);
-  const drivers = await listDrivers(regionScope);
-  return ok({
-    drivers,
-    regionScope,
-    readOnly: user.role === "inspector",
-  });
+  const drivers = await listDrivers(regionScope, { limit, offset });
+  const meta = buildPageMeta(
+    offset + drivers.length + (drivers.length === limit ? limit : 0),
+    page,
+    limit
+  );
+
+  return ok(
+    {
+      drivers,
+      regionScope,
+      readOnly: user.role === "inspector",
+    },
+    { meta }
+  );
 });
 
 export const POST = withApiHandler(async (request: NextRequest) => {

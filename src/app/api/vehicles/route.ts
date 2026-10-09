@@ -14,6 +14,7 @@ import { assignDriverVehicle } from "@/lib/assignments/service";
 import { normalizePlate } from "@/lib/domain/identity";
 import { issueVehicleVirtualCard } from "@/lib/domain/vehicleCard";
 import { writeAudit } from "@/lib/domain/audit";
+import { parsePageParams, buildPageMeta } from "@/lib/pagination";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
 
@@ -48,7 +49,7 @@ function generateVIC(reg: string): string {
   return `${prefix}-${digits}`;
 }
 
-export const GET = withApiHandler(async () => {
+export const GET = withApiHandler(async (request: NextRequest) => {
   const session = await getServerSession();
   if (!session) throw AppError.unauthenticated();
 
@@ -65,7 +66,8 @@ export const GET = withApiHandler(async () => {
          cof_number, cof_issue_date, cof_expiry_date, created_at, updated_at`
       )
       .eq("owner_operator_id", session.operatorId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(500);
 
     if (error) {
       throw AppError.internal(`Failed to list operator vehicles: ${error.message}`);
@@ -101,11 +103,29 @@ export const GET = withApiHandler(async () => {
     throw AppError.forbidden();
   }
 
-  // Inspector: national read-only list (same surface as super-admin browse)
+  const { page, limit, offset } = parsePageParams(request.nextUrl.searchParams, {
+    limit: 100,
+    maxLimit: 500,
+  });
+
   const regionScope =
     session.role === "inspector" ? null : regionScopeOrThrow(session);
-  const vehicles = await listVehicles(regionScope);
-  return ok({ vehicles, regionScope, readOnly: session.role === "inspector" });
+  const vehicles = await listVehicles(regionScope, { limit, offset });
+  const meta = buildPageMeta(
+    // Approximate total when we only have this page; client can request more
+    offset + vehicles.length + (vehicles.length === limit ? limit : 0),
+    page,
+    limit
+  );
+
+  return ok(
+    {
+      vehicles,
+      regionScope,
+      readOnly: session.role === "inspector",
+    },
+    { meta }
+  );
 });
 
 export const POST = withApiHandler(async (request: NextRequest) => {

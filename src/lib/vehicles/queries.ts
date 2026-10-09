@@ -41,7 +41,6 @@ export interface VehicleRow {
   midMonthJoinDay: number | null;
   monthlySequenceBaseIndex: number | null;
   vehiclePhotoUrl: string | null;
-  /** True when vehicle has no route — still listed for regional admins as orphan */
   unrouted?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -104,16 +103,26 @@ function mapRow(
   };
 }
 
-/** @param regionScope null = national */
+/**
+ * @param regionScope null = national
+ * @param options.limit / offset after region filter
+ */
 export async function listVehicles(
-  regionScope: string | null = null
+  regionScope: string | null = null,
+  options?: { limit?: number; offset?: number }
 ): Promise<VehicleRow[]> {
   const admin = createSupabaseAdminClient();
+
+  const dbLimit = Math.min(
+    Math.max(options?.limit ? options.limit + (options.offset ?? 0) + 50 : 2000, 50),
+    3000
+  );
 
   const { data, error } = await admin
     .from("vehicles")
     .select(SELECT_COLUMNS)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(dbLimit);
 
   if (error) throw new Error(`Failed to list vehicles: ${error.message}`);
   if (!data) return [];
@@ -130,12 +139,17 @@ export async function listVehicles(
         routeRegion.set(String(r.id), String(r.region_code));
       }
     }
-    // Include in-region routed vehicles AND unrouted (orphan) so staff can assign routes
     rows = data.filter((v) => {
       if (!v.route_assignment_id) return true;
       const rid = routeRegion.get(String(v.route_assignment_id));
       return matchesRegion(regionScope, rid);
     });
+  }
+
+  if (options?.offset != null || options?.limit != null) {
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? 100;
+    rows = rows.slice(offset, offset + limit);
   }
 
   const driverIds = rows
