@@ -39,6 +39,8 @@ export interface WorkItem {
   score: number;
   title: string;
   detail: string;
+  /** What happens if this item is left unresolved */
+  consequence?: string;
   entityType: EntityType;
   entityId: string;
   entityLabel: string;
@@ -89,6 +91,8 @@ export interface IntelligenceKpis {
   vehiclesUnassigned: number;
   driversSuspended: number;
   masterCardsFrozen: number;
+  /** High-severity financial exceptions (recon + card drift), when available */
+  financialExceptionsHigh?: number;
 }
 
 export interface IntelligenceSnapshot {
