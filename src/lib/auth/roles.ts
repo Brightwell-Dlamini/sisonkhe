@@ -19,10 +19,6 @@
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/server";
 
-// ---------------------------------------------------------------------------
-// The role set. `commuter` is NOT here — it is not an authenticated role.
-// ---------------------------------------------------------------------------
-
 export const AUTH_ROLES = [
   "super-admin",
   "admin",
@@ -39,15 +35,7 @@ export function isAuthRole(v: unknown): v is AuthRole {
   return typeof v === "string" && (AUTH_ROLES as readonly string[]).includes(v);
 }
 
-/**
- * Navigation-only pseudo-role. Never returned by resolveUserRole.
- * Lives here so there is exactly one place that names it.
- */
 export type NavRole = AuthRole | "commuter";
-
-// ---------------------------------------------------------------------------
-// ResolvedUser — the only shape the rest of the app may depend on.
-// ---------------------------------------------------------------------------
 
 export interface ResolvedUser {
   authUserId: string;
@@ -57,23 +45,15 @@ export interface ResolvedUser {
   roleDisplay: string;
   fullName: string;
   avatarUrl?: string;
-
-  // Exactly one of these will be set, matching `role`.
   staffId?: string;
   marshalId?: string;
   driverId?: string;
   operatorId?: string;
-
-  // Role-scoped metadata
   region?: string;
   terminalId?: string;
   assignedRouteId?: string;
   assignedVehicleReg?: string;
 }
-
-// ---------------------------------------------------------------------------
-// Resolution
-// ---------------------------------------------------------------------------
 
 type TableMatch =
   | { kind: "staff"; id: string; fullName: string; role: AuthRole; region?: string; terminalId?: string; avatarUrl?: string }
@@ -105,6 +85,18 @@ export class RoleResolutionError extends Error {
   }
 }
 
+/** Short-lived cache so every API call does not re-hit 4 role tables. */
+const ROLE_CACHE_TTL_MS = 45_000;
+const roleCache = new Map<
+  string,
+  { user: ResolvedUser | null; expiresAt: number }
+>();
+
+export function invalidateRoleCache(authUserId?: string): void {
+  if (authUserId) roleCache.delete(authUserId);
+  else roleCache.clear();
+}
+
 async function findStaffMatch(authUserId: string): Promise<TableMatch | null> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
@@ -117,10 +109,7 @@ async function findStaffMatch(authUserId: string): Promise<TableMatch | null> {
   if (!data) return null;
 
   if (data.is_active === false) {
-    throw new RoleResolutionError(
-      `staff ${data.id} is not active`,
-      "INACTIVE"
-    );
+    throw new RoleResolutionError(`staff ${data.id} is not active`, "INACTIVE");
   }
 
   if (!isAuthRole(data.role)) {
@@ -153,10 +142,7 @@ async function findMarshalMatch(authUserId: string): Promise<TableMatch | null> 
   if (!data) return null;
 
   if (data.is_active === false) {
-    throw new RoleResolutionError(
-      `marshal ${data.id} is not active`,
-      "INACTIVE"
-    );
+    throw new RoleResolutionError(`marshal ${data.id} is not active`, "INACTIVE");
   }
 
   const avatarUrl =
@@ -186,10 +172,7 @@ async function findDriverMatch(authUserId: string): Promise<TableMatch | null> {
   if (!data) return null;
 
   if (data.status === "Suspended") {
-    throw new RoleResolutionError(
-      `driver ${data.id} is suspended`,
-      "INACTIVE"
-    );
+    throw new RoleResolutionError(`driver ${data.id} is suspended`, "INACTIVE");
   }
 
   return {
@@ -220,18 +203,7 @@ async function findOperatorMatch(authUserId: string): Promise<TableMatch | null>
   };
 }
 
-/**
- * Resolve a Supabase auth user to their one-and-only role.
- *
- * Throws RoleResolutionError on:
- *   - more than one table claiming the user (data integrity violation)
- *   - unknown role string in staff
- *   - inactive staff/marshal/driver
- *   - no table claiming the user
- *
- * Returns ResolvedUser on the happy path.
- */
-export async function resolveUserRole(
+async function resolveUserRoleUncached(
   authUserId: string,
   email: string | null,
   phone: string | null
@@ -265,8 +237,8 @@ export async function resolveUserRole(
     phone,
     fullName: m.fullName,
     avatarUrl: m.avatarUrl,
-    role: "marshal", // placeholder — overwritten below
-    roleDisplay: "",  // placeholder — overwritten below
+    role: "marshal",
+    roleDisplay: "",
   };
 
   switch (m.kind) {
@@ -306,8 +278,27 @@ export async function resolveUserRole(
 }
 
 /**
- * Return the primary entity id for a user (for storage paths, self-service).
+ * Resolve a Supabase auth user to their one-and-only role.
+ * Results cached ~45s per authUserId to avoid 4 table hits on every API call.
  */
+export async function resolveUserRole(
+  authUserId: string,
+  email: string | null,
+  phone: string | null
+): Promise<ResolvedUser | null> {
+  const hit = roleCache.get(authUserId);
+  if (hit && hit.expiresAt > Date.now()) {
+    return hit.user;
+  }
+
+  const user = await resolveUserRoleUncached(authUserId, email, phone);
+  roleCache.set(authUserId, {
+    user,
+    expiresAt: Date.now() + ROLE_CACHE_TTL_MS,
+  });
+  return user;
+}
+
 export function primaryEntityId(user: ResolvedUser): string {
   return (
     user.staffId ??

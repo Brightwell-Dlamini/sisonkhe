@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Region scope via assigned vehicle → route. Unassigned drivers only for national scope.
+ * Usernames come from the usernames table — never auth.admin.listUsers on list path.
  */
 
 import "server-only";
@@ -36,6 +37,14 @@ export interface DriverRow {
   username: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ListDriversOptions {
+  /** null = national */
+  regionScope?: string | null;
+  /** Cap rows after region filter. Omit for full set (still no listUsers). */
+  limit?: number;
+  offset?: number;
 }
 
 const SELECT_COLUMNS = `
@@ -146,16 +155,54 @@ async function platesInRegion(regionScope: string): Promise<Set<string>> {
   );
 }
 
-/** @param regionScope null = national (all drivers + unassigned) */
+/** Batch username lookup — usernames table only (no Auth Admin scan). */
+async function usernamesByAuthIds(
+  authIds: string[]
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (authIds.length === 0) return map;
+  const admin = createSupabaseAdminClient();
+  try {
+    // Chunk to stay under PostgREST URL limits
+    for (let i = 0; i < authIds.length; i += 200) {
+      const chunk = authIds.slice(i, i + 200);
+      const { data } = await admin
+        .from("usernames")
+        .select("username, auth_user_id")
+        .in("auth_user_id", chunk);
+      for (const row of data ?? []) {
+        if (row.auth_user_id && row.username) {
+          map.set(String(row.auth_user_id), String(row.username));
+        }
+      }
+    }
+  } catch {
+    /* table missing — usernames stay null */
+  }
+  return map;
+}
+
+/**
+ * @param regionScope null = national (all drivers + unassigned)
+ * @param options.limit / offset for page slices after region filter
+ */
 export async function listDrivers(
-  regionScope: string | null = null
+  regionScope: string | null = null,
+  options?: { limit?: number; offset?: number }
 ): Promise<DriverRow[]> {
   const admin = createSupabaseAdminClient();
+
+  // Hard DB cap so we never pull unbounded rows into the function
+  const dbLimit = Math.min(
+    Math.max(options?.limit ? options.limit + (options.offset ?? 0) + 50 : 2000, 50),
+    3000
+  );
 
   const { data, error } = await admin
     .from("drivers")
     .select(SELECT_COLUMNS)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(dbLimit);
 
   if (error) throw new Error(`Failed to list drivers: ${error.message}`);
   if (!data || data.length === 0) return [];
@@ -164,7 +211,6 @@ export async function listDrivers(
 
   if (regionScope) {
     const allowedPlates = await platesInRegion(regionScope);
-    // Regional: only drivers currently on in-region vehicles (no cross-region unassigned leak)
     rows = rows.filter((d) => {
       const plate = d.assigned_vehicle_reg
         ? normalizePlate(d.assigned_vehicle_reg as string)
@@ -172,6 +218,12 @@ export async function listDrivers(
       if (!plate) return false;
       return allowedPlates.has(plate);
     });
+  }
+
+  if (options?.offset != null || options?.limit != null) {
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? 100;
+    rows = rows.slice(offset, offset + limit);
   }
 
   const plates = rows
@@ -188,22 +240,7 @@ export async function listDrivers(
     .map((d) => d.auth_user_id as string | null)
     .filter((id): id is string => !!id);
 
-  const usernameMap = new Map<string, string>();
-  if (authIds.length > 0) {
-    try {
-      const { data: usersData } = await admin.auth.admin.listUsers({
-        perPage: 1000,
-      });
-      for (const u of usersData?.users ?? []) {
-        if (authIds.includes(u.id)) {
-          const uname = u.user_metadata?.username as string | undefined;
-          if (uname) usernameMap.set(u.id, uname);
-        }
-      }
-    } catch {
-      /* */
-    }
-  }
+  const usernameMap = await usernamesByAuthIds(authIds);
 
   return rows.map((row) => {
     const authUserId = row.auth_user_id as string | null;
@@ -230,13 +267,8 @@ export async function getDriverById(id: string): Promise<DriverRow | null> {
   let username: string | null = null;
   const authUserId = data.auth_user_id as string | null;
   if (authUserId) {
-    try {
-      const { data: userData } = await admin.auth.admin.getUserById(authUserId);
-      username =
-        (userData?.user?.user_metadata?.username as string | undefined) ?? null;
-    } catch {
-      /* */
-    }
+    const map = await usernamesByAuthIds([authUserId]);
+    username = map.get(authUserId) ?? null;
   }
 
   let region: string | null = null;
