@@ -295,3 +295,25 @@ export const adverts = pgTable("adverts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Every public/staff QR verification attempt (audit). */
+export const qrScanEvents = pgTable(
+  "qr_scan_events",
+  {
+    id: text("id").primaryKey(),
+    valid: boolean("valid").notNull(),
+    reason: text("reason"),
+    entityType: text("entity_type"),
+    entityKey: text("entity_key"),
+    source: text("source").notNull().default("unknown"),
+    actorUserId: uuid("actor_user_id"),
+    actorRole: text("actor_role"),
+    userAgent: text("user_agent"),
+    ipHint: text("ip_hint"),
+    scannedAt: timestamp("scanned_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("qr_scan_events_scanned_at_idx").on(t.scannedAt),
+    index("qr_scan_events_entity_idx").on(t.entityType, t.entityKey),
+  ]
+);
