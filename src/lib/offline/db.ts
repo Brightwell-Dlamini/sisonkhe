@@ -63,11 +63,19 @@ export interface WatermarkRow {
   seq: number;
 }
 
+/** Cached roadside compliance snapshot for offline inspector lookup. */
+export interface InspectorCacheRow {
+  registrationNumber: string;
+  view: Record<string, unknown>;
+  cachedAt: string;
+}
+
 export class SisonkheDB extends Dexie {
   outbox!: Table<OutboxEntry, string>;
   vehicles!: Table<LocalVehicle, string>;
   drivers!: Table<LocalDriver, string>;
   watermarks!: Table<WatermarkRow, string>;
+  inspectorCache!: Table<InspectorCacheRow, string>;
 
   constructor() {
     super("sisonkhe");
@@ -77,6 +85,14 @@ export class SisonkheDB extends Dexie {
       vehicles: "registrationNumber, vic, status, updatedAt, routeAssignmentId",
       drivers: "id, assignedVehicleReg, status, updatedAt",
       watermarks: "table",
+    });
+
+    this.version(2).stores({
+      outbox: "id, status, entityType, createdAt, idempotencyKey",
+      vehicles: "registrationNumber, vic, status, updatedAt, routeAssignmentId",
+      drivers: "id, assignedVehicleReg, status, updatedAt",
+      watermarks: "table",
+      inspectorCache: "registrationNumber, cachedAt",
     });
   }
 }

@@ -10,14 +10,25 @@ import type {
   InspectorTicket,
   InspectorVehicleView,
 } from "../lib/inspector/queries";
+import {
+  getInspectorCache,
+  putInspectorCache,
+} from "@/lib/offline/inspectorCache";
+import { isOnline } from "@/lib/offline/network";
 
 interface UseInspectorTicketsResult {
   tickets: InspectorTicket[];
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  /** Lookup by plate or VIC. */
-  lookupVehicle: (query: string) => Promise<InspectorVehicleView | null>;
+  /** Lookup by plate or VIC. Returns live or cached view. */
+  lookupVehicle: (
+    query: string
+  ) => Promise<{
+    vehicle: InspectorVehicleView | null;
+    fromCache: boolean;
+    cachedAt?: string;
+  }>;
   createTicket: (input: CreateTicketRequest) => Promise<{
     success: boolean;
     ticket?: InspectorTicket;
@@ -62,17 +73,37 @@ export function useInspectorTickets(): UseInspectorTicketsResult {
   }, [refresh]);
 
   const lookupVehicle = useCallback(async (query: string) => {
-    try {
-      const res = await fetch(
-        `/api/inspector/vehicle?q=${encodeURIComponent(query.trim())}`,
-        { cache: "no-store" }
-      );
-      if (!res.ok) return null;
-      const data = await res.json();
-      return (data.vehicle as InspectorVehicleView) ?? null;
-    } catch {
-      return null;
+    const online = isOnline();
+
+    if (online) {
+      try {
+        const res = await fetch(
+          `/api/inspector/vehicle?q=${encodeURIComponent(query.trim())}`,
+          { cache: "no-store" }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const vehicle = (data.vehicle as InspectorVehicleView) ?? null;
+          if (vehicle) {
+            void putInspectorCache(vehicle);
+            return { vehicle, fromCache: false };
+          }
+        }
+      } catch {
+        // fall through to cache
+      }
     }
+
+    const cached = await getInspectorCache(query);
+    if (cached) {
+      return {
+        vehicle: cached.view,
+        fromCache: true,
+        cachedAt: cached.cachedAt,
+      };
+    }
+
+    return { vehicle: null, fromCache: false };
   }, []);
 
   const createTicket = useCallback(
