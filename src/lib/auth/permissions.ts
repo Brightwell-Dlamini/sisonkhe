@@ -41,6 +41,8 @@ export type Permission =
   | "admin.ledger.view"
   | "admin.queue.view"
   | "admin.yoy.view"
+  | "admin.ops.view"
+  | "admin.payments.manage"
   | "admin.staff"
   | "admin.platform"
   | "admin.config"
@@ -53,27 +55,26 @@ export type Permission =
  *
  * Key:   the Permission used by the app.
  * Value: the RLS policy name(s) that enforce the same rule at the DB.
- *
- * Kept as a separate map so a lint rule or test can assert the two stay in
- * sync as the schema evolves.
  */
 export const PERMISSION_POLICIES: Partial<Record<Permission, string[]>> = {
-  "admin.drivers":           ["drivers_scoped_write"],
-  "admin.operators":         ["omcards_scoped_write", "operators_scoped_update"],
-  "admin.marshals":          ["marshals_scoped_write"],
-  "admin.vehicles":          ["vehicles_scoped_write"],
-  "admin.routes":            ["routes_scoped_write"],
-  "admin.terminals":         ["regions_super_admin_write"],
-  "admin.permits.review":    ["renewals_scoped_write"],
-  "admin.permits.print":     ["renewals_scoped_write"],
-  "admin.reports":           ["trips_scoped_read"],
-  "admin.audits.view":       ["audit_scoped_read"],
-  "admin.staff":             ["staff_super_admin_write"],
-  "admin.platform":          ["adverts_super_admin_write"],
-  "admin.config":            ["system_config_super_admin_write"],
-  "admin.ledger.view":       ["trips_scoped_read", "payments_scoped_read"],
-  "inspector.ticket":        ["tickets_inspector_write"],
-  "inspector.lookup":        ["vehicles_scoped_read", "drivers_scoped_read"],
+  "admin.drivers": ["drivers_scoped_write"],
+  "admin.operators": ["omcards_scoped_write", "operators_scoped_update"],
+  "admin.marshals": ["marshals_scoped_write"],
+  "admin.vehicles": ["vehicles_scoped_write"],
+  "admin.routes": ["routes_scoped_write"],
+  "admin.terminals": ["regions_super_admin_write"],
+  "admin.permits.review": ["renewals_scoped_write"],
+  "admin.permits.print": ["renewals_scoped_write"],
+  "admin.reports": ["trips_scoped_read"],
+  "admin.audits.view": ["audit_scoped_read"],
+  "admin.staff": ["staff_super_admin_write"],
+  "admin.platform": ["adverts_super_admin_write"],
+  "admin.config": ["system_config_super_admin_write"],
+  "admin.ledger.view": ["trips_scoped_read", "payments_scoped_read"],
+  "admin.ops.view": ["trips_scoped_read", "payments_scoped_read", "audit_scoped_read"],
+  "admin.payments.manage": ["payments_scoped_read"],
+  "inspector.ticket": ["tickets_inspector_write"],
+  "inspector.lookup": ["vehicles_scoped_read", "drivers_scoped_read"],
 };
 
 const SUPER: Permission[] = [
@@ -92,6 +93,8 @@ const SUPER: Permission[] = [
   "admin.ledger.view",
   "admin.queue.view",
   "admin.yoy.view",
+  "admin.ops.view",
+  "admin.payments.manage",
   "admin.staff",
   "admin.platform",
   "admin.config",
@@ -117,6 +120,8 @@ const RANK_ADMIN: Permission[] = [
   "admin.ledger.view",
   "admin.queue.view",
   "admin.yoy.view",
+  "admin.ops.view",
+  "admin.payments.manage",
 ];
 
 const INSPECTOR: Permission[] = ["inspector.lookup", "inspector.ticket"];
@@ -173,4 +178,9 @@ export function assertPermission(
   if (!can(user.role, permission)) {
     throw AppError.forbidden();
   }
+}
+
+/** List permissions granted to a role (for UI nav gating). */
+export function permissionsForRole(role: AuthRole): readonly Permission[] {
+  return ROLE_PERMISSIONS[role] ?? [];
 }

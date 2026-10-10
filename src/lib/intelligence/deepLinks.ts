@@ -18,6 +18,9 @@ export const DeepLink = {
   driversUnassigned: "/admin/drivers?filter=unassigned",
   driversPdpExpired: "/admin/drivers?filter=pdp_expired",
   operatorsFrozen: "/admin/operators?filter=frozen",
+  financialExceptions: "/admin/payments?view=exceptions",
+  ledger: "/admin/ledger",
+  invariants: "/admin/super/telemetry",
   vehicleDetail: (reg: string) =>
     `/admin/vehicles?q=${encodeURIComponent(reg)}`,
   driverDetail: (id: string) => `/admin/drivers?q=${encodeURIComponent(id)}`,
