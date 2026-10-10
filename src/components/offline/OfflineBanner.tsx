@@ -9,9 +9,11 @@
 
 import { WifiOff } from "lucide-react";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { useLocale } from "@/hooks/useLocale";
 
 export default function OfflineBanner() {
   const isOnline = useOnlineStatus();
+  const { t } = useLocale();
 
   if (isOnline) return null;
 
@@ -21,7 +23,7 @@ export default function OfflineBanner() {
       className="sticky top-0 inset-x-0 z-[100] bg-amber-600 text-white text-center text-xs font-bold uppercase tracking-wider py-1.5 px-3 flex items-center justify-center gap-2 shadow-md"
     >
       <WifiOff className="w-3.5 h-3.5" />
-      <span>You are offline — changes will sync when connection returns</span>
+      <span>{t("offline.banner")}</span>
     </div>
   );
 }
