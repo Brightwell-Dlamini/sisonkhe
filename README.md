@@ -21,67 +21,60 @@ Sisonkhe coordinates vehicle registries, driver compliance (permit / COF / PDP),
 ```
 Next.js 15 (App Router)
   ├── Role shells + dashboards (React 19)
-  ├── API routes (auth-scoped)
-  ├── Intelligence snapshot (ranked work queue + consequences)
+  ├── API routes (permission-scoped)
+  ├── Intelligence snapshot (ranked work + consequences)
+  ├── Ops command centre + regional pressure summary
   ├── Event-log sync (preferred)  ←  legacy fleet blob (deprecated)
-  └── Supabase Postgres + Auth
+  └── Supabase Postgres + Auth + RLS authority lattice
         + Upstash Redis (rate limits)
         + Dexie (client offline outbox)
 ```
 
 **Preferred data path:** relational tables + `/api/sync/{push,pull,replay}` event protocol.  
-**Legacy path:** `/api/fleet/sync` blob store — retained only for older clients. Every access is logged as `fleet.legacy.used`. Planned removal after 2026-11-01 (or earlier once usage reaches zero).
+**Legacy path:** `/api/fleet/sync` — logged as `fleet.legacy.used`; planned removal after 2026-11-01.
 
 ## Key modules
 
 | Path | Purpose |
 |------|---------|
-| `src/lib/intelligence/` | Command-centre KPIs, ranked work items, consequences, deep links |
-| `src/lib/sync/` | Event-log apply/pull with idempotency + optimistic concurrency |
-| `src/lib/marshal/` | Dispatch, roster, queue queries, rank-fee on depart |
-| `src/lib/payments/` | Payment intents, webhooks, reconciliation, exception queue |
-| `src/lib/ledger/` | Trip/settlement queries + double-entry journal helper |
-| `src/lib/queue/` | Dispatch suggestion / fairness scoring |
-| `src/lib/notifications/` | In-app notifications |
-| `src/lib/invariants/` | Nightly money/identity/ops integrity checks |
-| `src/lib/compliance/` | Proactive expiry digests |
+| `src/lib/intelligence/` | KPIs, ranked work items, consequences, deep links |
+| `src/lib/ops/` | Command centre snapshot, regional pressure summary |
+| `src/lib/sync/` | Event-log apply/pull with idempotency |
+| `src/lib/marshal/` | Dispatch, roster, rank-fee on depart |
+| `src/lib/payments/` | Intents, webhooks, reconciliation, exception queue |
+| `src/lib/ledger/` | Settlements + double-entry journal helper |
+| `src/lib/queue/` | Fairness-aware dispatch suggestions |
+| `src/lib/auth/` | Role resolution, permission matrix, session gates |
 | `src/lib/observability/` | Structured logging |
-| `src/lib/offline/` | Dexie outbox, network heartbeat, background sync |
-
-## Environment
-
-Copy `.env.example` → `.env.local`. Required: Supabase, `AUTH_SECRET`, `QR_HMAC_SECRET`, Upstash Redis, `CRON_SECRET`. Optional: payment provider keys, `FLEET_SYNC_*`.
-
-Feature flag: `NEXT_PUBLIC_USE_EVENT_SYNC=true` prefers the event-log path.
-
-## Crons (Vercel)
-
-| Path | Schedule | Purpose |
-|------|----------|---------|
-| `/api/cron/daily` | `0 2 * * *` | Daily maintenance |
-| `/api/super/invariants/cron` | `0 2 * * *` | Nightly invariant run + staff alerts |
-| `/api/cron/compliance-digest` | `0 6 * * *` | Permit/COF/PDP expiry notifications |
-| `/api/cron/payment-reconcile` | `30 3 * * *` | Unmatched intents / rank fees |
-
-All cron routes require `Authorization: Bearer $CRON_SECRET`.
+| `src/lib/offline/` | Dexie outbox, reconnect replay |
 
 ## Financial integrity
 
-- Payment intents use cryptographic ids and optimistic card-balance updates.
-- Successful card top-ups and rank fees post balanced journal entries (`ledger.journal.post`).
-- `GET /api/admin/ops/exceptions` returns a unified exception queue (reconciliation + card-ledger drifts).
-- Rank fee on depart writes `payment.rank_fee.recorded` audit + journal lines for operational/NRTC/maintenance splits.
+- Optimistic card balances; cryptographic intent ids.
+- Top-ups and rank fees post balanced journal entries (`ledger.journal.post`).
+- `GET /api/admin/ops/exceptions` — unified recon + card-drift queue (`admin.ops.view`).
+- `GET /api/admin/ops/regional-summary` — national heat-map pressure (national scope only).
+
+## Permissions (Phase 4)
+
+Capability matrix in `src/lib/auth/permissions.ts`. Notable ops permissions:
+
+| Permission | Who | Gates |
+|------------|-----|-------|
+| `admin.ops.view` | admin, fleet-manager, super-admin | exceptions, card-ledger, reconciliation, regional-summary |
+| `admin.payments.manage` | same | payment repair flows |
+| `admin.command_centre` | same | command-center snapshot |
+| `admin.national` | super-admin | cross-region data |
+
+DB RLS policies live under `supabase/migrations/20261018_authority_lattice.sql` (+ follow-ups).
 
 ## Improvement roadmap
 
 **Phase 1 (foundation) — complete**  
-Legacy deprecation telemetry, event-log hardening, offline outbox resilience, invariants/payment crons, structured observability.
-
 **Phase 2 (financial & ledger) — complete**  
-Double-entry journal helper, money audit actions, exception queue API, journals on top-ups and rank fees, card-ledger drift telemetry.
-
-**Phase 3 (intelligence) — in progress**  
-Work-item consequence lines, financial exceptions on the intelligence risk radar, existing fairness-aware queue suggestions retained.
+**Phase 3 (intelligence) — complete** — work-item consequences, financial risks on radar, regional pressure summary, command-centre exception links.  
+**Phase 4 (permissions & governance) — in progress** — `admin.ops.view` / `admin.payments.manage`, permission-gated ops APIs, existing authority lattice migrations.  
+**Phase 5+** — UX, localisation, further invariant coverage.
 
 ## License
 
