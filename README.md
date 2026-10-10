@@ -16,65 +16,45 @@ Sisonkhe coordinates vehicle registries, driver compliance (permit / COF / PDP),
 | **Super-admin** | `/admin/super` | National config, security, invariants, telemetry |
 | **Public / Kiosk** | `/kiosk` | Region routes and assignments |
 
-## Architecture (high level)
+## Architecture
 
 ```
 Next.js 15 (App Router)
-  ├── Role shells + dashboards (React 19)
-  ├── API routes (permission-scoped)
-  ├── Intelligence snapshot (ranked work + consequences)
-  ├── Ops command centre + regional pressure summary
+  ├── Permission-aware nav + role shells
+  ├── Intelligence + ops command centre
   ├── Event-log sync (preferred)  ←  legacy fleet blob (deprecated)
   └── Supabase Postgres + Auth + RLS authority lattice
-        + Upstash Redis (rate limits)
-        + Dexie (client offline outbox)
 ```
-
-**Preferred data path:** relational tables + `/api/sync/{push,pull,replay}` event protocol.  
-**Legacy path:** `/api/fleet/sync` — logged as `fleet.legacy.used`; planned removal after 2026-11-01.
-
-## Key modules
-
-| Path | Purpose |
-|------|---------|
-| `src/lib/intelligence/` | KPIs, ranked work items, consequences, deep links |
-| `src/lib/ops/` | Command centre snapshot, regional pressure summary |
-| `src/lib/sync/` | Event-log apply/pull with idempotency |
-| `src/lib/marshal/` | Dispatch, roster, rank-fee on depart |
-| `src/lib/payments/` | Intents, webhooks, reconciliation, exception queue |
-| `src/lib/ledger/` | Settlements + double-entry journal helper |
-| `src/lib/queue/` | Fairness-aware dispatch suggestions |
-| `src/lib/auth/` | Role resolution, permission matrix, session gates |
-| `src/lib/observability/` | Structured logging |
-| `src/lib/offline/` | Dexie outbox, reconnect replay |
-
-## Financial integrity
-
-- Optimistic card balances; cryptographic intent ids.
-- Top-ups and rank fees post balanced journal entries (`ledger.journal.post`).
-- `GET /api/admin/ops/exceptions` — unified recon + card-drift queue (`admin.ops.view`).
-- `GET /api/admin/ops/regional-summary` — national heat-map pressure (national scope only).
 
 ## Permissions (Phase 4)
 
-Capability matrix in `src/lib/auth/permissions.ts`. Notable ops permissions:
+Capability matrix: `src/lib/auth/permissions.ts`. Nav items declare optional `permission` and are filtered by `navForRole()`.
 
-| Permission | Who | Gates |
-|------------|-----|-------|
-| `admin.ops.view` | admin, fleet-manager, super-admin | exceptions, card-ledger, reconciliation, regional-summary |
-| `admin.payments.manage` | same | payment repair flows |
-| `admin.command_centre` | same | command-center snapshot |
-| `admin.national` | super-admin | cross-region data |
+| Permission | Gates |
+|------------|-------|
+| `admin.ops.view` | exceptions, card-ledger, reconciliation, webhooks, rank-fee GET |
+| `admin.payments.manage` | retry-credit |
+| `admin.command_centre` | command-center snapshot |
+| `admin.config` | rank-fee PATCH, system config |
+| `admin.national` | cross-region data (super-admin) |
 
-DB RLS policies live under `supabase/migrations/20261018_authority_lattice.sql` (+ follow-ups).
+DB policies: `supabase/migrations/20261018_authority_lattice.sql` (+ follow-ups).
+
+## Financial integrity
+
+- Journal posts on card top-ups and rank fees.
+- Unified exception queue: `GET /api/admin/ops/exceptions`.
+- Regional pressure: `GET /api/admin/ops/regional-summary` (national only).
 
 ## Improvement roadmap
 
-**Phase 1 (foundation) — complete**  
-**Phase 2 (financial & ledger) — complete**  
-**Phase 3 (intelligence) — complete** — work-item consequences, financial risks on radar, regional pressure summary, command-centre exception links.  
-**Phase 4 (permissions & governance) — in progress** — `admin.ops.view` / `admin.payments.manage`, permission-gated ops APIs, existing authority lattice migrations.  
-**Phase 5+** — UX, localisation, further invariant coverage.
+| Phase | Status |
+|-------|--------|
+| 1 Foundation | **Complete** |
+| 2 Financial & ledger | **Complete** |
+| 3 Intelligence | **Complete** |
+| 4 Permissions & governance | **Complete** |
+| 5+ UX / localisation | Not started |
 
 ## License
 
