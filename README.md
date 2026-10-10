@@ -22,28 +22,28 @@ Sisonkhe coordinates vehicle registries, driver compliance (permit / COF / PDP),
 Next.js 15 (App Router)
   ├── Permission-aware nav + role shells
   ├── Intelligence + ops command centre
+  ├── en / ss (siSwati) UI strings for field roles
   ├── Event-log sync (preferred)  ←  legacy fleet blob (deprecated)
   └── Supabase Postgres + Auth + RLS authority lattice
 ```
 
-## Permissions (Phase 4)
+## Localisation (Phase 5)
+
+- `src/lib/i18n/messages.ts` — English + siSwati catalogs for offline, marshal, driver, common chrome
+- `useLocale()` — preference in `localStorage` (`sisonkhe.locale`)
+- `LocaleSwitcher` in the app topbar
+- Offline banner respects the active locale
+
+Expand message keys as more marshal/driver screens are wired to `t()`.
+
+## Permissions
 
 Capability matrix: `src/lib/auth/permissions.ts`. Nav items declare optional `permission` and are filtered by `navForRole()`.
-
-| Permission | Gates |
-|------------|-------|
-| `admin.ops.view` | exceptions, card-ledger, reconciliation, webhooks, rank-fee GET |
-| `admin.payments.manage` | retry-credit |
-| `admin.command_centre` | command-center snapshot |
-| `admin.config` | rank-fee PATCH, system config |
-| `admin.national` | cross-region data (super-admin) |
-
-DB policies: `supabase/migrations/20261018_authority_lattice.sql` (+ follow-ups).
 
 ## Financial integrity
 
 - Journal posts on card top-ups and rank fees.
-- Unified exception queue: `GET /api/admin/ops/exceptions`.
+- Unified exception queue: `GET /api/admin/ops/exceptions` (also surfaced on `/admin/payments`).
 - Regional pressure: `GET /api/admin/ops/regional-summary` (national only).
 
 ## Improvement roadmap
@@ -54,7 +54,7 @@ DB policies: `supabase/migrations/20261018_authority_lattice.sql` (+ follow-ups)
 | 2 Financial & ledger | **Complete** |
 | 3 Intelligence | **Complete** |
 | 4 Permissions & governance | **Complete** |
-| 5+ UX / localisation | Not started |
+| 5 UX / localisation | **In progress** — i18n foundation, command-centre consequences, payments exception panel |
 
 ## License
 
