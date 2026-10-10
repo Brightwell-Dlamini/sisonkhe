@@ -2,8 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Surfaces payment mismatches, allows retry of failed card credits,
- * and shows recent webhook delivery outcomes.
+ * Surfaces payment mismatches, unified financial exceptions (recon + card drift),
+ * allows retry of failed card credits, and shows recent webhook deliveries.
  */
 
 "use client";
@@ -16,6 +16,7 @@ import {
   Wallet,
   RotateCcw,
   Radio,
+  Layers,
 } from "lucide-react";
 
 interface ReconIssue {
@@ -36,6 +37,30 @@ interface Report {
   counts: Record<string, number>;
 }
 
+interface FinancialException {
+  id: string;
+  source: "reconciliation" | "card_ledger";
+  severity: "low" | "medium" | "high";
+  title: string;
+  detail: string;
+  entityType: string;
+  entityId: string;
+  amountSzl?: number;
+  ageHours?: number;
+}
+
+interface ExceptionReport {
+  generatedAt: string;
+  exceptions: FinancialException[];
+  counts: {
+    high: number;
+    medium: number;
+    low: number;
+    reconciliation: number;
+    cardLedger: number;
+  };
+}
+
 interface WebhookEvent {
   id: string;
   providerId: string;
@@ -49,6 +74,7 @@ interface WebhookEvent {
 
 export default function PaymentReconciliationPanel() {
   const [report, setReport] = useState<Report | null>(null);
+  const [exceptions, setExceptions] = useState<ExceptionReport | null>(null);
   const [webhooks, setWebhooks] = useState<WebhookEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,9 +85,10 @@ export default function PaymentReconciliationPanel() {
     setLoading(true);
     setError(null);
     try {
-      const [reconRes, whRes] = await Promise.all([
+      const [reconRes, whRes, exRes] = await Promise.all([
         fetch("/api/admin/reconciliation", { cache: "no-store" }),
         fetch("/api/admin/payments/webhooks", { cache: "no-store" }),
+        fetch("/api/admin/ops/exceptions", { cache: "no-store" }),
       ]);
       const reconData = await reconRes.json();
       if (!reconRes.ok) throw new Error(reconData.error ?? `HTTP ${reconRes.status}`);
@@ -72,6 +99,13 @@ export default function PaymentReconciliationPanel() {
         setWebhooks((whData.data ?? whData).events ?? []);
       } else {
         setWebhooks([]);
+      }
+
+      if (exRes.ok) {
+        const exData = await exRes.json();
+        setExceptions((exData.data ?? exData) as ExceptionReport);
+      } else {
+        setExceptions(null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
@@ -109,6 +143,8 @@ export default function PaymentReconciliationPanel() {
   };
 
   const counts = report?.counts ?? {};
+  const cardDrifts =
+    exceptions?.exceptions.filter((e) => e.source === "card_ledger") ?? [];
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -119,7 +155,7 @@ export default function PaymentReconciliationPanel() {
             Payment reconciliation
           </h1>
           <p className="text-xs text-zinc-500 mt-1">
-            Stale intents, completed payments without card credit, pending rank fees, webhook deliveries.
+            Stale intents, completed payments without card credit, rank fees, card-ledger drifts, webhooks.
           </p>
         </div>
         <button
@@ -132,7 +168,7 @@ export default function PaymentReconciliationPanel() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[
           ["intent_success_no_credit", "Paid, no credit"],
           ["intent_pending_stale", "Stale pending"],
@@ -146,6 +182,12 @@ export default function PaymentReconciliationPanel() {
             <div className="text-xl font-black text-white">{counts[k] ?? 0}</div>
           </div>
         ))}
+        <div className="rounded-xl border border-white/[0.06] bg-[#0F0F10] px-3 py-2">
+          <div className="text-[10px] uppercase font-bold text-zinc-500">Card drifts</div>
+          <div className="text-xl font-black text-white">
+            {exceptions?.counts.cardLedger ?? cardDrifts.length}
+          </div>
+        </div>
       </div>
 
       {toast && (
@@ -165,9 +207,9 @@ export default function PaymentReconciliationPanel() {
         <div className="flex justify-center py-16">
           <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
         </div>
-      ) : report && report.issues.length === 0 ? (
+      ) : report && report.issues.length === 0 && cardDrifts.length === 0 ? (
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 text-emerald-200 text-center py-12 text-sm font-bold">
-          No payment mismatches in the lookback window.
+          No payment mismatches or card drifts in the lookback window.
         </div>
       ) : (
         <ul className="space-y-2">
@@ -214,7 +256,41 @@ export default function PaymentReconciliationPanel() {
         </ul>
       )}
 
-      {/* Recent webhook deliveries */}
+      {cardDrifts.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <h2 className="text-sm font-black uppercase tracking-tight text-white flex items-center gap-2">
+            <Layers className="w-4 h-4 text-amber-500" />
+            Card ledger drifts
+          </h2>
+          <p className="text-[11px] text-zinc-500">
+            Stored balance does not match reconstructed transaction history (observation only).
+          </p>
+          <ul className="space-y-2">
+            {cardDrifts.map((ex) => (
+              <li
+                key={ex.id}
+                className={`rounded-xl border px-4 py-3 ${
+                  ex.severity === "high"
+                    ? "border-red-500/40 bg-red-950/20"
+                    : "border-amber-500/30 bg-amber-950/15"
+                }`}
+              >
+                <div className="text-[10px] font-black uppercase tracking-wider text-zinc-500">
+                  {ex.severity} · card ledger
+                </div>
+                <div className="font-bold text-sm text-white">{ex.title}</div>
+                <div className="text-[11px] text-zinc-400 mt-0.5">{ex.detail}</div>
+                {ex.amountSzl != null && (
+                  <div className="text-[11px] font-mono text-amber-300 mt-1">
+                    |Δ| {ex.amountSzl} SZL
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="space-y-3 pt-2">
         <h2 className="text-sm font-black uppercase tracking-tight text-white flex items-center gap-2">
           <Radio className="w-4 h-4 text-sky-500" />

@@ -8,6 +8,7 @@ import { findActiveItem } from "@/lib/navigation/resolve";
 import NotificationsMenu from "./NotificationsMenu";
 import UserMenu from "./UserMenu";
 import SyncStatusPill from "@/components/offline/SyncStatusPill";
+import LocaleSwitcher from "@/components/common/LocaleSwitcher";
 
 interface Props {
   user: ResolvedUser;
@@ -27,7 +28,6 @@ export default function Topbar({
 
   return (
     <header className="h-14 shrink-0 bg-[#0A0A0A]/95 backdrop-blur-lg border-b border-white/[0.06] flex items-center justify-between px-3 sm:px-5 sticky top-0 z-30">
-      {/* Left: mobile menu + title */}
       <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={onOpenMobileNav}
@@ -47,8 +47,8 @@ export default function Topbar({
         </div>
       </div>
 
-      {/* Right: sync pill + notifications + user */}
       <div className="flex items-center gap-1.5 shrink-0">
+        <LocaleSwitcher className="hidden sm:inline-flex mr-1" />
         <SyncStatusPill />
         <NotificationsMenu />
         <div className="w-px h-5 bg-white/[0.08] mx-1" />

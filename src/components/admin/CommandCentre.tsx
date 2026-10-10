@@ -55,6 +55,7 @@ const NAV_LINKS = [
   { href: "/admin/ledger", label: "Ledger", desc: "Trips & settlement", icon: Receipt },
   { href: "/admin/permits", label: "Permits", desc: "Renewals", icon: Award },
   { href: "/admin/permits/print", label: "Print Queue", desc: "A4 + QR", icon: Printer },
+  { href: "/admin/payments", label: "Payments", desc: "Recon & exceptions", icon: Receipt },
   { href: "/admin/audits", label: "Audits", desc: "Change log", icon: Shield },
   { href: "/admin/reports", label: "Reports", desc: "CSV export", icon: FileText },
   { href: "/admin/config", label: "Config", desc: "Rank fee", icon: Settings },
@@ -138,6 +139,11 @@ function WorkRow({ item }: { item: WorkItem }) {
           </Badge>
         </div>
         <p className="text-[11px] text-zinc-500 mt-0.5 truncate">{item.detail}</p>
+        {item.consequence && (
+          <p className="text-[10px] text-amber-400/90 mt-1 leading-snug line-clamp-2">
+            If unresolved: {item.consequence}
+          </p>
+        )}
       </div>
       <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-emerald-400 shrink-0 mt-1 transition-colors" />
     </Link>
@@ -301,6 +307,14 @@ export default function CommandCentre() {
             tone={k.driversSuspended > 0 ? "warn" : "neutral"}
             href="/admin/drivers"
           />
+          {(k.financialExceptionsHigh ?? 0) > 0 && (
+            <KpiChip
+              label="Fin. exceptions"
+              value={k.financialExceptionsHigh ?? 0}
+              tone="critical"
+              href="/admin/payments?view=exceptions"
+            />
+          )}
           <KpiChip label="Fleet" value={k.vehiclesTotal} tone="neutral" href="/admin/vehicles" />
         </div>
       )}
