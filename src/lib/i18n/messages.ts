@@ -2,8 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Lightweight UI strings for field roles (marshal / driver) and shared chrome.
- * English (en) + siSwati (ss). Expand keys as screens are localised.
+ * Lightweight UI strings for field roles (marshal / driver / operator) and shared chrome.
+ * English (en) + siSwati (ss).
  */
 
 export type Locale = "en" | "ss";
@@ -38,6 +38,13 @@ const en = {
   "marshal.settings": "Queue settings",
   "marshal.settings_saved": "Settings saved",
   "marshal.save_settings": "Save settings",
+  "marshal.delay_title": "Delay reason",
+  "marshal.delay_confirm": "Confirm delay",
+  "marshal.breakdown_title": "Report breakdown",
+  "marshal.breakdown_confirm": "Confirm breakdown",
+  "marshal.delay_other": "Other (specify)",
+  "marshal.delay_placeholder": "Describe the delay…",
+  "marshal.breakdown_placeholder": "Describe the breakdown…",
   "driver.cab": "Driver cab",
   "driver.my_vehicle": "My vehicle",
   "driver.roster": "My roster",
@@ -50,6 +57,15 @@ const en = {
   "driver.status_full": "Full cabin",
   "driver.status_depart": "Departing",
   "driver.marshal_final": "The marshal has final approval on queue dispatch.",
+  "operator.master_card": "Operator master card",
+  "operator.balance": "Balance",
+  "operator.send_money": "Send money",
+  "operator.reload": "Reload",
+  "operator.freeze": "Freeze",
+  "operator.unfreeze": "Unfreeze",
+  "operator.renewals_title": "Permit renewals",
+  "operator.renewals_desc": "Submit renewal requests for your fleet vehicles. Fleet managers review and approve.",
+  "operator.request_renewal": "Request renewal",
   "common.refresh": "Refresh",
   "common.retry": "Retry",
   "common.loading": "Loading…",
@@ -83,6 +99,13 @@ const ss: Record<MessageKey, string> = {
   "marshal.settings": "Tinhlelo telayini",
   "marshal.settings_saved": "Tinhlelo tigciniwe",
   "marshal.save_settings": "Gcina tinhlelo",
+  "marshal.delay_title": "Sizathu sekubambeka",
+  "marshal.delay_confirm": "Cinisekisa kubambeka",
+  "marshal.breakdown_title": "Bika kuphuka",
+  "marshal.breakdown_confirm": "Cinisekisa kuphuka",
+  "marshal.delay_other": "Lokunye (chaza)",
+  "marshal.delay_placeholder": "Chaza kubambeka…",
+  "marshal.breakdown_placeholder": "Chaza kuphuka…",
   "driver.cab": "Ikhhabhi yemshayeli",
   "driver.my_vehicle": "Imoto yami",
   "driver.roster": "Luhlelo lwami",
@@ -95,6 +118,15 @@ const ss: Record<MessageKey, string> = {
   "driver.status_full": "Ikhhabhi ligcwele",
   "driver.status_depart": "Kuyahamba",
   "driver.marshal_final": "Umashali unemvume yekugcina ekuthumeleni.",
+  "operator.master_card": "Ikhadi leliyinhloko yemnikati",
+  "operator.balance": "Ibhalansi",
+  "operator.send_money": "Thumela imali",
+  "operator.reload": "Gcwalisa",
+  "operator.freeze": "Vala",
+  "operator.unfreeze": "Vula",
+  "operator.renewals_title": "Kuvuselelwa kwemaphemiti",
+  "operator.renewals_desc": "Faka ticelo tekuvuselela timoto takho. Baphatsi belitfule bayahlola futsi bayavuma.",
+  "operator.request_renewal": "Cela kuvuselela",
   "common.refresh": "Vuselela",
   "common.retry": "Phindza",
   "common.loading": "Kulayishwa…",

@@ -8,6 +8,7 @@ import {
   Send,
   Loader2,
 } from "lucide-react";
+import { useLocale } from "@/hooks/useLocale";
 
 interface Props {
   status: "Active" | "Frozen";
@@ -22,6 +23,7 @@ export default function MasterCardActions({
   onSend,
   onToggleFreeze,
 }: Props) {
+  const { t } = useLocale();
   const [freezing, setFreezing] = useState(false);
   const isFrozen = status === "Frozen";
 
@@ -36,24 +38,24 @@ export default function MasterCardActions({
       <button
         onClick={onSend}
         disabled={isFrozen}
-        className="py-3 px-4 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-black rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+        className="min-h-12 py-3 px-4 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-black rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 touch-manipulation"
       >
         <Send className="w-4 h-4" />
-        Send Money
+        {t("operator.send_money")}
       </button>
 
       <button
         onClick={onReload}
-        className="py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+        className="min-h-12 py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 touch-manipulation"
       >
         <Plus className="w-4 h-4" />
-        Reload
+        {t("operator.reload")}
       </button>
 
       <button
         onClick={handleToggle}
         disabled={freezing}
-        className={`py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 border ${
+        className={`min-h-12 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 border touch-manipulation ${
           isFrozen
             ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
             : "bg-white/[0.04] text-zinc-300 border-white/[0.08] hover:bg-white/[0.08]"
@@ -66,7 +68,7 @@ export default function MasterCardActions({
         ) : (
           <Snowflake className="w-4 h-4" />
         )}
-        {isFrozen ? "Unfreeze" : "Freeze"}
+        {isFrozen ? t("operator.unfreeze") : t("operator.freeze")}
       </button>
     </div>
   );

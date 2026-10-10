@@ -2,12 +2,14 @@
 
 import { CreditCard, ShieldCheck, Snowflake } from "lucide-react";
 import type { OperatorMasterCard } from "@/lib/operator/queries";
+import { useLocale } from "@/hooks/useLocale";
 
 interface Props {
   card: OperatorMasterCard;
 }
 
 export default function MasterCardView({ card }: Props) {
+  const { t } = useLocale();
   const formatted = card.cardNumber.replace(/(\d{4})(?=\d)/g, "$1 ");
   const isFrozen = card.status === "Frozen";
 
@@ -54,7 +56,7 @@ export default function MasterCardView({ card }: Props) {
 
         <div className="pt-4">
           <div className="text-[10px] uppercase opacity-70 tracking-wider">
-            Operator Master Card
+            {t("operator.master_card")}
           </div>
           <div className="text-2xl font-mono font-black tracking-wider">
             {formatted}
@@ -72,7 +74,7 @@ export default function MasterCardView({ card }: Props) {
             </div>
           </div>
           <div className="text-right">
-            <div className="text-[10px] uppercase opacity-70">Balance</div>
+            <div className="text-[10px] uppercase opacity-70">{t("operator.balance")}</div>
             <div className="text-2xl font-mono font-black">
               E {card.balanceSzl.toFixed(2)}
             </div>

@@ -9,12 +9,14 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { useRenewals } from "@/hooks/useRenewals";
 import { useAuth } from "@/hooks/useAuth";
+import { useLocale } from "@/hooks/useLocale";
 import RenewalsList from "./RenewalsList";
 import RenewalRequestModal from "./RenewalRequestModal";
 import { Button, PageHeader, useToast } from "@/components/ui";
 
 export default function OperatorRenewalsPage() {
   const { user } = useAuth();
+  const { t } = useLocale();
   const { renewals, loading, error, createRenewal } = useRenewals();
   const [showModal, setShowModal] = useState(false);
   const toast = useToast();
@@ -32,11 +34,11 @@ export default function OperatorRenewalsPage() {
   return (
     <div>
       <PageHeader
-        title="Permit Renewals"
-        description="Submit renewal requests for your fleet vehicles. Fleet managers review and approve."
+        title={t("operator.renewals_title")}
+        description={t("operator.renewals_desc")}
         actions={
           <Button leadingIcon={Plus} onClick={() => setShowModal(true)} size="sm">
-            Request Renewal
+            {t("operator.request_renewal")}
           </Button>
         }
       />
