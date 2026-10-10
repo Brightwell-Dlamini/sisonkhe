@@ -9,7 +9,7 @@
  */
 
 import type { NextRequest } from "next/server";
-import { requireAdminScope } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { retryCreditForIntent } from "@/lib/payments/intent";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
@@ -18,14 +18,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export const POST = withApiHandler(async (request: NextRequest) => {
-  const session = await requireAdminScope();
+  const user = await requirePermission("admin.payments.manage");
   const body = await request.json();
   const intentId = String(body.intentId ?? "").trim();
   if (!intentId) throw AppError.validation("intentId is required");
 
   const result = await retryCreditForIntent(intentId, {
-    actorId: session.authUserId,
-    actorName: session.fullName,
+    actorId: user.authUserId,
+    actorName: user.fullName,
   });
 
   if (!result.success) {

@@ -5,8 +5,9 @@
 
 import type { NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { requireServerRole } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { getRankFeeConfig, setRankFeeConfig } from "@/lib/domain/rankFee";
+import { writeAudit } from "@/lib/domain/audit";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
 
@@ -14,14 +15,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export const GET = withApiHandler(async () => {
-  await requireServerRole(["super-admin", "admin", "fleet-manager"]);
+  await requirePermission("admin.ops.view");
   const admin = createSupabaseAdminClient();
   const config = await getRankFeeConfig(admin);
   return ok(config);
 });
 
 export const PATCH = withApiHandler(async (request: NextRequest) => {
-  await requireServerRole(["super-admin"]);
+  const user = await requirePermission("admin.config");
   const body = await request.json();
   const config = {
     rankFee: Number(body.rankFee ?? 25),
@@ -38,5 +39,17 @@ export const PATCH = withApiHandler(async (request: NextRequest) => {
   }
   const admin = createSupabaseAdminClient();
   await setRankFeeConfig(admin, config);
+
+  await writeAudit(admin, {
+    action: "system.config_changed",
+    actorId: user.authUserId,
+    actorRole: user.role,
+    actorName: user.fullName,
+    entityType: "system_config",
+    entityId: "rank_fee",
+    summary: `Rank fee set to ${config.rankFee} SZL`,
+    after: config as unknown as Record<string, unknown>,
+  });
+
   return ok({ success: true, config });
 });

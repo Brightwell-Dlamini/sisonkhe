@@ -9,6 +9,7 @@
  */
 
 import type { AuthRole, NavRole } from "@/lib/auth/roles";
+import { can, type Permission } from "@/lib/auth/permissions";
 import {
   ADMIN_NAV,
   PLATFORM_NAV,
@@ -46,8 +47,33 @@ export function homeRouteForRole(role: NavRole | null): string {
   }
 }
 
+function itemAllowed(item: NavItem, role: NavRole): boolean {
+  if (item.roles && !item.roles.includes(role)) return false;
+  if (item.permission) {
+    // Permission matrix is defined for AuthRole; commuter has no permissions
+    if (role === "commuter") return false;
+    if (!can(role as AuthRole, item.permission)) return false;
+  }
+  return true;
+}
+
 /**
- * Nav tree for a role. Role-gated items are filtered out.
+ * Filter nav groups by role list + optional permission on each item.
+ */
+export function filterNavByPermissions(
+  groups: NavGroup[],
+  role: NavRole
+): NavGroup[] {
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => itemAllowed(item, role)),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
+/**
+ * Nav tree for a role. Role-gated and permission-gated items are filtered out.
  * Super-admin gets ADMIN_NAV + PLATFORM_NAV.
  */
 export function navForRole(role: NavRole): NavGroup[] {
@@ -78,14 +104,7 @@ export function navForRole(role: NavRole): NavGroup[] {
       break;
   }
 
-  return groups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter(
-        (item) => !item.roles || item.roles.includes(role)
-      ),
-    }))
-    .filter((group) => group.items.length > 0);
+  return filterNavByPermissions(groups, role);
 }
 
 /**
@@ -164,9 +183,6 @@ export function breadcrumbsFor(pathname: string, groups: NavGroup[]): Crumb[] {
 /**
  * Runtime guard: narrow an untyped role string (e.g. from a JWT or URL)
  * to NavRole. Returns null when the input is not a known role.
- *
- * Use this ONLY at trust boundaries (URL params, third-party data).
- * In-app code should already have a typed value.
  */
 export function toNavRole(roleString: string): NavRole | null {
   switch (roleString) {
@@ -188,3 +204,5 @@ export function toNavRole(roleString: string): NavRole | null {
 export function toRole(roleString: string): NavRole {
   return toNavRole(roleString) ?? "commuter";
 }
+
+export type { Permission };
