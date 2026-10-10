@@ -13,6 +13,11 @@ import { listEnabledProviders, isLive } from "@/lib/payments/providers";
 import type { PaymentPurpose, ProviderId } from "@/lib/payments/types";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
+import {
+  RATE_LIMITS,
+  rateLimitAsync,
+} from "@/lib/domain/rateLimit";
+import { logEvent } from "@/lib/ops/telemetry";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -56,6 +61,23 @@ export const POST = withApiHandler(async (request: NextRequest) => {
     throw AppError.validation("amountSzl must be a positive number");
   }
 
+  const rl = await rateLimitAsync(
+    `pay:intent:${session.authUserId}`,
+    RATE_LIMITS.paymentMutation.limit,
+    RATE_LIMITS.paymentMutation.windowMs
+  );
+  if (!rl.ok) {
+    logEvent({
+      event: "payment.intent.rate_limited",
+      level: "warn",
+      backend: rl.backend,
+      retryAfterSec: rl.retryAfterSec,
+    });
+    throw new AppError("RATE_LIMITED", "Too many payment requests. Try again shortly.", {
+      details: { retryAfterSec: rl.retryAfterSec },
+    });
+  }
+
   // Operators may only target their own master card / own vehicles
   if (session.role === "operator") {
     if (!session.operatorId) {
@@ -66,8 +88,6 @@ export const POST = withApiHandler(async (request: NextRequest) => {
         throw AppError.forbidden("Operators may only top up their own master card");
       }
     } else if (purpose === "vehicle_card_topup") {
-      // Ownership is enforced downstream in transfer flows; for intents we
-      // require the vehicle to belong to this operator when we can look it up.
       const { createSupabaseAdminClient } = await import("@/lib/supabase/server");
       const admin = createSupabaseAdminClient();
       const { data: vehicle } = await admin
@@ -97,6 +117,13 @@ export const POST = withApiHandler(async (request: NextRequest) => {
   if (result.error) {
     throw AppError.validation(result.error, { intent: result.intent });
   }
+
+  logEvent({
+    event: "payment.intent.created",
+    purpose,
+    providerId,
+    amountSzl,
+  });
 
   return ok({ intent: result.intent }, { status: 201 });
 });
