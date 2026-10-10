@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Camera, Loader2 } from "lucide-react";
 import type { DriverContext } from "@/lib/driver/queries";
+import { useLocale } from "@/hooks/useLocale";
 
 interface Props {
   context: DriverContext;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function DriverHeader({ context, onPhotoUploaded }: Props) {
+  const { t } = useLocale();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export default function DriverHeader({ context, onPhotoUploaded }: Props) {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={
-                  (context as any).profilePictureUrl ??
+                  (context as { profilePictureUrl?: string }).profilePictureUrl ??
                   `https://ui-avatars.com/api/?name=${encodeURIComponent(context.fullName)}&background=06b6d4&color=fff&size=128`
                 }
                 alt={context.fullName}
@@ -60,11 +62,11 @@ export default function DriverHeader({ context, onPhotoUploaded }: Props) {
             <button
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
-              className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-cyan-500 hover:bg-cyan-400 text-black flex items-center justify-center shadow-md"
+              className="absolute -bottom-1 -right-1 w-8 h-8 min-h-8 min-w-8 rounded-full bg-cyan-500 hover:bg-cyan-400 text-black flex items-center justify-center shadow-md touch-manipulation"
               title="Upload photo"
             >
               {uploading ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <Camera className="w-3.5 h-3.5" />
               )}
@@ -83,7 +85,7 @@ export default function DriverHeader({ context, onPhotoUploaded }: Props) {
 
           <div>
             <span className="text-[10px] font-black uppercase tracking-widest text-cyan-400">
-              Driver Cab
+              {t("driver.cab")}
             </span>
             <h1 className="text-lg font-black text-white">{context.fullName}</h1>
             <div className="text-xs text-zinc-500 font-mono mt-0.5">{context.phone}</div>
