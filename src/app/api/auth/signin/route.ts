@@ -12,6 +12,12 @@ import { looseAdmin, rpcRow } from "@/lib/supabase/rpc";
 import { resolveUserRole } from "@/lib/auth/roles";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
+import {
+  RATE_LIMITS,
+  clientIp,
+  rateLimitAsync,
+} from "@/lib/domain/rateLimit";
+import { logEvent } from "@/lib/ops/telemetry";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -39,10 +45,47 @@ export const POST = withApiHandler(async (request: NextRequest) => {
   const identifier = String(body.identifier ?? "").trim();
   const password = String(body.password ?? "");
 
-  // Rate limiting intentionally removed until public rollout.
-
   if (!identifier || !password) {
     throw AppError.validation("Identifier and password are required");
+  }
+
+  const ip = clientIp(request);
+  const idKey = identifier.toLowerCase().slice(0, 64);
+
+  const ipLimit = await rateLimitAsync(
+    `signin:ip:${ip}`,
+    RATE_LIMITS.signinIp.limit,
+    RATE_LIMITS.signinIp.windowMs
+  );
+  if (!ipLimit.ok) {
+    logEvent({
+      event: "auth.signin.rate_limited",
+      level: "warn",
+      scope: "ip",
+      backend: ipLimit.backend,
+      retryAfterSec: ipLimit.retryAfterSec,
+    });
+    throw new AppError("RATE_LIMITED", "Too many sign-in attempts. Try again later.", {
+      details: { retryAfterSec: ipLimit.retryAfterSec },
+    });
+  }
+
+  const idLimit = await rateLimitAsync(
+    `signin:id:${idKey}`,
+    RATE_LIMITS.signinId.limit,
+    RATE_LIMITS.signinId.windowMs
+  );
+  if (!idLimit.ok) {
+    logEvent({
+      event: "auth.signin.rate_limited",
+      level: "warn",
+      scope: "identifier",
+      backend: idLimit.backend,
+      retryAfterSec: idLimit.retryAfterSec,
+    });
+    throw new AppError("RATE_LIMITED", "Too many sign-in attempts. Try again later.", {
+      details: { retryAfterSec: idLimit.retryAfterSec },
+    });
   }
 
   const admin = createSupabaseAdminClient();
@@ -95,6 +138,7 @@ export const POST = withApiHandler(async (request: NextRequest) => {
   }
 
   if (!targetAuthUserId || !targetEmail) {
+    logEvent({ event: "auth.signin.failed", level: "info", reason: "unknown_identifier" });
     throw AppError.unauthenticated(GENERIC_AUTH_ERROR);
   }
 
@@ -106,6 +150,7 @@ export const POST = withApiHandler(async (request: NextRequest) => {
     });
 
   if (signInErr || !signIn.user) {
+    logEvent({ event: "auth.signin.failed", level: "info", reason: "bad_password" });
     throw AppError.unauthenticated(GENERIC_AUTH_ERROR);
   }
 
@@ -137,6 +182,12 @@ export const POST = withApiHandler(async (request: NextRequest) => {
       console.warn("[signin] staff last_login update failed:", updateErr);
     }
   }
+
+  logEvent({
+    event: "auth.signin.ok",
+    role: resolved.role,
+    region: resolved.region ?? null,
+  });
 
   return ok({
     user: resolved,
