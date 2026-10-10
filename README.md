@@ -22,39 +22,33 @@ Sisonkhe coordinates vehicle registries, driver compliance (permit / COF / PDP),
 Next.js 15 (App Router)
   ├── Permission-aware nav + role shells
   ├── Intelligence + ops command centre
-  ├── en / ss (siSwati) UI strings for field roles
+  ├── en / ss (siSwati) UI for marshal + driver field chrome
   ├── Event-log sync (preferred)  ←  legacy fleet blob (deprecated)
   └── Supabase Postgres + Auth + RLS authority lattice
 ```
 
 ## Localisation (Phase 5)
 
-- `src/lib/i18n/messages.ts` — English + siSwati catalogs for offline, marshal, driver, common chrome
-- `useLocale()` — preference in `localStorage` (`sisonkhe.locale`)
-- `LocaleSwitcher` in the app topbar
-- Offline banner respects the active locale
-
-Expand message keys as more marshal/driver screens are wired to `t()`.
+- `src/lib/i18n/messages.ts` — English + siSwati catalogs
+- `useLocale()` + topbar / marshal settings `LocaleSwitcher`
+- Wired: offline banner, marshal header + queue actions, driver cab header + status buttons
+- Dispatch buttons use ≥44px touch targets (`min-h-11` / `min-h-14`) for rank phones
 
 ## Permissions
 
-Capability matrix: `src/lib/auth/permissions.ts`. Nav items declare optional `permission` and are filtered by `navForRole()`.
+Capability matrix: `src/lib/auth/permissions.ts`. Nav items declare optional `permission`.
 
 ## Financial integrity
 
-- Journal posts on card top-ups and rank fees.
-- Unified exception queue: `GET /api/admin/ops/exceptions` (also surfaced on `/admin/payments`).
-- Regional pressure: `GET /api/admin/ops/regional-summary` (national only).
+- Journal posts on card top-ups and rank fees
+- Unified exception queue on `/admin/payments` and `GET /api/admin/ops/exceptions`
 
 ## Improvement roadmap
 
 | Phase | Status |
 |-------|--------|
-| 1 Foundation | **Complete** |
-| 2 Financial & ledger | **Complete** |
-| 3 Intelligence | **Complete** |
-| 4 Permissions & governance | **Complete** |
-| 5 UX / localisation | **In progress** — i18n foundation, command-centre consequences, payments exception panel |
+| 1–4 | **Complete** |
+| 5 UX / localisation | **In progress** — field i18n + touch targets; more copy + operator surfaces remain |
 
 ## License
 
