@@ -6,7 +6,7 @@
  */
 
 import type { NextRequest } from "next/server";
-import { requireServerRole } from "@/lib/auth/session";
+import { requirePermission, requireAdminScope } from "@/lib/auth/session";
 import { buildCommandCenter } from "@/lib/ops/commandCenter";
 import { ok, withApiHandler } from "@/lib/api/response";
 
@@ -14,15 +14,17 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export const GET = withApiHandler(async (request: NextRequest) => {
-  await requireServerRole([
-    "super-admin",
-    "admin",
-    "fleet-manager",
-  ]);
+  await requirePermission("admin.command_centre");
+  const { region: scopeRegion } = await requireAdminScope();
 
   const params = request.nextUrl.searchParams;
+  // Regional admins cannot override scope to another region
+  const requestedRegion = params.get("region");
+  const region =
+    scopeRegion !== null ? scopeRegion : requestedRegion;
+
   const snapshot = await buildCommandCenter({
-    region: params.get("region"),
+    region,
     routeId: params.get("routeId"),
   });
 

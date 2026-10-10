@@ -9,8 +9,8 @@
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { evaluateCompliance } from "@/lib/domain/compliance";
-import { runPaymentReconciliation } from "@/lib/payments/reconciliation";
-import { auditCardLedgers } from "@/lib/payments/cardLedger";
+import { buildExceptionQueue } from "@/lib/payments/exceptions";
+import { DeepLink } from "@/lib/intelligence/deepLinks";
 
 export interface RankLiveRow {
   registrationNumber: string;
@@ -133,7 +133,7 @@ export async function buildCommandCenter(opts?: {
       severity: "high",
       title: `${counts.blockedFromLoad} vehicle(s) blocked from load`,
       detail: "Compliance or missing driver prevents rank load.",
-      href: "/admin/fleet",
+      href: DeepLink.vehiclesUnassigned,
     });
   }
 
@@ -144,48 +144,55 @@ export async function buildCommandCenter(opts?: {
   let cardLedgerDrifts = 0;
 
   try {
-    const recon = await runPaymentReconciliation({
-      lookbackDays: 7,
-      stalePendingHours: 6,
+    const exceptions = await buildExceptionQueue({
+      includeCardLedger: true,
+      reconLookbackDays: 7,
     });
-    stalePendingIntents = recon.counts.intent_pending_stale;
-    completedWithoutCredit = recon.counts.intent_success_no_credit;
-    pendingRankFees = recon.counts.rank_fee_pending;
-    highSeverityIssues = recon.issues.filter((i) => i.severity === "high").length;
+    highSeverityIssues = exceptions.counts.high;
+    cardLedgerDrifts = exceptions.counts.cardLedger;
 
-    if (completedWithoutCredit > 0) {
+    for (const ex of exceptions.exceptions) {
+      if (ex.source === "reconciliation") {
+        if (ex.title.toLowerCase().includes("without credit") || ex.id.includes("no_credit")) {
+          completedWithoutCredit += 1;
+        }
+        if (ex.title.toLowerCase().includes("stale") || ex.id.includes("pending_stale")) {
+          stalePendingIntents += 1;
+        }
+        if (ex.title.toLowerCase().includes("rank fee") || ex.id.includes("rank_fee")) {
+          pendingRankFees += 1;
+        }
+      }
+    }
+
+    // Fallback counts from high/medium titles when id patterns differ
+    if (completedWithoutCredit === 0) {
+      completedWithoutCredit = exceptions.exceptions.filter(
+        (e) =>
+          e.source === "reconciliation" &&
+          /credit|credited/i.test(e.title + e.detail)
+      ).length;
+    }
+
+    if (highSeverityIssues > 0) {
       attention.push({
-        severity: "critical",
-        title: `${completedWithoutCredit} completed payment(s) without card credit`,
-        detail: "Money received path incomplete — run reconciliation.",
-        href: "/admin/ledger",
+        severity: highSeverityIssues >= 3 ? "critical" : "high",
+        title: `${highSeverityIssues} high financial exception(s)`,
+        detail: `${exceptions.counts.reconciliation} recon · ${exceptions.counts.cardLedger} card drift`,
+        href: DeepLink.financialExceptions,
       });
     }
-    if (stalePendingIntents > 0) {
-      attention.push({
-        severity: "high",
-        title: `${stalePendingIntents} stale payment intent(s)`,
-        detail: "Pending/processing longer than 6h.",
-        href: "/admin/ledger",
-      });
-    }
-  } catch (err) {
-    console.warn("[commandCenter] recon failed:", err);
-  }
 
-  try {
-    const ledger = await auditCardLedgers({ limit: 200 });
-    cardLedgerDrifts = ledger.drifts.length;
-    if (cardLedgerDrifts > 0) {
+    if (cardLedgerDrifts > 0 && highSeverityIssues === 0) {
       attention.push({
         severity: "critical",
         title: `${cardLedgerDrifts} card balance drift(s)`,
         detail: "Stored balance does not match transaction history.",
-        href: "/admin/ledger",
+        href: DeepLink.financialExceptions,
       });
     }
   } catch (err) {
-    console.warn("[commandCenter] card ledger failed:", err);
+    console.warn("[commandCenter] exception queue failed:", err);
   }
 
   let openInvariantViolations = 0;
@@ -218,14 +225,13 @@ export async function buildCommandCenter(opts?: {
         severity: openInvariantViolations > 20 ? "critical" : "high",
         title: `${openInvariantViolations} open invariant violation(s)`,
         detail: "Nightly runner still detecting structural issues.",
-        href: "/super/invariants",
+        href: DeepLink.invariants,
       });
     }
   } catch {
     /* table may be empty pre-migration */
   }
 
-  // Live scan for expired permit still loading if invariants not yet populated
   if (expiredPermitInService === 0) {
     for (const row of live) {
       if (
