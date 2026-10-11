@@ -47,45 +47,42 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-fade-in"
+        className="absolute inset-0 bg-black/75 backdrop-blur-sm"
         onClick={onClose}
+        aria-hidden
       />
       <div
+        role="dialog"
+        aria-modal="true"
         className={cn(
-          "relative w-full max-h-[90vh] overflow-hidden bg-[#0F0F10] border border-white/[0.08] rounded-2xl shadow-2xl flex flex-col",
+          "relative w-full max-h-[92vh] overflow-hidden bg-[#0F0F10] border border-white/[0.08] rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col ui-enter",
           SIZES[size]
         )}
       >
-        {/* Header */}
         {(title || description) && (
           <div className="px-5 py-4 border-b border-white/[0.06] flex items-start justify-between gap-3 shrink-0">
             <div className="min-w-0">
               {title && (
-                <h2 className="text-sm font-black text-white uppercase tracking-tight truncate">
+                <h2 className="text-base font-semibold text-white tracking-tight truncate">
                   {title}
                 </h2>
               )}
               {description && (
-                <p className="text-xs text-zinc-500 mt-1">{description}</p>
+                <p className="text-sm text-zinc-500 mt-1 leading-relaxed">
+                  {description}
+                </p>
               )}
             </div>
-            <IconButton
-              icon={X}
-              label="Close"
-              onClick={onClose}
-              size="sm"
-            />
+            <IconButton icon={X} label="Close" onClick={onClose} size="sm" />
           </div>
         )}
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto p-5">{children}</div>
 
-        {/* Footer */}
         {footer && (
-          <div className="px-5 py-3 border-t border-white/[0.06] bg-white/[0.01] flex justify-end gap-2 shrink-0">
+          <div className="px-5 py-3.5 border-t border-white/[0.06] bg-white/[0.02] flex justify-end gap-2 shrink-0">
             {footer}
           </div>
         )}

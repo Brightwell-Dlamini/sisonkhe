@@ -4,17 +4,23 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useState,
+  type ReactNode,
 } from "react";
-import { CheckCircle2, AlertCircle, Info, X, AlertTriangle } from "lucide-react";
+import {
+  CheckCircle2,
+  AlertCircle,
+  AlertTriangle,
+  Info,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type ToastVariant = "success" | "error" | "warning" | "info";
+type Variant = "success" | "error" | "warning" | "info";
 
 interface Toast {
   id: string;
-  variant: ToastVariant;
+  variant: Variant;
   title: string;
   description?: string;
   duration?: number;
@@ -38,13 +44,20 @@ const ICONS = {
 };
 
 const STYLES = {
-  success: "border-emerald-500/30 text-emerald-400",
-  error: "border-rose-500/30 text-rose-400",
-  warning: "border-amber-500/30 text-amber-400",
-  info: "border-cyan-500/30 text-cyan-400",
+  success: "border-emerald-500/25 bg-emerald-950/40",
+  error: "border-rose-500/25 bg-rose-950/40",
+  warning: "border-amber-500/25 bg-amber-950/40",
+  info: "border-sky-500/25 bg-sky-950/40",
 };
 
-export function ToastProvider({ children }: { children: React.ReactNode }) {
+const ICON_COLOR = {
+  success: "text-emerald-400",
+  error: "text-rose-400",
+  warning: "text-amber-400",
+  info: "text-sky-400",
+};
+
+export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const show = useCallback((t: Omit<Toast, "id">) => {
@@ -74,31 +87,32 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+      <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full pointer-events-none px-3 sm:px-0">
         {toasts.map((t) => {
           const Icon = ICONS[t.variant];
           return (
             <div
               key={t.id}
               className={cn(
-                "pointer-events-auto bg-[#0F0F10] border rounded-xl shadow-2xl p-3.5 flex items-start gap-3 animate-fade-in",
+                "pointer-events-auto border rounded-xl shadow-2xl p-3.5 flex items-start gap-3 ui-enter bg-[#0F0F10]/95 backdrop-blur-md",
                 STYLES[t.variant]
               )}
             >
-              <Icon className="w-4 h-4 shrink-0 mt-0.5" />
+              <Icon
+                className={cn("w-4 h-4 shrink-0 mt-0.5", ICON_COLOR[t.variant])}
+              />
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-black text-white uppercase tracking-wide">
-                  {t.title}
-                </div>
+                <div className="text-sm font-semibold text-white">{t.title}</div>
                 {t.description && (
-                  <div className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
+                  <div className="text-[13px] text-zinc-400 mt-0.5 leading-relaxed">
                     {t.description}
                   </div>
                 )}
               </div>
               <button
+                type="button"
                 onClick={() => dismiss(t.id)}
-                className="text-zinc-500 hover:text-white shrink-0"
+                className="min-h-8 min-w-8 inline-flex items-center justify-center rounded-lg text-zinc-500 hover:text-white"
                 aria-label="Dismiss"
               >
                 <X className="w-3.5 h-3.5" />
@@ -111,8 +125,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useToast() {
+export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error("useToast must be used within ToastProvider");
+  if (!ctx) {
+    throw new Error("useToast must be used within ToastProvider");
+  }
   return ctx;
 }

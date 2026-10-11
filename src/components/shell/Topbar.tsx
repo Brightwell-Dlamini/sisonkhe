@@ -27,31 +27,32 @@ export default function Topbar({
   const active = findActiveItem(pathname, groups);
 
   return (
-    <header className="h-14 shrink-0 bg-[#0A0A0A]/95 backdrop-blur-lg border-b border-white/[0.06] flex items-center justify-between px-3 sm:px-5 sticky top-0 z-30">
-      <div className="flex items-center gap-3 min-w-0">
+    <header className="h-14 shrink-0 bg-[#0A0A0A]/90 backdrop-blur-xl border-b border-white/[0.06] flex items-center justify-between px-3 sm:px-5 sticky top-0 z-30">
+      <div className="flex items-center gap-2.5 min-w-0">
         <button
+          type="button"
           onClick={onOpenMobileNav}
-          className="lg:hidden p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.06]"
+          className="lg:hidden min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl text-zinc-400 hover:text-white hover:bg-white/[0.06] touch-manipulation"
           aria-label="Open navigation"
         >
-          <Menu className="w-4 h-4" />
+          <Menu className="w-5 h-5" />
         </button>
 
         <div className="min-w-0">
-          <div className="font-mono text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">
-            {active ? "Current page" : "Sisonkhe In Transit"}
+          <div className="text-[11px] font-medium text-zinc-500 truncate">
+            {active ? "Sisonkhe" : "Sisonkhe · in transit"}
           </div>
-          <h1 className="text-sm font-black text-white uppercase tracking-tight truncate">
+          <h1 className="text-[15px] font-semibold text-white tracking-tight truncate leading-tight">
             {active?.label ?? "Dashboard"}
           </h1>
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 shrink-0">
-        <LocaleSwitcher className="hidden sm:inline-flex mr-1" />
+      <div className="flex items-center gap-1 shrink-0">
+        <LocaleSwitcher className="hidden sm:inline-flex mr-0.5" />
         <SyncStatusPill />
         <NotificationsMenu />
-        <div className="w-px h-5 bg-white/[0.08] mx-1" />
+        <div className="w-px h-5 bg-white/[0.08] mx-1.5" />
         <UserMenu user={user} role={role} />
       </div>
     </header>

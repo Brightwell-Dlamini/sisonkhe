@@ -13,7 +13,7 @@ export default function SidebarGroup({ group, onNavigate, collapsed }: Props) {
   return (
     <div>
       {!collapsed && (
-        <div className="px-3 mb-1.5 font-mono text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">
+        <div className="px-3 mb-2 text-[11px] font-semibold text-zinc-500 tracking-wide">
           {group.label}
         </div>
       )}
