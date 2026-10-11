@@ -28,6 +28,7 @@ import type { DispatchAction } from "@/lib/marshal/dispatch";
 import { rankCoach } from "@/lib/domain/rankCoach";
 import { useLocale } from "@/hooks/useLocale";
 import type { MessageKey } from "@/lib/i18n/messages";
+import { StatusDot, statusToneFromLabel } from "@/components/ui";
 import DelayReasonModal from "./DelayReasonModal";
 import BreakdownModal from "./BreakdownModal";
 
@@ -45,14 +46,6 @@ interface Props {
   showToast: (msg: string) => void;
   onSelectVehicle?: (reg: string) => void;
 }
-
-const STATUS_STYLES: Record<string, string> = {
-  Waiting: "bg-blue-950/60 text-blue-300",
-  Loading: "bg-emerald-950/60 text-emerald-300",
-  Departed: "bg-zinc-800 text-zinc-400",
-  Delayed: "bg-amber-950/60 text-amber-300",
-  Breakdown: "bg-red-950/60 text-red-300",
-};
 
 const ACTION_ICON: Partial<Record<DispatchAction, React.ElementType>> = {
   load: Play,
@@ -165,23 +158,23 @@ export default function QueueRow({
   return (
     <>
       <div
-        className={`bg-[#0F0F10] border rounded-2xl p-4 transition-colors ${
+        className={`surface-raised p-4 transition-colors ${
           isLead
-            ? "border-emerald-500 ring-2 ring-emerald-500/20"
+            ? "border-emerald-500/60 ring-2 ring-emerald-500/20"
             : coach.blocked
               ? "border-amber-500/40"
-              : "border-white/[0.06]"
+              : ""
         }`}
       >
         <div className="flex items-start gap-3">
           <div className="flex flex-col items-center gap-0.5 shrink-0">
             <div
-              className={`w-11 h-11 rounded-xl flex items-center justify-center font-mono font-black ${
+              className={`w-12 h-12 rounded-xl flex items-center justify-center font-mono text-base font-bold ${
                 isLead
                   ? "bg-emerald-600 text-white"
                   : isQueued
-                    ? "bg-white/[0.06] text-zinc-300"
-                    : "bg-[#0F0F10] text-zinc-400 border border-dashed border-white/[0.08]"
+                    ? "bg-white/[0.06] text-zinc-200"
+                    : "bg-[#0F0F10] text-zinc-500 border border-dashed border-white/[0.08]"
               }`}
             >
               {isQueued ? `#${vehicle.currentQueuePosition}` : "—"}
@@ -192,7 +185,7 @@ export default function QueueRow({
                   type="button"
                   disabled={isLead || pending === "up"}
                   onClick={() => handleReorder("up")}
-                  className="min-h-9 min-w-9 p-1.5 rounded-lg text-zinc-500 hover:text-white disabled:opacity-30 touch-manipulation"
+                  className="min-h-10 min-w-10 p-2 rounded-lg text-zinc-500 hover:text-white disabled:opacity-30 touch-manipulation"
                   title="Move up"
                 >
                   {pending === "up" ? (
@@ -205,7 +198,7 @@ export default function QueueRow({
                   type="button"
                   disabled={pending === "down"}
                   onClick={() => handleReorder("down")}
-                  className="min-h-9 min-w-9 p-1.5 rounded-lg text-zinc-500 hover:text-white disabled:opacity-30 touch-manipulation"
+                  className="min-h-10 min-w-10 p-2 rounded-lg text-zinc-500 hover:text-white disabled:opacity-30 touch-manipulation"
                   title="Move down"
                 >
                   {pending === "down" ? (
@@ -222,79 +215,74 @@ export default function QueueRow({
             className="flex-1 min-w-0 cursor-pointer group"
             onClick={() => onSelectVehicle?.(vehicle.registrationNumber)}
           >
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono font-black text-white group-hover:text-emerald-400 transition-colors">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="font-mono text-base sm:text-lg font-bold text-white group-hover:text-emerald-400 transition-colors tracking-tight">
                 {vehicle.registrationNumber}
               </span>
               {vehicle.vic && (
-                <span className="text-[10px] font-mono text-emerald-400">
+                <span className="text-sm font-mono text-emerald-400/90">
                   {vehicle.vic}
                 </span>
               )}
-              <span
-                className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                  STATUS_STYLES[vehicle.status] ?? "bg-zinc-800 text-zinc-400"
-                }`}
-              >
-                {vehicle.status}
-              </span>
+              <StatusDot
+                tone={statusToneFromLabel(vehicle.status)}
+                label={vehicle.status}
+              />
               {isLead && (
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-600 text-white">
-                  {t("marshal.lead")}
-                </span>
+                <StatusDot tone="ok" label={t("marshal.lead")} />
               )}
               {coach.blocked && (
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-600/90 text-white flex items-center gap-1">
-                  <ShieldAlert className="w-3 h-3" />
+                <span className="inline-flex items-center gap-1 text-[12px] font-medium text-amber-200">
+                  <ShieldAlert className="w-3.5 h-3.5" />
                   {t("marshal.blocked")}
                 </span>
               )}
             </div>
 
-            <div className="flex items-center gap-3 mt-1 text-[11px] text-zinc-500 flex-wrap">
+            <div className="flex items-center gap-3 mt-1.5 text-meta flex-wrap">
               <span className="flex items-center gap-1">
-                <Bus className="w-3 h-3" />
+                <Bus className="w-3.5 h-3.5" />
                 {vehicle.make} {vehicle.model} · {vehicle.seatingCapacity} seats
               </span>
               {vehicle.routeOrigin && vehicle.routeDestination && (
                 <span className="flex items-center gap-1">
-                  <MapPin className="w-3 h-3" />
+                  <MapPin className="w-3.5 h-3.5" />
                   {vehicle.routeOrigin} to {vehicle.routeDestination}
                 </span>
               )}
               {vehicle.driverName ? (
                 <span className="flex items-center gap-1">
-                  <User className="w-3 h-3" />
+                  <User className="w-3.5 h-3.5" />
                   {vehicle.driverName}
                 </span>
               ) : (
                 <span className="flex items-center gap-1 text-amber-400">
-                  <User className="w-3 h-3" />
+                  <User className="w-3.5 h-3.5" />
                   {t("marshal.no_driver")}
                 </span>
               )}
             </div>
 
             <div
-              className={`mt-2 flex items-start gap-1.5 text-[11px] rounded-lg px-2.5 py-1.5 ${
+              className={`mt-2.5 flex items-start gap-1.5 text-[13px] rounded-xl px-3 py-2 ${
                 coach.blocked
-                  ? "bg-amber-950/40 text-amber-200 border border-amber-800/40"
+                  ? "bg-amber-950/40 text-amber-100 border border-amber-800/40"
                   : isLead
-                    ? "bg-emerald-950/30 text-emerald-200 border border-emerald-800/30"
+                    ? "bg-emerald-950/30 text-emerald-100 border border-emerald-800/30"
                     : "bg-white/[0.03] text-zinc-400 border border-white/[0.04]"
               }`}
             >
               {coach.blocked ? (
-                <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
               ) : (
-                <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-400" />
+                <Sparkles className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
               )}
               <span className="leading-snug">{coach.coachLine}</span>
             </div>
           </div>
         </div>
 
-        <div className="mt-3 pt-3 border-t border-white/[0.06] flex items-center gap-2 flex-wrap">
+        <div className="mt-3.5 pt-3 border-t border-white/[0.06] flex items-center gap-2 flex-wrap">
           {coach.primary && (
             <button
               type="button"
@@ -309,7 +297,7 @@ export default function QueueRow({
                   ? coach.blockReasons[0]
                   : coach.primaryHint ?? undefined
               }
-              className={`min-h-11 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase flex items-center gap-1.5 disabled:opacity-40 touch-manipulation ${
+              className={`min-h-12 px-5 py-3 rounded-xl text-sm font-bold flex items-center gap-2 disabled:opacity-40 touch-manipulation ${
                 coach.blocked
                   ? "bg-zinc-800 text-zinc-400 border border-zinc-700"
                   : "bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500"
@@ -321,11 +309,6 @@ export default function QueueRow({
                 <PrimaryIcon className="w-4 h-4" />
               )}
               {primaryLabel}
-              {coach.primaryHint && !coach.blocked && (
-                <span className="opacity-70 text-[9px] font-normal normal-case hidden sm:inline">
-                  {coach.primaryHint}
-                </span>
-              )}
             </button>
           )}
 
@@ -409,11 +392,11 @@ function ActionButton({
 }) {
   const styles: Record<string, string> = {
     emerald: "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600",
-    blue: "bg-blue-600 hover:bg-blue-700 text-white border-blue-600",
+    blue: "bg-sky-600 hover:bg-sky-700 text-white border-sky-600",
     amber:
-      "bg-amber-950/40 hover:bg-amber-950/60 text-amber-300 border-amber-800",
-    red: "bg-red-950/40 hover:bg-red-950/60 text-red-300 border-red-800",
-    zinc: "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700",
+      "bg-amber-950/40 hover:bg-amber-950/60 text-amber-200 border-amber-800",
+    red: "bg-red-950/40 hover:bg-red-950/60 text-red-200 border-red-800",
+    zinc: "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700",
   };
 
   return (
@@ -421,12 +404,12 @@ function ActionButton({
       type="button"
       onClick={onClick}
       disabled={pending || disabled}
-      className={`min-h-11 px-3.5 py-2.5 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 disabled:opacity-50 touch-manipulation ${styles[color]}`}
+      className={`min-h-12 px-4 py-3 rounded-xl border text-sm font-semibold flex items-center gap-2 disabled:opacity-50 touch-manipulation ${styles[color]}`}
     >
       {pending ? (
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        <Loader2 className="w-4 h-4 animate-spin" />
       ) : (
-        <Icon className="w-3.5 h-3.5" />
+        <Icon className="w-4 h-4" />
       )}
       <span>{label}</span>
     </button>
