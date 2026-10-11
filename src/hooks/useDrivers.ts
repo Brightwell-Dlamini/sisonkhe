@@ -60,6 +60,9 @@ export interface ResetPasswordResponse {
   error?: string;
   tempPassword?: string;
   fullName?: string;
+  username?: string | null;
+  claimUrl?: string | null;
+  expiresAt?: string | null;
 }
 
 export function useDrivers(): UseDriversResult {
@@ -180,6 +183,9 @@ export function useDrivers(): UseDriversResult {
           success: true,
           tempPassword: data.tempPassword,
           fullName: data.fullName,
+          username: data.username,
+          claimUrl: data.claimUrl,
+          expiresAt: data.expiresAt,
         };
       } catch (err) {
         return {
