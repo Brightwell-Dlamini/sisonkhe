@@ -53,7 +53,7 @@ export default function DriverActionsMenu({
   if (!driver.authUserId && onIssueLogin) {
     items.push({
       key: "issue-login",
-      label: issuing ? "Issuing…" : "Issue login",
+      label: issuing ? "Sending…" : "Send access",
       icon: UserPlus,
       disabled: issuing,
       onClick: async () => {
@@ -69,7 +69,7 @@ export default function DriverActionsMenu({
 
   items.push({
     key: "reset-password",
-    label: resetting ? "Resetting…" : "Reset Password",
+    label: resetting ? "Sending…" : "Send new access link",
     icon: KeyRound,
     disabled: resetting || !driver.authUserId,
     onClick: async () => {
@@ -85,7 +85,7 @@ export default function DriverActionsMenu({
   if (driver.status !== "Suspended") {
     items.push({
       key: "suspend",
-      label: "Suspend",
+      label: "Stop from rank",
       icon: UserX,
       tone: "danger",
       dividerBefore: true,
@@ -100,7 +100,7 @@ export default function DriverActionsMenu({
       <ConsequencePreviewDialog
         open={confirmDeactivate}
         preview={suspendPreview}
-        confirmLabel="Suspend"
+        confirmLabel="Stop from rank"
         variant="danger"
         onCancel={() => setConfirmDeactivate(false)}
         onConfirm={() => {

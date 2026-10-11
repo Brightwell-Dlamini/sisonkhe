@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Public page: admin-issued claim link → user sets password → signed in.
+ * Public page: access link → set password → signed in.
  */
 
 "use client";
@@ -40,7 +40,7 @@ export default function InviteClaimPage() {
   useEffect(() => {
     if (!token) {
       setStatus("error");
-      setError("Missing invite token.");
+      setError("Missing access link.");
       return;
     }
     let cancelled = false;
@@ -53,7 +53,7 @@ export default function InviteClaimPage() {
         if (cancelled) return;
         if (!res.ok) {
           setStatus("error");
-          setError(data.error ?? "Invalid invite link");
+          setError(data.error ?? "Invalid access link");
           return;
         }
         setUsername(data.username ?? data.data?.username ?? "");
@@ -111,6 +111,12 @@ export default function InviteClaimPage() {
     }
   }
 
+  const recoveryHint =
+    error.toLowerCase().includes("expir") ||
+    error.toLowerCase().includes("used") ||
+    error.toLowerCase().includes("invalid") ||
+    error.toLowerCase().includes("revok");
+
   return (
     <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-xl p-6 sm:p-8">
       <h2 className="text-lg font-black text-white uppercase tracking-wide flex items-center gap-2 mb-1">
@@ -118,14 +124,13 @@ export default function InviteClaimPage() {
         Set your password
       </h2>
       <p className="text-xs text-zinc-400 mb-6">
-        Your administrator invited you to Sisonkhe. Choose a password to finish
-        setting up your account.
+        Your rank admin sent this access link. Choose a password to finish setup.
       </p>
 
       {status === "loading" && (
         <div className="flex flex-col items-center py-10 gap-3 text-zinc-400">
           <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
-          <p className="text-xs">Checking invite…</p>
+          <p className="text-xs">Checking link…</p>
         </div>
       )}
 
@@ -135,6 +140,24 @@ export default function InviteClaimPage() {
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
+          {recoveryHint && (
+            <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 text-xs text-zinc-400 space-y-2">
+              <p className="font-bold text-zinc-200">What to do</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Ask your rank admin or supervisor to <strong className="text-white">Send access</strong> again.</li>
+                <li>If you already set a password, try{" "}
+                  <Link href="/login" className="text-emerald-400 font-bold hover:underline">
+                    Sign in
+                  </Link>.
+                </li>
+                <li>Link lost but profile exists?{" "}
+                  <Link href="/claim" className="text-emerald-400 font-bold hover:underline">
+                    Verify with National ID
+                  </Link>.
+                </li>
+              </ol>
+            </div>
+          )}
           <Link
             href="/login"
             className="block text-center text-xs font-bold text-emerald-400 hover:underline"
