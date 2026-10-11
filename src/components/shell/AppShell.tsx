@@ -14,10 +14,6 @@ import { ToastProvider } from "@/components/ui";
 
 interface Props {
   children: React.ReactNode;
-  /**
-   * Roles allowed in this shell. Pass an AuthRole[] literal — TypeScript
-   * rejects typos at compile time.
-   */
   allowedRoles?: AuthRole[];
 }
 
@@ -33,7 +29,6 @@ export default function AppShell({ children, allowedRoles }: Props) {
     return allowedRoles.includes(user.role);
   }, [user, allowedRoles]);
 
-  // Redirect logic in an effect — never during render.
   useEffect(() => {
     if (loading) return;
     if (!user) {
@@ -60,7 +55,7 @@ export default function AppShell({ children, allowedRoles }: Props) {
 
   return (
     <ToastProvider>
-      <div className="min-h-screen flex bg-[#0A0A0A] text-white">
+      <div className="min-h-screen flex bg-[#0A0A0A] text-zinc-100">
         <div className="hidden lg:block shrink-0">
           <div className="sticky top-0 h-screen">
             <Sidebar
@@ -86,7 +81,7 @@ export default function AppShell({ children, allowedRoles }: Props) {
             onOpenMobileNav={() => setMobileOpen(true)}
           />
           <main className="flex-1 min-w-0">
-            <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6">
+            <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-5 sm:py-6">
               {children}
             </div>
           </main>

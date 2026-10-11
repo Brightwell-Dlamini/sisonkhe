@@ -62,11 +62,11 @@ export default function MarshalDashboard() {
 
   if (error && !context) {
     return (
-      <div className="bg-rose-500/10 border border-rose-500/25 text-rose-400 rounded-xl px-4 py-3 text-xs flex items-start gap-2">
+      <div className="bg-rose-500/10 border border-rose-500/25 text-rose-400 rounded-xl px-4 py-3 text-sm flex items-start gap-2">
         <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
         <div>
-          <div className="font-bold">Could not load terminal</div>
-          <div className="mt-0.5">{error}</div>
+          <div className="font-semibold">Could not load terminal</div>
+          <div className="mt-0.5 text-rose-300/90">{error}</div>
         </div>
       </div>
     );
@@ -83,9 +83,13 @@ export default function MarshalDashboard() {
       />
 
       {toast && (
-        <div className="bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 rounded-xl px-4 py-3 text-xs font-bold flex items-center justify-between">
+        <div className="bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 rounded-xl px-4 py-3 text-sm font-medium flex items-center justify-between">
           <span>{toast}</span>
-          <button type="button" onClick={() => setToast(null)} className="text-emerald-400">
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="text-emerald-400 min-h-9 min-w-9"
+          >
             ✕
           </button>
         </div>
@@ -93,28 +97,25 @@ export default function MarshalDashboard() {
 
       <MarshalHeader context={context} onRefresh={refresh} loading={loading} />
 
-      {/* Shift mode: three numbers only */}
       {summary && <SummaryCards summary={summary} />}
 
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-black uppercase tracking-wider text-white">
-          Live queue
-        </h2>
+        <h2 className="text-title">Live queue</h2>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setShowMore((v) => !v)}
-            className="px-3 py-1.5 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold flex items-center gap-1.5"
+            className="min-h-11 px-3.5 bg-white/[0.06] text-zinc-200 rounded-xl text-sm font-semibold flex items-center gap-1.5 touch-manipulation"
           >
-            <MoreHorizontal className="w-3.5 h-3.5" />
+            <MoreHorizontal className="w-4 h-4" />
             More
           </button>
           <button
             type="button"
             onClick={() => setShowAddVehicle(true)}
-            className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-bold flex items-center gap-1.5"
+            className="min-h-11 px-3.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-sm font-bold flex items-center gap-1.5 touch-manipulation"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
             Add vehicle
           </button>
         </div>
@@ -124,23 +125,23 @@ export default function MarshalDashboard() {
         <div className="grid grid-cols-3 gap-2">
           <Link
             href="/marshal/comms"
-            className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-center text-[11px] font-bold text-zinc-300 hover:border-emerald-500/40"
+            className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center text-sm font-semibold text-zinc-200 hover:border-emerald-500/40 min-h-11 flex flex-col items-center justify-center gap-1"
           >
-            <MessageSquare className="w-4 h-4 mx-auto mb-1 text-emerald-400" />
+            <MessageSquare className="w-4 h-4 text-emerald-400" />
             Comms
           </Link>
           <Link
             href="/marshal/queue"
-            className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-center text-[11px] font-bold text-zinc-300 hover:border-emerald-500/40"
+            className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center text-sm font-semibold text-zinc-200 hover:border-emerald-500/40 min-h-11 flex flex-col items-center justify-center gap-1"
           >
-            <Calendar className="w-4 h-4 mx-auto mb-1 text-emerald-400" />
+            <Calendar className="w-4 h-4 text-emerald-400" />
             30-day
           </Link>
           <Link
             href="/marshal/settings"
-            className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-center text-[11px] font-bold text-zinc-300 hover:border-emerald-500/40"
+            className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center text-sm font-semibold text-zinc-200 hover:border-emerald-500/40 min-h-11 flex flex-col items-center justify-center gap-1"
           >
-            <Settings className="w-4 h-4 mx-auto mb-1 text-emerald-400" />
+            <Settings className="w-4 h-4 text-emerald-400" />
             Settings
           </Link>
         </div>
@@ -152,6 +153,7 @@ export default function MarshalDashboard() {
         onReorder={handleReorder}
         showToast={showToast}
         onSelectVehicle={setDetailReg}
+        onAddVehicle={() => setShowAddVehicle(true)}
       />
 
       {showAddVehicle && (

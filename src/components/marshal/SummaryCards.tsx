@@ -15,54 +15,53 @@ interface Props {
 export default function SummaryCards({ summary }: Props) {
   const cards = [
     {
-      label: "Dispatched Today",
+      label: "Dispatched",
       value: summary.dispatchedToday.toString(),
       icon: Car,
       color: "text-emerald-400",
-      bg: "bg-emerald-500/10 border border-emerald-500/20",
+      bg: "bg-emerald-500/10",
     },
     {
-      label: "Fees Collected",
-      value: `E ${summary.feesCollectedToday.toLocaleString("en-US", {
+      label: "Fees today",
+      value: `E${summary.feesCollectedToday.toLocaleString("en-US", {
         minimumFractionDigits: 0,
         maximumFractionDigits: 0,
       })}`,
       icon: Coins,
       color: "text-amber-400",
-      bg: "bg-amber-500/10 border border-amber-500/20",
+      bg: "bg-amber-500/10",
     },
     {
-      label: "In Queue",
+      label: "In queue",
       value: summary.activeQueueLength.toString(),
       icon: Clock,
-      color: "text-cyan-400",
-      bg: "bg-cyan-500/10 border border-cyan-500/20",
+      color: "text-sky-400",
+      bg: "bg-sky-500/10",
     },
     {
       label: "Delayed",
       value: summary.delayedCount.toString(),
       icon: AlertTriangle,
       color: "text-rose-400",
-      bg: "bg-rose-500/10 border border-rose-500/20",
+      bg: "bg-rose-500/10",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3">
       {cards.map((c) => {
         const Icon = c.icon;
         return (
-          <div
-            key={c.label}
-            className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4"
-          >
-            <div className={`w-8 h-8 rounded-lg ${c.bg} ${c.color} flex items-center justify-center mb-2`}>
+          <div key={c.label} className="surface-raised p-3.5 sm:p-4">
+            <div
+              className={`w-9 h-9 rounded-xl ${c.bg} ${c.color} flex items-center justify-center mb-2.5`}
+            >
               <Icon className="w-4 h-4" />
             </div>
-            <div className="text-[10px] uppercase font-bold tracking-wider text-zinc-500">
-              {c.label}
-            </div>
-            <div className={`text-xl font-black font-mono mt-0.5 ${c.color}`}>
+            <div className="text-meta">{c.label}</div>
+            <div
+              className={`text-2xl sm:text-[1.75rem] font-bold font-mono tabular-nums mt-0.5 tracking-tight ${c.color}`}
+            >
               {c.value}
             </div>
           </div>
