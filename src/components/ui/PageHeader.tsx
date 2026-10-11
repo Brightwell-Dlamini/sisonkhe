@@ -18,13 +18,9 @@ export function PageHeader({ title, description, actions, className }: Props) {
       )}
     >
       <div className="min-w-0">
-        <h1 className="text-xl font-black text-white uppercase tracking-tight">
-          {title}
-        </h1>
+        <h1 className="text-display">{title}</h1>
         {description && (
-          <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-            {description}
-          </p>
+          <p className="text-body mt-1.5 max-w-2xl">{description}</p>
         )}
       </div>
       {actions && (

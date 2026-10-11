@@ -12,6 +12,22 @@
     --field-focus: rgba(16, 185, 129, 0.75);
     --field-shadow: rgba(16, 185, 129, 0.12);
     --field-arrow: #475569;
+
+    /* App design tokens */
+    --surface-page: #050505;
+    --surface-raised: #0f0f10;
+    --surface-muted: rgba(255, 255, 255, 0.03);
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border-strong: rgba(255, 255, 255, 0.12);
+    --text-primary: #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --status-ok: #34d399;
+    --status-wait: #fbbf24;
+    --status-stop: #fb7185;
+    --status-info: #38bdf8;
+    --status-neutral: #a1a1aa;
+    --touch-min: 2.75rem;
   }
 
   .dark {
@@ -28,6 +44,8 @@
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     background-color: #f9fafb;
     color: #1f2937;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   select,
@@ -45,15 +63,15 @@
   input[type="search"],
   textarea {
     width: 100%;
-    min-height: 2.75rem;
+    min-height: var(--touch-min);
     border-radius: 0.8rem;
     border: 1px solid var(--field-border);
     background-color: var(--field-bg);
     color: var(--field-text);
     padding: 0.7rem 0.9rem;
-    transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, transform 180ms ease;
+    font-size: 0.9375rem;
+    transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
     outline: none;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
 
   select {
@@ -101,22 +119,66 @@
 .dark {
   --background: 5 5 5;
   background-color: #050505 !important;
-  color: #F1F5F9 !important;
+  color: #f4f4f5 !important;
 }
 
 .dark body, body.dark {
   background-color: #050505 !important;
-  color: #F1F5F9 !important;
+  color: #f4f4f5 !important;
 }
 
-/* Custom Status Border Badges according to Design specifications */
-.badge {
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 13px;
+/* Typography utilities — prefer these over ad-hoc text-[10px] */
+.text-display {
+  font-size: 1.375rem;
+  line-height: 1.25;
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+.text-title {
+  font-size: 1.125rem;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.text-body {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+.text-meta {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.text-micro {
+  font-size: 0.75rem;
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.surface-raised {
+  background-color: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+}
+
+.touch-target {
+  min-height: var(--touch-min);
+  min-width: var(--touch-min);
+}
+
+/* Status border badges (legacy + refined) */
+.badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -124,61 +186,47 @@
 }
 
 .status-green {
-  color: #22C55E !important;
+  color: #22c55e !important;
   background-color: rgba(34, 197, 94, 0.08) !important;
-  border: 1px solid #22C55E !important;
+  border: 1px solid #22c55e !important;
 }
-
 .status-blue {
-  color: #3B82F6 !important;
+  color: #3b82f6 !important;
   background-color: rgba(59, 130, 246, 0.08) !important;
-  border: 1px solid #3B82F6 !important;
+  border: 1px solid #3b82f6 !important;
 }
-
 .status-yellow {
-  color: #EAB308 !important;
+  color: #eab308 !important;
   background-color: rgba(234, 179, 8, 0.08) !important;
-  border: 1px solid #EAB308 !important;
+  border: 1px solid #eab308 !important;
 }
-
 .status-red {
-  color: #EF4444 !important;
+  color: #ef4444 !important;
   background-color: rgba(239, 68, 68, 0.08) !important;
-  border: 1px solid #EF4444 !important;
+  border: 1px solid #ef4444 !important;
 }
-
 .status-grey {
-  color: #94A3B8 !important;
+  color: #94a3b8 !important;
   background-color: rgba(148, 163, 184, 0.08) !important;
-  border: 1px solid #94A3B8 !important;
+  border: 1px solid #94a3b8 !important;
 }
 
-/* Custom styles for Terminal-Style Departure Board */
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
-
 .animate-blink {
   animation: blink 1.2s infinite;
 }
 
-@keyframes ticker {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-50%); }
-}
-
-/* Custom retro LED effects */
 .led-amber {
   color: #ffb000;
   text-shadow: 0 0 10px rgba(255, 176, 0, 0.6), 0 0 20px rgba(255, 176, 0, 0.3);
 }
-
 .led-green {
   color: #00ff66;
   text-shadow: 0 0 10px rgba(0, 255, 102, 0.6), 0 0 20px rgba(0, 255, 102, 0.3);
 }
-
 .led-blue {
   color: #00ccff;
   text-shadow: 0 0 10px rgba(0, 204, 255, 0.6), 0 0 20px rgba(0, 204, 255, 0.3);
@@ -187,12 +235,10 @@
 .font-space {
   font-family: 'Space Grotesk', system-ui, sans-serif;
 }
-
 .font-mono-jb {
   font-family: 'JetBrains Mono', SFMono-Regular, monospace;
 }
 
-/* Scrollbar customization */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -210,43 +256,20 @@
 .dark ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.3);
-}
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-/* =========================================================================
-   KIOSK DESIGN SYSTEM
-   ========================================================================= */
 
-/* LED-style glows (kiosk only) */
+/* Kiosk design system (unchanged behaviour) */
 .led-emerald {
   color: #00ff66;
-  text-shadow:
-    0 0 8px rgba(0, 255, 102, 0.7),
-    0 0 20px rgba(0, 255, 102, 0.35);
+  text-shadow: 0 0 8px rgba(0, 255, 102, 0.7), 0 0 20px rgba(0, 255, 102, 0.35);
 }
 .led-cyan {
   color: #00d9ff;
-  text-shadow:
-    0 0 8px rgba(0, 217, 255, 0.7),
-    0 0 20px rgba(0, 217, 255, 0.35);
-}
-.led-amber {
-  color: #ffb000;
-  text-shadow:
-    0 0 8px rgba(255, 176, 0, 0.7),
-    0 0 20px rgba(255, 176, 0, 0.35);
+  text-shadow: 0 0 8px rgba(0, 217, 255, 0.7), 0 0 20px rgba(0, 217, 255, 0.35);
 }
 .led-red {
   color: #ff3b3b;
-  text-shadow:
-    0 0 8px rgba(255, 59, 59, 0.7),
-    0 0 20px rgba(255, 59, 59, 0.35);
+  text-shadow: 0 0 8px rgba(255, 59, 59, 0.7), 0 0 20px rgba(255, 59, 59, 0.35);
 }
-
-/* Kiosk typography */
 .kiosk-destination {
   font-family: "Inter", system-ui, sans-serif;
   font-weight: 800;
@@ -263,95 +286,68 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
-
-/* Live indicator pulse */
 @keyframes kiosk-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: 0.55; transform: scale(1.15); }
+  50% { opacity: 0.55; transform: scale(1.15); }
 }
 .kiosk-pulse {
   animation: kiosk-pulse 1.8s ease-in-out infinite;
 }
-
-/* Soft dot pulse (live indicator, less aggressive) */
 @keyframes kiosk-dot {
   0%, 100% { box-shadow: 0 0 0 0 currentColor; }
-  70%      { box-shadow: 0 0 0 6px transparent; }
+  70% { box-shadow: 0 0 0 6px transparent; }
 }
 .kiosk-dot {
   animation: kiosk-dot 2s ease-out infinite;
 }
-
-/* Occupancy bar shimmer for "boarding" state */
 @keyframes kiosk-shimmer {
-  0%   { background-position: -200% 0; }
+  0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 .kiosk-shimmer {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.25) 50%,
-    transparent 100%
-  );
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.25) 50%, transparent 100%);
   background-size: 200% 100%;
   animation: kiosk-shimmer 2.2s ease-in-out infinite;
 }
-
-/* Board-flicker announcement ticker */
 @keyframes kiosk-ticker {
-  0%   { transform: translateX(0); }
+  0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
 .kiosk-ticker {
   animation: kiosk-ticker 60s linear infinite;
 }
-
-/* Card entrance */
 @keyframes kiosk-card-in {
   from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .kiosk-card-in {
   animation: kiosk-card-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-
-/* Kiosk container — always dark */
 .kiosk-root {
   background-color: #050505;
   color: #fafafa;
   min-height: 100vh;
   font-feature-settings: "tnum", "cv11";
 }
-
-/* Glass surface (used sparingly) */
 .kiosk-glass {
   background-color: rgba(20, 20, 20, 0.65);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
-
-/* Board surface — the darker card the info sits on */
 .kiosk-surface {
   background-color: #0f0f10;
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 .kiosk-surface-hover {
   transition: border-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
-              background-color 150ms cubic-bezier(0.16, 1, 0.3, 1);
+    background-color 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .kiosk-surface-hover:hover {
   border-color: rgba(16, 185, 129, 0.35);
   background-color: #101012;
 }
-
-/* Board grid pattern (subtle) */
 .kiosk-grid-bg {
-  background-image: radial-gradient(
-    circle at 1px 1px,
-    rgba(255, 255, 255, 0.03) 1px,
-    transparent 0
-  );
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.03) 1px, transparent 0);
   background-size: 24px 24px;
 }

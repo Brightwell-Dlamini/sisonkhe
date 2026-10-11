@@ -6,6 +6,7 @@ export { Select } from "./Select";
 export { Checkbox } from "./Checkbox";
 export { Switch } from "./Switch";
 export { Badge } from "./Badge";
+export { StatusDot, statusToneFromLabel } from "./StatusDot";
 export { Table, TableHead, TableBody, Th, Tr, Td } from "./Table";
 export { Modal } from "./Modal";
 export { ConfirmDialog } from "./ConfirmDialog";
