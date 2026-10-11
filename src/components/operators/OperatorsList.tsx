@@ -24,6 +24,7 @@ import { HealthChips } from "@/components/intelligence/HealthChips";
 import OperatorFormModal from "./OperatorFormModal";
 import OperatorActionsMenu from "./OperatorActionsMenu";
 import OperatorCredentialsDialog from "./OperatorCredentialsDialog";
+import ClaimLinkDialog from "@/components/common/ClaimLinkDialog";
 
 export default function OperatorsList() {
   const {
@@ -49,6 +50,13 @@ export default function OperatorsList() {
     masterCardNumber?: string;
     initialBalance?: number;
     isReset?: boolean;
+  } | null>(null);
+  const [claimInvite, setClaimInvite] = useState<{
+    fullName: string;
+    username: string;
+    claimUrl?: string | null;
+    password?: string | null;
+    expiresAt?: string | null;
   } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -99,14 +107,25 @@ export default function OperatorsList() {
     const result = await createOperator(input);
     if (result.success && result.credentials) {
       setShowCreateModal(false);
-      setCredentials({
-        name: input.name,
-        email: result.credentials.email,
-        username: result.credentials.username,
-        password: result.credentials.password,
-        masterCardNumber: result.masterCard?.cardNumber,
-        initialBalance: result.masterCard?.initialBalance,
-      });
+      const c = result.credentials;
+      if (c.claimUrl) {
+        setClaimInvite({
+          fullName: input.name,
+          username: c.username,
+          claimUrl: c.claimUrl,
+          password: c.password,
+          expiresAt: c.expiresAt,
+        });
+      } else if (c.password) {
+        setCredentials({
+          name: input.name,
+          email: c.email,
+          username: c.username,
+          password: c.password,
+          masterCardNumber: result.masterCard?.cardNumber,
+          initialBalance: result.masterCard?.initialBalance,
+        });
+      }
       return { success: true };
     }
     return {
@@ -136,14 +155,23 @@ export default function OperatorsList() {
 
   const handleResetPassword = async (op: OperatorRow) => {
     const result = await resetPassword(op.id);
-    if (result.success && result.tempPassword && result.name) {
-      setCredentials({
-        name: result.name,
-        email: op.email ?? "",
-        username: op.username ?? "(unknown)",
-        password: result.tempPassword,
-        isReset: true,
-      });
+    if (result.success) {
+      if (result.claimUrl) {
+        setClaimInvite({
+          fullName: result.name ?? op.name,
+          username: result.username ?? op.username ?? "operator",
+          claimUrl: result.claimUrl,
+          expiresAt: result.expiresAt,
+        });
+      } else if (result.tempPassword && result.name) {
+        setCredentials({
+          name: result.name,
+          email: op.email ?? "",
+          username: op.username ?? "(unknown)",
+          password: result.tempPassword,
+          isReset: true,
+        });
+      }
       return result;
     }
     return result;
@@ -351,6 +379,18 @@ export default function OperatorsList() {
           initialBalance={credentials.initialBalance}
           isReset={credentials.isReset}
           onClose={() => setCredentials(null)}
+        />
+      )}
+
+      {claimInvite && (
+        <ClaimLinkDialog
+          fullName={claimInvite.fullName}
+          username={claimInvite.username}
+          claimUrl={claimInvite.claimUrl}
+          password={claimInvite.password}
+          expiresAt={claimInvite.expiresAt}
+          roleLabel="operator"
+          onClose={() => setClaimInvite(null)}
         />
       )}
     </div>

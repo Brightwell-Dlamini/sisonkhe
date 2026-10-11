@@ -28,8 +28,10 @@ export interface CreateOperatorResponse {
   operatorId?: string;
   credentials?: {
     username: string;
-    password: string;
     email: string;
+    claimUrl?: string | null;
+    expiresAt?: string | null;
+    password?: string;
   };
   masterCard?: {
     cardNumber: string;
@@ -42,6 +44,9 @@ export interface ResetPasswordResponse {
   error?: string;
   tempPassword?: string;
   name?: string;
+  username?: string | null;
+  claimUrl?: string | null;
+  expiresAt?: string | null;
 }
 
 interface UseOperatorsResult {
@@ -167,6 +172,9 @@ export function useOperators(): UseOperatorsResult {
           success: true,
           tempPassword: data.tempPassword,
           name: data.name,
+          username: data.username,
+          claimUrl: data.claimUrl,
+          expiresAt: data.expiresAt,
         };
       } catch (err) {
         return {
