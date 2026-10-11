@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import type { MarshalRow } from "@/lib/admin/marshals";
 import {
-  Button,
   IconButton,
   Input,
   Badge,
@@ -29,6 +28,7 @@ import {
 } from "@/components/ui";
 import MarshalFormModal from "./MarshalFormModal";
 import MarshalCardModal from "./MarshalCardModal";
+import ClaimLinkDialog from "@/components/common/ClaimLinkDialog";
 
 export default function MarshalsList() {
   const [marshals, setMarshals] = useState<MarshalRow[]>([]);
@@ -39,10 +39,12 @@ export default function MarshalsList() {
   const [editing, setEditing] = useState<MarshalRow | null>(null);
   const [viewingCard, setViewingCard] = useState<MarshalRow | null>(null);
   const [issuingId, setIssuingId] = useState<string | null>(null);
-  const [issuedCreds, setIssuedCreds] = useState<{
+  const [claimInvite, setClaimInvite] = useState<{
     name: string;
     username: string;
-    password: string;
+    claimUrl?: string | null;
+    password?: string | null;
+    expiresAt?: string | null;
   } | null>(null);
   const toast = useToast();
 
@@ -102,10 +104,13 @@ export default function MarshalsList() {
         toast.error(data.error ?? "Could not issue login");
         return;
       }
-      setIssuedCreds({
+      const creds = data.credentials ?? data.data?.credentials ?? {};
+      setClaimInvite({
         name: m.fullName,
-        username: data.credentials.username,
-        password: data.credentials.password,
+        username: creds.username,
+        claimUrl: creds.claimUrl ?? null,
+        password: creds.password ?? null,
+        expiresAt: creds.expiresAt ?? null,
       });
       void refresh();
     } catch {
@@ -286,37 +291,16 @@ export default function MarshalsList() {
         />
       )}
 
-      {issuedCreds && (
-        <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0F0F10] border border-emerald-500/30 rounded-2xl max-w-md w-full p-6 space-y-4">
-            <h3 className="text-sm font-black uppercase text-emerald-400">
-              Login issued
-            </h3>
-            <p className="text-xs text-zinc-300">{issuedCreds.name}</p>
-            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4 space-y-2 font-mono text-sm">
-              <div>
-                <span className="text-[10px] text-zinc-500 uppercase">
-                  Username
-                </span>
-                <p className="text-white font-bold">{issuedCreds.username}</p>
-              </div>
-              <div>
-                <span className="text-[10px] text-zinc-500 uppercase">
-                  Temp password
-                </span>
-                <p className="text-amber-300 font-bold">
-                  {issuedCreds.password}
-                </p>
-              </div>
-            </div>
-            <p className="text-[11px] text-zinc-500">
-              Share once. They must change password on first sign-in.
-            </p>
-            <Button onClick={() => setIssuedCreds(null)} className="w-full">
-              Done
-            </Button>
-          </div>
-        </div>
+      {claimInvite && (
+        <ClaimLinkDialog
+          fullName={claimInvite.name}
+          username={claimInvite.username}
+          claimUrl={claimInvite.claimUrl}
+          password={claimInvite.password}
+          expiresAt={claimInvite.expiresAt}
+          roleLabel="marshal"
+          onClose={() => setClaimInvite(null)}
+        />
       )}
     </div>
   );
