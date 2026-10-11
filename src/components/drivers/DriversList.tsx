@@ -15,6 +15,7 @@ import { HealthChips } from "@/components/intelligence/HealthChips";
 import DriverFormModal from "./DriverFormModal";
 import DriverActionsMenu from "./DriverActionsMenu";
 import DriverCredentialsDialog from "./DriverCredentialsDialog";
+import ClaimLinkDialog from "@/components/common/ClaimLinkDialog";
 
 const STATUS_COLORS: Record<string, string> = {
   Active: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25",
@@ -46,6 +47,13 @@ export default function DriversList() {
     username: string;
     password: string;
     isReset?: boolean;
+  } | null>(null);
+  const [claimInvite, setClaimInvite] = useState<{
+    fullName: string;
+    username: string;
+    claimUrl?: string | null;
+    password?: string | null;
+    expiresAt?: string | null;
   } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -139,10 +147,13 @@ export default function DriversList() {
       showToast(data.error ?? "Could not issue login");
       return;
     }
-    setCredentials({
+    const creds = data.credentials ?? data.data?.credentials ?? {};
+    setClaimInvite({
       fullName: driver.fullName,
-      username: data.credentials.username,
-      password: data.credentials.password,
+      username: creds.username,
+      claimUrl: creds.claimUrl ?? null,
+      password: creds.password ?? null,
+      expiresAt: creds.expiresAt ?? null,
     });
     void refresh();
   };
@@ -384,6 +395,18 @@ export default function DriversList() {
           password={credentials.password}
           isReset={credentials.isReset}
           onClose={() => setCredentials(null)}
+        />
+      )}
+
+      {claimInvite && (
+        <ClaimLinkDialog
+          fullName={claimInvite.fullName}
+          username={claimInvite.username}
+          claimUrl={claimInvite.claimUrl}
+          password={claimInvite.password}
+          expiresAt={claimInvite.expiresAt}
+          roleLabel="driver"
+          onClose={() => setClaimInvite(null)}
         />
       )}
     </div>
