@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * POST — admin issues login for an existing unclaimed marshal.
+ * Returns a one-time claim URL (preferred) plus optional password fallback.
  */
 
 import type { NextRequest } from "next/server";
@@ -12,6 +13,7 @@ import { requireServerRole } from "@/lib/auth/session";
 import { claimUsername, isUsernameTaken } from "@/lib/domain/usernames";
 import { writeAudit } from "@/lib/domain/audit";
 import { generateTempPassword } from "@/lib/drivers/generators";
+import { createClaimLink } from "@/lib/auth/claimLink";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
 
@@ -79,7 +81,7 @@ export const POST = withApiHandler(async (request: NextRequest, ctx: Ctx) => {
       full_name: fullName,
       role: "marshal",
       marshal_id: id,
-      must_change_password: !parsed.data.password,
+      must_change_password: true,
     },
     app_metadata: { role: "marshal" },
   });
@@ -101,6 +103,23 @@ export const POST = withApiHandler(async (request: NextRequest, ctx: Ctx) => {
 
   await claimUsername(admin, username, created.user.id, "marshal");
 
+  let claimUrl: string | null = null;
+  let expiresAt: string | null = null;
+  try {
+    const claim = await createClaimLink({
+      authUserId: created.user.id,
+      username,
+      role: "marshal",
+      entityType: "marshal",
+      entityId: id,
+      createdBy: session.authUserId,
+    });
+    claimUrl = claim.claimUrl;
+    expiresAt = claim.expiresAt;
+  } catch (err) {
+    console.error("[issue-login/marshal] claim link failed:", err);
+  }
+
   await writeAudit(admin, {
     action: "marshal.update",
     actorId: session.authUserId,
@@ -115,8 +134,10 @@ export const POST = withApiHandler(async (request: NextRequest, ctx: Ctx) => {
     success: true,
     credentials: {
       username,
-      password,
-      mustChangePassword: !parsed.data.password,
+      password: claimUrl ? undefined : password,
+      claimUrl,
+      expiresAt,
+      mustChangePassword: true,
     },
   });
 });

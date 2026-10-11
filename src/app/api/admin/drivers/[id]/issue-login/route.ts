@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * POST — admin issues login for an existing unclaimed driver.
+ * Returns a one-time claim URL (preferred) plus optional password fallback.
  */
 
 import type { NextRequest } from "next/server";
@@ -15,6 +16,7 @@ import {
   generateTempPassword,
   generateUsername,
 } from "@/lib/drivers/generators";
+import { createClaimLink } from "@/lib/auth/claimLink";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
 
@@ -86,7 +88,7 @@ export const POST = withApiHandler(async (request: NextRequest, ctx: Ctx) => {
       full_name: fullName,
       role: "driver",
       driver_id: id,
-      must_change_password: !parsed.data.password,
+      must_change_password: true,
     },
     app_metadata: { role: "driver" },
   });
@@ -108,6 +110,23 @@ export const POST = withApiHandler(async (request: NextRequest, ctx: Ctx) => {
 
   await claimUsername(admin, username, created.user.id, "driver");
 
+  let claimUrl: string | null = null;
+  let expiresAt: string | null = null;
+  try {
+    const claim = await createClaimLink({
+      authUserId: created.user.id,
+      username,
+      role: "driver",
+      entityType: "driver",
+      entityId: id,
+      createdBy: session.authUserId,
+    });
+    claimUrl = claim.claimUrl;
+    expiresAt = claim.expiresAt;
+  } catch (err) {
+    console.error("[issue-login/driver] claim link failed:", err);
+  }
+
   await writeAudit(admin, {
     action: "driver.update",
     actorId: session.authUserId,
@@ -122,8 +141,11 @@ export const POST = withApiHandler(async (request: NextRequest, ctx: Ctx) => {
     success: true,
     credentials: {
       username,
-      password,
-      mustChangePassword: !parsed.data.password,
+      /** Prefer claimUrl — password is fallback if table not migrated yet */
+      password: claimUrl ? undefined : password,
+      claimUrl,
+      expiresAt,
+      mustChangePassword: true,
     },
   });
 });
