@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * GET  /api/operators — list
- * POST /api/operators — create operator + master card
+ * POST /api/operators — create operator + master card + claim link
  */
 
 import type { NextRequest } from "next/server";
@@ -21,6 +21,7 @@ import {
 } from "@/lib/operators/generators";
 import { claimUsername, isUsernameTaken } from "@/lib/domain/usernames";
 import { provisionAuthUser } from "@/lib/auth/provision";
+import { createClaimLink } from "@/lib/auth/claimLink";
 import { writeAudit } from "@/lib/domain/audit";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
@@ -146,6 +147,23 @@ export const POST = withApiHandler(async (request: NextRequest) => {
 
   await claimUsername(admin, username, authUserId, "operator");
 
+  let claimUrl: string | null = null;
+  let expiresAt: string | null = null;
+  try {
+    const claim = await createClaimLink({
+      authUserId,
+      username,
+      role: "operator",
+      entityType: "operator",
+      entityId: operatorId,
+      createdBy: user.authUserId,
+    });
+    claimUrl = claim.claimUrl;
+    expiresAt = claim.expiresAt;
+  } catch (err) {
+    console.error("[api/operators] claim link failed:", err);
+  }
+
   const cardId = `MCARD-${operatorId.toUpperCase()}`;
   const cardNumber = generateMasterCardNumber(operatorId);
   const cvvHash = generateCvvHash(operatorId);
@@ -185,8 +203,11 @@ export const POST = withApiHandler(async (request: NextRequest) => {
       operatorId,
       credentials: {
         username,
-        password: tempPassword,
         email: input.email,
+        claimUrl,
+        expiresAt,
+        /** Only when claim table is missing */
+        password: claimUrl ? undefined : tempPassword,
         mustChangePassword: true,
       },
       masterCard: {
