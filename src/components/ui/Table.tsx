@@ -9,8 +9,13 @@ interface TableProps {
 
 export function Table({ children, className }: TableProps) {
   return (
-    <div className={cn("w-full overflow-x-auto", className)}>
-      <table className="w-full text-xs border-collapse">{children}</table>
+    <div
+      className={cn(
+        "w-full overflow-x-auto rounded-2xl border border-white/[0.06] bg-[#0F0F10]",
+        className
+      )}
+    >
+      <table className="w-full text-sm border-collapse">{children}</table>
     </div>
   );
 }
@@ -18,9 +23,7 @@ export function Table({ children, className }: TableProps) {
 export function TableHead({ children }: { children: React.ReactNode }) {
   return (
     <thead>
-      <tr className="border-b border-white/[0.06] bg-white/[0.02]">
-        {children}
-      </tr>
+      <tr className="border-b border-white/[0.06] bg-white/[0.02]">{children}</tr>
     </thead>
   );
 }
@@ -35,7 +38,7 @@ export function Th({ children, align = "left", className }: ThProps) {
   return (
     <th
       className={cn(
-        "px-4 py-3 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-zinc-500 whitespace-nowrap",
+        "px-4 py-3 text-[12px] font-semibold text-zinc-500 whitespace-nowrap tracking-wide",
         align === "center" && "text-center",
         align === "right" && "text-right",
         className
@@ -63,7 +66,7 @@ export function Tr({ children, onClick, className }: TrProps) {
       className={cn(
         "transition-colors",
         onClick && "cursor-pointer",
-        "hover:bg-white/[0.02]",
+        "hover:bg-white/[0.025]",
         className
       )}
     >
@@ -82,7 +85,7 @@ export function Td({ children, align = "left", className }: TdProps) {
   return (
     <td
       className={cn(
-        "px-4 py-3 text-zinc-300 align-middle",
+        "px-4 py-3.5 text-zinc-300 align-middle text-[13px]",
         align === "center" && "text-center",
         align === "right" && "text-right",
         className
