@@ -51,6 +51,90 @@ export function buildClaimUrl(rawToken: string): string {
   return `${getAppBaseUrl()}/invite/${encodeURIComponent(rawToken)}`;
 }
 
+/** Opaque random password used only to invalidate the previous one. */
+function randomOpaquePassword(): string {
+  return randomBytes(24).toString("base64url") + "Aa1!";
+}
+
+/** Resolve display username for an auth user. */
+export async function resolveUsernameForAuthUser(
+  authUserId: string,
+  fallback = "user"
+): Promise<string> {
+  const admin = createSupabaseAdminClient();
+  try {
+    const { data } = await admin
+      .from("usernames")
+      .select("username")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
+    if (data?.username) return String(data.username);
+  } catch {
+    /* table may differ */
+  }
+  try {
+    const { data } = await admin.auth.admin.getUserById(authUserId);
+    const meta = data.user?.user_metadata?.username;
+    if (typeof meta === "string" && meta.trim()) return meta.trim();
+    if (data.user?.email) return data.user.email;
+  } catch {
+    /* */
+  }
+  return fallback;
+}
+
+/**
+ * Rotate password to a random value, force must_change, issue claim link.
+ * Prefer returning claimUrl — do not show the opaque password to admins.
+ */
+export async function reissuePasswordViaClaim(input: {
+  authUserId: string;
+  role: string;
+  entityType: ClaimEntityType;
+  entityId?: string;
+  createdBy?: string;
+  usernameHint?: string;
+}): Promise<{ claimUrl: string; expiresAt: string; username: string }> {
+  const admin = createSupabaseAdminClient();
+  const username =
+    input.usernameHint?.trim() ||
+    (await resolveUsernameForAuthUser(input.authUserId));
+
+  const { data: userData } = await admin.auth.admin.getUserById(input.authUserId);
+  const meta = userData?.user?.user_metadata ?? {};
+
+  const { error: updateErr } = await admin.auth.admin.updateUserById(
+    input.authUserId,
+    {
+      password: randomOpaquePassword(),
+      user_metadata: {
+        ...meta,
+        must_change_password: true,
+        password_reissued_at: new Date().toISOString(),
+      },
+    }
+  );
+
+  if (updateErr) {
+    throw new Error(`reissuePasswordViaClaim: ${updateErr.message}`);
+  }
+
+  const claim = await createClaimLink({
+    authUserId: input.authUserId,
+    username,
+    role: input.role,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    createdBy: input.createdBy,
+  });
+
+  return {
+    claimUrl: claim.claimUrl,
+    expiresAt: claim.expiresAt,
+    username,
+  };
+}
+
 /**
  * Insert a claim token. Returns the raw token (show once) and public URL.
  * Invalidates any unused prior tokens for the same auth user.
@@ -158,7 +242,6 @@ export async function consumeClaimToken(
   const admin = createSupabaseAdminClient();
   const { record } = peeked;
 
-  // Load auth user for email
   const { data: userData, error: userErr } =
     await admin.auth.admin.getUserById(record.authUserId);
   if (userErr || !userData.user) {

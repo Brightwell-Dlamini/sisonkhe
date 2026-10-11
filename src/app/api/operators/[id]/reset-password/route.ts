@@ -7,6 +7,7 @@ import type { NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { requireServerRole } from "@/lib/auth/session";
 import { generateTempPassword } from "@/lib/operators/generators";
+import { reissuePasswordViaClaim } from "@/lib/auth/claimLink";
 import { writeAudit } from "@/lib/domain/audit";
 import { AppError } from "@/lib/api/errors";
 import { ok, withApiHandler } from "@/lib/api/response";
@@ -34,15 +35,35 @@ export const POST = withApiHandler(async (_: NextRequest, ctx: Ctx) => {
     throw AppError.notFound("Operator login account");
   }
 
-  const newPassword = generateTempPassword();
+  let claimUrl: string | null = null;
+  let expiresAt: string | null = null;
+  let username: string | null = null;
+  let tempPassword: string | undefined;
 
-  const { error: updateErr } = await admin.auth.admin.updateUserById(
-    opRow.auth_user_id,
-    { password: newPassword }
-  );
-
-  if (updateErr) {
-    throw AppError.internal(`Password reset failed: ${updateErr.message}`);
+  try {
+    const claim = await reissuePasswordViaClaim({
+      authUserId: opRow.auth_user_id,
+      role: "operator",
+      entityType: "operator",
+      entityId: id,
+      createdBy: session.authUserId,
+    });
+    claimUrl = claim.claimUrl;
+    expiresAt = claim.expiresAt;
+    username = claim.username;
+  } catch (err) {
+    console.error("[operator/reset-password] claim failed:", err);
+    tempPassword = generateTempPassword();
+    const { error: updateErr } = await admin.auth.admin.updateUserById(
+      opRow.auth_user_id,
+      {
+        password: tempPassword,
+        user_metadata: { must_change_password: true },
+      }
+    );
+    if (updateErr) {
+      throw AppError.internal(`Password reset failed: ${updateErr.message}`);
+    }
   }
 
   await writeAudit(admin, {
@@ -57,7 +78,10 @@ export const POST = withApiHandler(async (_: NextRequest, ctx: Ctx) => {
 
   return ok({
     success: true,
-    tempPassword: newPassword,
     name: opRow.name,
+    username,
+    claimUrl,
+    expiresAt,
+    tempPassword,
   });
 });
