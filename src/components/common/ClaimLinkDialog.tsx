@@ -2,8 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Admin dialog after issuing login: share claim link (primary),
- * optional password fallback, WhatsApp share.
+ * Share "Send Access" invite — claim link primary, password fallback.
  */
 
 "use client";
@@ -23,10 +22,11 @@ interface Props {
   fullName: string;
   username: string;
   claimUrl?: string | null;
-  /** Only shown when claimUrl is missing (migration not applied yet) */
   password?: string | null;
   expiresAt?: string | null;
   roleLabel?: string;
+  /** Dialog title — default rank-friendly "Access sent" */
+  title?: string;
   onClose: () => void;
 }
 
@@ -37,6 +37,7 @@ export default function ClaimLinkDialog({
   password,
   expiresAt,
   roleLabel = "user",
+  title = "Access sent",
   onClose,
 }: Props) {
   const [copied, setCopied] = useState<
@@ -54,8 +55,8 @@ export default function ClaimLinkDialog({
     : null;
 
   const shareMessage = claimUrl
-    ? `Sisonkhe login for ${fullName}\n\nUsername: ${username}\nOpen this link to set your password (expires ${expiryLabel ?? "soon"}):\n${claimUrl}`
-    : `Sisonkhe login\nUsername: ${username}\nPassword: ${password ?? ""}`;
+    ? `Sisonkhe access for ${fullName}\n\nUsername: ${username}\nOpen this link to set your password${expiryLabel ? ` (expires ${expiryLabel})` : ""}:\n${claimUrl}`
+    : `Sisonkhe access\nUsername: ${username}\nPassword: ${password ?? ""}`;
 
   const whatsappHref = `https://wa.me/?text=${encodeURIComponent(shareMessage)}`;
 
@@ -68,9 +69,7 @@ export default function ClaimLinkDialog({
               <ShieldCheck className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <h3 className="text-sm font-black uppercase text-white">
-                Login issued
-              </h3>
+              <h3 className="text-sm font-black uppercase text-white">{title}</h3>
               <p className="text-[11px] text-zinc-500">
                 {fullName} · {roleLabel}
               </p>
@@ -90,9 +89,8 @@ export default function ClaimLinkDialog({
           <span>
             {claimUrl ? (
               <>
-                Share the <strong>invite link</strong> only. {fullName} opens it,
-                sets their own password, and is signed in. No password travels
-                over WhatsApp.
+                Share the <strong>access link</strong> only. {fullName} opens it,
+                sets their own password, and signs in.
                 {expiryLabel && (
                   <>
                     {" "}
@@ -102,8 +100,8 @@ export default function ClaimLinkDialog({
               </>
             ) : (
               <>
-                Claim links need the <code className="text-emerald-300">login_claim_tokens</code>{" "}
-                migration. Showing a one-time password instead.
+                Access links need the login_claim_tokens migration. Showing a
+                one-time password instead.
               </>
             )}
           </span>
@@ -134,7 +132,7 @@ export default function ClaimLinkDialog({
         {claimUrl && (
           <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
             <div className="text-[10px] font-black uppercase text-zinc-400 mb-1">
-              Invite link
+              Access link
             </div>
             <div className="flex items-start justify-between gap-2">
               <code className="text-[11px] font-mono text-emerald-300 break-all leading-snug">
@@ -182,8 +180,7 @@ export default function ClaimLinkDialog({
         <div className="bg-amber-950/30 border border-amber-800/40 rounded-xl p-2.5 text-[11px] text-amber-200 flex items-start gap-2">
           <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           <span>
-            Do not post this in a public group. Prefer a direct WhatsApp chat with{" "}
-            {fullName}.
+            Prefer a direct WhatsApp chat with {fullName} — not a public group.
           </span>
         </div>
 

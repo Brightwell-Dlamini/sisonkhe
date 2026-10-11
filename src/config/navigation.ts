@@ -40,6 +40,7 @@ import {
   MessageSquare,
   Activity as ActivityIcon,
   ListChecks,
+  KeyRound,
 } from "lucide-react";
 import type { NavRole } from "@/lib/auth/roles";
 import type { Permission } from "@/lib/auth/permissions";
@@ -53,7 +54,6 @@ export interface NavItem {
   badge?: "live" | "count";
   exact?: boolean;
   roles?: NavRole[];
-  /** Capability required in addition to role list */
   permission?: Permission;
   emphasis?: "primary";
   hint?: string;
@@ -76,6 +76,14 @@ export const ADMIN_NAV: NavGroup[] = [
         emphasis: "primary",
         permission: "admin.command_centre",
         hint: "Ranked work queue and risk radar",
+      },
+      {
+        href: "/admin/access",
+        label: "Send Access",
+        icon: KeyRound,
+        emphasis: "primary",
+        permission: "admin.drivers",
+        hint: "Approve portal enrolments — invite links",
       },
       {
         href: "/admin/compliance",
@@ -321,11 +329,11 @@ export const MARSHAL_NAV: NavGroup[] = [
     items: [
       {
         href: "/marshal",
-        label: "Dispatch",
+        label: "Live Queue",
         icon: LayoutGrid,
         exact: true,
         emphasis: "primary",
-        hint: "Live bay and departure board",
+        hint: "Shift board — dispatch only",
       },
       {
         href: "/marshal/comms",
@@ -365,6 +373,19 @@ export const DRIVER_NAV: NavGroup[] = [
 ];
 
 export const OPERATOR_NAV: NavGroup[] = [
+  {
+    label: "Home",
+    items: [
+      {
+        href: "/operator",
+        label: "Desk",
+        icon: LayoutGrid,
+        exact: true,
+        emphasis: "primary",
+        hint: "Checklist and master card",
+      },
+    ],
+  },
   {
     label: "Compliance",
     items: [

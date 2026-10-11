@@ -5,31 +5,27 @@ import Link from "next/link";
 import {
   Loader2,
   AlertCircle,
-  ListOrdered,
-  Calendar,
-  MessageSquare,
-  Settings,
   Plus,
+  MoreHorizontal,
+  MessageSquare,
+  Calendar,
+  Settings,
 } from "lucide-react";
 import { useMarshalTerminal } from "@/hooks/useMarshalTerminal";
 import { useMarshalVehicles } from "@/hooks/useMarshalVehicles";
+import { useAuth } from "@/hooks/useAuth";
 import MarshalHeader from "./MarshalHeader";
 import SummaryCards from "./SummaryCards";
 import QueueList from "./QueueList";
-import RecentActivityFeed from "./RecentActivityFeed";
 import AddVehicleModal from "./AddVehicleModal";
 import VehicleDetailsModal from "./VehicleDetailsModal";
-import QueueSuggestionsPanel from "./QueueSuggestionsPanel";
-import { RoleGuidance } from "@/components/common/RoleGuidance";
-import { RoleWelcomeBanner } from "@/components/common/RoleWelcomeBanner";
-import { CalendarRange, MessageSquareText, Route, PlusCircle } from "lucide-react";
+import FirstRunWizard from "@/components/common/FirstRunWizard";
 
 export default function MarshalDashboard() {
   const {
     context,
     vehicles,
     summary,
-    activity,
     loading,
     error,
     refresh,
@@ -38,9 +34,11 @@ export default function MarshalDashboard() {
 
   const { vehicles: allVehicles, addToQueue, reorderQueue } =
     useMarshalVehicles();
+  const { user } = useAuth();
 
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [detailReg, setDetailReg] = useState<string | null>(null);
+  const [showMore, setShowMore] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -76,24 +74,18 @@ export default function MarshalDashboard() {
 
   if (!context) return null;
 
-  const routeId =
-    (context as { routeId?: string; assignedRouteId?: string }).routeId ??
-    (context as { assignedRouteId?: string }).assignedRouteId ??
-    null;
-
   return (
-    <div className="space-y-5">
-      <RoleWelcomeBanner
-        title={`Welcome back, ${context.fullName}`}
-        subtitle="Your dispatch board is live. Review queue priorities, route health, and driver updates before the next departure."
-        actionLabel="Open queue"
-        actionHref="/marshal/queue"
+    <div className="space-y-4">
+      <FirstRunWizard
+        role="marshal"
+        userId={user?.id}
+        displayName={context.fullName}
       />
 
       {toast && (
         <div className="bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 rounded-xl px-4 py-3 text-xs font-bold flex items-center justify-between">
           <span>{toast}</span>
-          <button onClick={() => setToast(null)} className="text-emerald-400">
+          <button type="button" onClick={() => setToast(null)} className="text-emerald-400">
             ✕
           </button>
         </div>
@@ -101,91 +93,66 @@ export default function MarshalDashboard() {
 
       <MarshalHeader context={context} onRefresh={refresh} loading={loading} />
 
+      {/* Shift mode: three numbers only */}
       {summary && <SummaryCards summary={summary} />}
 
-      <div className="flex items-center gap-1 bg-[#0F0F10] border border-white/[0.06] p-1 rounded-2xl overflow-x-auto scrollbar-none">
-        <span className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap bg-white/[0.08] text-white">
-          <ListOrdered className="w-3.5 h-3.5" />
-          Live Queue
-        </span>
-        <Link
-          href="/marshal/queue"
-          className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap text-zinc-500 hover:text-zinc-300"
-        >
-          <Calendar className="w-3.5 h-3.5" />
-          30-Day Roster
-        </Link>
-        <Link
-          href="/marshal/comms"
-          className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap text-zinc-500 hover:text-zinc-300"
-        >
-          <MessageSquare className="w-3.5 h-3.5" />
-          Driver Comms
-        </Link>
-        <Link
-          href="/marshal/settings"
-          className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap text-zinc-500 hover:text-zinc-300"
-        >
-          <Settings className="w-3.5 h-3.5" />
-          Settings
-        </Link>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-black uppercase tracking-wider text-white">
+          Live queue
+        </h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowMore((v) => !v)}
+            className="px-3 py-1.5 bg-white/[0.06] text-zinc-300 rounded-xl text-xs font-bold flex items-center gap-1.5"
+          >
+            <MoreHorizontal className="w-3.5 h-3.5" />
+            More
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAddVehicle(true)}
+            className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-bold flex items-center gap-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add vehicle
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-black uppercase tracking-wider text-white">
-              Live Queue
-            </h2>
-            <button
-              onClick={() => setShowAddVehicle(true)}
-              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-bold flex items-center gap-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Vehicle
-            </button>
-          </div>
-          <QueueList
-            vehicles={vehicles}
-            onDispatch={dispatch}
-            onReorder={handleReorder}
-            showToast={showToast}
-            onSelectVehicle={setDetailReg}
-          />
+      {showMore && (
+        <div className="grid grid-cols-3 gap-2">
+          <Link
+            href="/marshal/comms"
+            className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-center text-[11px] font-bold text-zinc-300 hover:border-emerald-500/40"
+          >
+            <MessageSquare className="w-4 h-4 mx-auto mb-1 text-emerald-400" />
+            Comms
+          </Link>
+          <Link
+            href="/marshal/queue"
+            className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-center text-[11px] font-bold text-zinc-300 hover:border-emerald-500/40"
+          >
+            <Calendar className="w-4 h-4 mx-auto mb-1 text-emerald-400" />
+            30-day
+          </Link>
+          <Link
+            href="/marshal/settings"
+            className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-center text-[11px] font-bold text-zinc-300 hover:border-emerald-500/40"
+          >
+            <Settings className="w-4 h-4 mx-auto mb-1 text-emerald-400" />
+            Settings
+          </Link>
         </div>
-        <div className="lg:col-span-1 space-y-4">
-          <RoleGuidance
-            title="Terminal flow"
-            items={[
-              {
-                label: "Add vehicle",
-                detail: "Board a vehicle into the live queue and assign the next priority slot.",
-                icon: PlusCircle,
-              },
-              {
-                label: "Review roster",
-                detail: "Check the current terminal rotation and dispatch cadence for the next cycle.",
-                href: "/marshal/queue",
-                icon: CalendarRange,
-              },
-              {
-                label: "Send updates",
-                detail: "Keep drivers aligned on route, status, and delays before dispatch.",
-                href: "/marshal/comms",
-                icon: MessageSquareText,
-              },
-              {
-                label: "Route guidance",
-                detail: "Use the queue suggestions panel to push the most ready vehicle first.",
-                href: "/marshal/settings",
-                icon: Route,
-              },
-            ]}
-          />
-          <QueueSuggestionsPanel routeId={routeId} />
-          <RecentActivityFeed activity={activity} />
-        </div>
-      </div>
+      )}
+
+      <QueueList
+        vehicles={vehicles}
+        onDispatch={dispatch}
+        onReorder={handleReorder}
+        showToast={showToast}
+        onSelectVehicle={setDetailReg}
+      />
 
       {showAddVehicle && (
         <AddVehicleModal

@@ -2,28 +2,13 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Visible indicator when the device is offline.
+ * Online + outbox status (replaces offline-only banner).
  */
 
 "use client";
 
-import { WifiOff } from "lucide-react";
-import { useOnlineStatus } from "@/hooks/useOnlineStatus";
-import { useLocale } from "@/hooks/useLocale";
+import OfflineStatusStrip from "@/components/common/OfflineStatusStrip";
 
 export default function OfflineBanner() {
-  const isOnline = useOnlineStatus();
-  const { t } = useLocale();
-
-  if (isOnline) return null;
-
-  return (
-    <div
-      role="status"
-      className="sticky top-0 inset-x-0 z-[100] bg-amber-600 text-white text-center text-xs font-bold uppercase tracking-wider py-1.5 px-3 flex items-center justify-center gap-2 shadow-md"
-    >
-      <WifiOff className="w-3.5 h-3.5" />
-      <span>{t("offline.banner")}</span>
-    </div>
-  );
+  return <OfflineStatusStrip />;
 }
