@@ -11,6 +11,7 @@ import {
 import type { DriverContext } from "@/lib/driver/queries";
 import type { DriverSignalKind } from "@/hooks/useDriverSignal";
 import { driverCoach } from "@/lib/domain/driverCoach";
+import { StatusDot, statusToneFromLabel } from "@/components/ui";
 import DriverSignalPanel from "./DriverSignalPanel";
 
 interface Props {
@@ -26,15 +27,6 @@ interface Props {
   isAfter830PM?: boolean;
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  Waiting: "bg-blue-950/60 text-blue-300",
-  Loading: "bg-emerald-950/60 text-emerald-300",
-  Departed: "bg-zinc-800 text-zinc-400",
-  Delayed: "bg-amber-950/60 text-amber-300",
-  Breakdown: "bg-red-950/60 text-red-300",
-  Offline: "bg-zinc-800 text-zinc-400",
-};
-
 export default function DriverVehicleCard({
   vehicle,
   marshal,
@@ -46,12 +38,12 @@ export default function DriverVehicleCard({
 }: Props) {
   if (!vehicle) {
     return (
-      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-6 text-center">
-        <Car className="w-8 h-8 mx-auto text-zinc-600 mb-2" />
-        <div className="text-sm font-bold text-zinc-300">No vehicle assigned</div>
-        <div className="text-xs text-zinc-500 mt-1">
+      <div className="surface-raised p-8 text-center">
+        <Car className="w-8 h-8 mx-auto text-zinc-600 mb-3" />
+        <div className="text-title">No vehicle assigned</div>
+        <p className="text-body mt-2 max-w-sm mx-auto">
           Contact your fleet manager to be assigned a vehicle.
-        </div>
+        </p>
       </div>
     );
   }
@@ -66,50 +58,48 @@ export default function DriverVehicleCard({
   });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {isAfter830PM && (
-        <div className="bg-purple-950/40 border border-purple-800 rounded-xl p-3 flex items-center gap-2 text-xs">
-          <Moon className="w-4 h-4 text-purple-400" />
-          <span className="text-purple-200 font-bold">
-            After 8:30 PM — Queue advances to tomorrow&apos;s rotation.
+        <div className="rounded-xl border border-violet-500/30 bg-violet-950/40 px-3.5 py-3 flex items-center gap-2.5 text-sm text-violet-100">
+          <Moon className="w-4 h-4 text-violet-300 shrink-0" />
+          <span>
+            After 8:30 PM — queue advances to tomorrow&apos;s rotation.
           </span>
         </div>
       )}
 
       <div
-        className={`bg-[#0F0F10] border rounded-2xl p-5 ${
-          isLead
-            ? "border-emerald-500 ring-2 ring-emerald-500/20"
-            : "border-white/[0.06]"
+        className={`surface-raised p-4 sm:p-5 ${
+          isLead ? "border-emerald-500/60 ring-2 ring-emerald-500/20" : ""
         }`}
       >
-        <div className="mb-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">
-              <Sparkles className="h-3.5 w-3.5" />
+        <div className="mb-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3.5">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 text-meta text-emerald-300">
+              <Sparkles className="h-4 w-4" />
               Next action
             </div>
-            <span className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-200">
+            <span className="text-sm font-semibold text-emerald-100">
               {coach.primaryLabel}
             </span>
           </div>
-          <p className="mt-2 text-xs leading-relaxed text-zinc-300">
+          <p className="mt-2 text-sm leading-relaxed text-zinc-200">
             {coach.coachLine}
           </p>
         </div>
 
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="w-12 h-12 rounded-xl bg-blue-950/60 text-cyan-400 flex items-center justify-center shrink-0">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-12 h-12 rounded-xl bg-sky-950/60 text-sky-300 flex items-center justify-center shrink-0">
               <Car className="w-6 h-6" />
             </div>
-            <div>
-              <div className="font-mono font-black text-white text-lg">
+            <div className="min-w-0">
+              <div className="font-mono text-lg sm:text-xl font-bold text-white tracking-tight">
                 {vehicle.registrationNumber}
               </div>
-              <div className="flex items-center gap-2 text-xs text-zinc-500 mt-0.5">
+              <div className="flex items-center gap-2 text-meta mt-0.5 flex-wrap">
                 {vehicle.vic && (
-                  <span className="font-mono font-bold text-emerald-400">
+                  <span className="font-mono font-semibold text-emerald-400">
                     {vehicle.vic}
                   </span>
                 )}
@@ -117,52 +107,45 @@ export default function DriverVehicleCard({
                   {vehicle.make} {vehicle.model}
                 </span>
               </div>
-              <div className="text-xs text-zinc-500 mt-1">
+              <div className="text-meta mt-1">
                 {vehicle.seatingCapacity} seats · {vehicle.classification}
               </div>
             </div>
           </div>
 
-          <div className="text-right shrink-0">
-            <span
-              className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                STATUS_STYLES[vehicle.status] ?? "bg-zinc-800 text-zinc-400"
-              }`}
-            >
-              {vehicle.status}
-            </span>
-            {isLead && (
-              <div className="text-[10px] text-emerald-400 font-bold mt-1">
-                LEAD VEHICLE
-              </div>
-            )}
+          <div className="text-right shrink-0 space-y-1">
+            <StatusDot
+              tone={statusToneFromLabel(vehicle.status)}
+              label={vehicle.status}
+            />
+            {isLead && <StatusDot tone="ok" label="Lead vehicle" />}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 pt-4 border-t border-white/[0.06] text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 pt-4 border-t border-white/[0.06] text-sm">
           {vehicle.routeOrigin && vehicle.routeDestination && (
-            <div className="col-span-2 flex items-center gap-2">
-              <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <div className="sm:col-span-2 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
               <span className="text-zinc-300">
-                <strong>{vehicle.routeOrigin}</strong> to{" "}
+                <strong className="text-white">{vehicle.routeOrigin}</strong> to{" "}
                 {vehicle.routeDestination}
               </span>
             </div>
           )}
           {vehicle.loadingBay && (
-            <div className="text-right">
-              <span className="text-zinc-500">Bay: </span>
+            <div className="sm:text-right">
+              <span className="text-zinc-500">Bay </span>
               <strong className="font-mono text-white">{vehicle.loadingBay}</strong>
             </div>
           )}
         </div>
 
         {vehicle.currentQueuePosition > 0 && (
-          <div className="mt-3 p-3 rounded-xl bg-blue-950/40 border border-blue-800 flex items-center justify-between text-xs">
-            <span className="text-blue-200 font-bold">
-              Queue position: <strong>#{vehicle.currentQueuePosition}</strong>
+          <div className="mt-3 p-3.5 rounded-xl bg-sky-950/40 border border-sky-800/50 flex items-center justify-between gap-2 text-sm">
+            <span className="text-sky-100 font-semibold">
+              Queue #{vehicle.currentQueuePosition}
             </span>
-            <span className="text-[10px] text-blue-300">
+            <span className="text-sky-200/90">
               {isLead
                 ? "Proceed to load"
                 : vehicle.currentQueuePosition === 2
@@ -173,55 +156,46 @@ export default function DriverVehicleCard({
         )}
 
         {vehicle.permitNumber && (
-          <div className="mt-3 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1.5">
+          <div className="mt-3 flex items-center justify-between gap-2 text-sm">
+            <div className="flex items-center gap-1.5 min-w-0">
               <ShieldCheck
-                className={`w-3.5 h-3.5 ${
+                className={`w-4 h-4 shrink-0 ${
                   vehicle.permitStatus === "Active"
-                    ? "text-emerald-500"
-                    : "text-amber-500"
+                    ? "text-emerald-400"
+                    : "text-amber-400"
                 }`}
               />
-              <span className="text-zinc-500">
-                Permit:{" "}
+              <span className="text-zinc-500 truncate">
+                Permit{" "}
                 <strong className="font-mono text-zinc-200">
                   {vehicle.permitNumber}
                 </strong>
               </span>
             </div>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                vehicle.permitStatus === "Active"
-                  ? "bg-emerald-950/60 text-emerald-300"
-                  : "bg-amber-950/60 text-amber-300"
-              }`}
-            >
-              {vehicle.permitStatus}
-            </span>
+            <StatusDot
+              tone={statusToneFromLabel(vehicle.permitStatus ?? "")}
+              label={vehicle.permitStatus ?? "—"}
+            />
           </div>
         )}
 
         {marshal && (
-          <div className="mt-4 pt-4 border-t border-white/[0.06] flex items-center justify-between">
-            <div>
-              <div className="text-[10px] uppercase font-black text-zinc-400">
-                Station Marshal
-              </div>
-              <div className="text-xs font-bold text-white">
+          <div className="mt-4 pt-4 border-t border-white/[0.06] flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-meta">Station marshal</div>
+              <div className="text-sm font-semibold text-white truncate">
                 {marshal.fullName}
               </div>
               {marshal.phone && (
-                <div className="text-[10px] font-mono text-zinc-500">
-                  {marshal.phone}
-                </div>
+                <div className="text-meta font-mono">{marshal.phone}</div>
               )}
             </div>
             <button
               type="button"
               onClick={onMessageMarshal}
-              className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+              className="min-h-11 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-semibold flex items-center gap-2 touch-manipulation shrink-0"
             >
-              <MessageSquare className="w-3.5 h-3.5" />
+              <MessageSquare className="w-4 h-4" />
               Message
             </button>
           </div>

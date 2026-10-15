@@ -6,7 +6,7 @@
 "use client";
 
 import { Clock, Inbox } from "lucide-react";
-import { EmptyState } from "@/components/ui";
+import { EmptyState, StatusDot } from "@/components/ui";
 import type { DriverTrip } from "@/lib/driver/queries";
 
 interface Props {
@@ -15,15 +15,13 @@ interface Props {
 
 export default function DriverTripsList({ trips }: Props) {
   return (
-    <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl overflow-hidden">
-      <div className="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between">
-        <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
-          <Clock className="w-3.5 h-3.5 text-zinc-400" />
-          Recent Trips
+    <div className="surface-raised overflow-hidden">
+      <div className="px-4 sm:px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between">
+        <h3 className="text-title flex items-center gap-2 text-base">
+          <Clock className="w-4 h-4 text-zinc-400" />
+          Recent trips
         </h3>
-        <span className="text-[10px] text-zinc-500 font-mono">
-          {trips.length} records
-        </span>
+        <span className="text-meta font-mono">{trips.length}</span>
       </div>
 
       {trips.length === 0 ? (
@@ -31,30 +29,29 @@ export default function DriverTripsList({ trips }: Props) {
           icon={Inbox}
           title="No trips yet"
           description="Trips appear here after your marshal dispatches your vehicle."
+          className="border-0 rounded-none"
         />
       ) : (
-        <div className="divide-y divide-white/[0.06]">
+        <div className="divide-y divide-white/[0.04]">
           {trips.map((t) => (
-            <div key={t.id} className="px-5 py-3 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/[0.06] flex items-center justify-center shrink-0 font-mono text-[10px] font-black text-zinc-500">
+            <div key={t.id} className="px-4 sm:px-5 py-3.5 flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-white/[0.05] flex items-center justify-center shrink-0 font-mono text-sm font-bold text-zinc-400">
                 {t.date.slice(-2)}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-bold text-white">
+                <div className="text-sm font-semibold text-white truncate">
                   {t.routeOrigin} → {t.routeDestination}
                 </div>
-                <div className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                <div className="text-meta font-mono mt-0.5">
                   {t.date} · {t.departureTime}
                   {t.arrivalTime ? ` → ${t.arrivalTime}` : ""}
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <div className="text-xs font-black font-mono text-white">
+                <div className="text-sm font-bold font-mono text-white tabular-nums">
                   {t.passengerCount} pax
                 </div>
-                <div className="text-[10px] font-bold text-emerald-400 font-mono">
-                  E {t.revenueSzl.toFixed(0)}
-                </div>
+                <StatusDot tone="ok" label={`E ${t.revenueSzl.toFixed(0)}`} />
               </div>
             </div>
           ))}
