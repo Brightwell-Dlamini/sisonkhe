@@ -18,7 +18,7 @@ export const Select = forwardRef<HTMLSelectElement, Props>(function Select(
         <select
           ref={ref}
           className={cn(
-            "w-full h-10 bg-white/[0.03] border border-white/[0.08] rounded-xl px-3.5 pr-9 text-sm font-medium text-white focus:outline-none focus:border-emerald-500/40 focus:bg-white/[0.04] appearance-none cursor-pointer transition-all",
+            "w-full min-h-11 h-11 bg-white/[0.03] border border-white/[0.08] rounded-xl px-3.5 pr-10 text-[15px] font-medium text-white focus:outline-none focus:border-emerald-500/50 focus:bg-white/[0.04] appearance-none cursor-pointer transition-colors",
             error && "border-rose-500/50",
             className
           )}
@@ -26,10 +26,10 @@ export const Select = forwardRef<HTMLSelectElement, Props>(function Select(
         >
           {children}
         </select>
-        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+        <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
       </div>
       {error && (
-        <p className="mt-1 text-[10px] text-rose-400 font-medium">{error}</p>
+        <p className="mt-1.5 text-[12px] text-rose-400 font-medium">{error}</p>
       )}
     </div>
   );

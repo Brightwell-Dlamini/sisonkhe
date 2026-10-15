@@ -114,20 +114,20 @@ function LoginForm() {
 
   if (forceChange) {
     return (
-      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-xl p-6 sm:p-8">
+      <div className="surface-raised p-6 sm:p-8 ui-enter">
         <div className="mb-6">
-          <h2 className="text-lg font-black text-white uppercase tracking-wide flex items-center gap-2">
+          <h2 className="text-display flex items-center gap-2 text-xl">
             <KeyRound className="w-5 h-5 text-amber-400" />
             Set a new password
           </h2>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-body mt-2">
             Your account was issued a temporary password. Choose a permanent one
             before continuing.
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 bg-red-950/40 border border-red-800 text-red-300 rounded-xl p-3 flex items-start gap-2 text-xs">
+          <div className="mb-4 bg-rose-950/40 border border-rose-800 text-rose-200 rounded-xl p-3.5 flex items-start gap-2 text-sm">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -135,35 +135,31 @@ function LoginForm() {
 
         <form onSubmit={onChangePassword} className="space-y-4">
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
-              New password
-            </label>
+            <label className="block text-meta mb-1.5">New password</label>
             <input
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+              className="w-full min-h-12 bg-white/[0.03] border border-white/[0.08] rounded-xl px-3.5 text-[15px] text-white focus:outline-none focus:border-emerald-500/50"
             />
           </div>
           <div>
-            <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
-              Confirm new password
-            </label>
+            <label className="block text-meta mb-1.5">Confirm new password</label>
             <input
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+              className="w-full min-h-12 bg-white/[0.03] border border-white/[0.08] rounded-xl px-3.5 text-[15px] text-white focus:outline-none focus:border-emerald-500/50"
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2"
+            className="w-full min-h-12 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-bold text-sm rounded-xl flex items-center justify-center gap-2 touch-manipulation"
           >
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -178,18 +174,16 @@ function LoginForm() {
   }
 
   return (
-    <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-xl p-6 sm:p-8">
+    <div className="surface-raised p-6 sm:p-8 ui-enter">
       <div className="mb-6">
-        <h2 className="text-lg font-black text-white uppercase tracking-wide">
-          Sign In
-        </h2>
-        <p className="text-xs text-zinc-400 mt-1">
-          Enter your username, phone number, or National ID
+        <h2 className="text-display text-xl">Sign in</h2>
+        <p className="text-body mt-2">
+          Username, phone number, or National ID
         </p>
       </div>
 
       {error && (
-        <div className="mb-4 bg-red-950/40 border border-red-800 text-red-300 rounded-xl p-3 flex items-start gap-2 text-xs">
+        <div className="mb-4 bg-rose-950/40 border border-rose-800 text-rose-200 rounded-xl p-3.5 flex items-start gap-2 text-sm">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
@@ -197,7 +191,7 @@ function LoginForm() {
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
-          <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
+          <label className="block text-meta mb-1.5">
             Username / Phone / National ID
           </label>
           <input
@@ -206,14 +200,12 @@ function LoginForm() {
             onChange={(e) => setIdentifier(e.target.value)}
             autoComplete="username"
             required
-            className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+            className="w-full min-h-12 bg-white/[0.03] border border-white/[0.08] rounded-xl px-3.5 text-[15px] text-white focus:outline-none focus:border-emerald-500/50"
           />
         </div>
 
         <div>
-          <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1.5">
-            Password
-          </label>
+          <label className="block text-meta mb-1.5">Password</label>
           <div className="relative">
             <input
               type={showPassword ? "text" : "password"}
@@ -221,12 +213,12 @@ function LoginForm() {
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
               required
-              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-2.5 pr-10 text-sm text-white focus:outline-none focus:border-emerald-500"
+              className="w-full min-h-12 bg-white/[0.03] border border-white/[0.08] rounded-xl px-3.5 pr-12 text-[15px] text-white focus:outline-none focus:border-emerald-500/50"
             />
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200"
+              className="absolute right-2 top-1/2 -translate-y-1/2 min-h-11 min-w-11 inline-flex items-center justify-center text-zinc-400 hover:text-zinc-200"
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? (
@@ -241,7 +233,7 @@ function LoginForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2"
+          className="w-full min-h-12 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-bold text-sm rounded-xl flex items-center justify-center gap-2 touch-manipulation"
         >
           {loading ? (
             <>
@@ -251,16 +243,14 @@ function LoginForm() {
           ) : (
             <>
               <LogIn className="w-4 h-4" />
-              Sign In
+              Sign in
             </>
           )}
         </button>
       </form>
 
-      <div className="mt-6 rounded-2xl border border-white/[0.06] bg-[#0F0F10] p-4">
-        <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
-          Quick roles
-        </div>
+      <div className="mt-6 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+        <div className="mb-3 text-meta">Quick roles</div>
         <div className="grid grid-cols-2 gap-2">
           {[
             ["Marshal", "Queue and dispatch"],
@@ -270,14 +260,10 @@ function LoginForm() {
           ].map(([name, detail]) => (
             <div
               key={name}
-              className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-2.5 py-2.5"
+              className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
             >
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-400">
-                {name}
-              </div>
-              <div className="mt-1 text-[10px] leading-relaxed text-zinc-500">
-                {detail}
-              </div>
+              <div className="text-sm font-semibold text-emerald-400">{name}</div>
+              <div className="mt-0.5 text-meta leading-relaxed">{detail}</div>
             </div>
           ))}
         </div>
@@ -286,32 +272,28 @@ function LoginForm() {
       <div className="mt-5 space-y-3">
         <Link
           href="/kiosk"
-          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-white/[0.06] bg-white/[0.03] text-xs font-bold text-zinc-200 hover:border-emerald-500/50 hover:text-emerald-400 transition-colors"
+          className="flex items-center justify-center gap-2 w-full min-h-11 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm font-semibold text-zinc-200 hover:border-emerald-500/40 hover:text-emerald-300 transition-colors"
         >
-          <Monitor className="w-3.5 h-3.5" />
+          <Monitor className="w-4 h-4" />
           View public kiosk
         </Link>
 
-        <p className="text-center text-[11px] text-zinc-500 space-y-1">
+        <p className="text-center text-[13px] text-zinc-500 space-y-1.5">
           <span className="block">
             Registered but no password yet?{" "}
-            <Link href="/claim" className="font-bold text-emerald-600 hover:underline">
+            <Link href="/claim" className="font-semibold text-emerald-400 hover:underline">
               Claim your account
             </Link>
-            {" "}
-            (marshal or driver)
           </span>
           <span className="block">
             New profile only?{" "}
-            <Link href="/register/driver" className="font-bold text-emerald-600 hover:underline">
+            <Link href="/register/driver" className="font-semibold text-emerald-400 hover:underline">
               Driver registration
             </Link>
             {" · "}
-            <Link href="/register/vehicle" className="font-bold text-emerald-600 hover:underline">
+            <Link href="/register/vehicle" className="font-semibold text-emerald-400 hover:underline">
               Vehicle record
             </Link>
-            {" "}
-            (data only — no login, no linking)
           </span>
         </p>
       </div>
@@ -321,7 +303,11 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="text-center text-xs text-zinc-500">Loading…</div>}>
+    <Suspense
+      fallback={
+        <div className="text-center text-sm text-zinc-500 py-12">Loading…</div>
+      }
+    >
       <LoginForm />
     </Suspense>
   );
