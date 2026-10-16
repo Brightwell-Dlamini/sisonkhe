@@ -1,13 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Plus,
-  Snowflake,
-  Flame,
-  Send,
-  Loader2,
-} from "lucide-react";
+import { Plus, Snowflake, Flame, Send, Loader2 } from "lucide-react";
 import { useLocale } from "@/hooks/useLocale";
 
 interface Props {
@@ -36,26 +30,29 @@ export default function MasterCardActions({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 max-w-md mx-auto">
       <button
+        type="button"
         onClick={onSend}
         disabled={isFrozen}
-        className="min-h-12 py-3 px-4 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-black rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 touch-manipulation"
+        className="min-h-12 py-3 px-4 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-black rounded-xl font-bold text-sm flex items-center justify-center gap-2 touch-manipulation"
       >
         <Send className="w-4 h-4" />
         {t("operator.send_money")}
       </button>
 
       <button
+        type="button"
         onClick={onReload}
-        className="min-h-12 py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 touch-manipulation"
+        className="min-h-12 py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl font-bold text-sm flex items-center justify-center gap-2 touch-manipulation"
       >
         <Plus className="w-4 h-4" />
         {t("operator.reload")}
       </button>
 
       <button
+        type="button"
         onClick={handleToggle}
         disabled={freezing}
-        className={`min-h-12 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 border touch-manipulation ${
+        className={`min-h-12 py-3 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 border touch-manipulation ${
           isFrozen
             ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
             : "bg-white/[0.04] text-zinc-300 border-white/[0.08] hover:bg-white/[0.08]"

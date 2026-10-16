@@ -9,54 +9,71 @@ interface Props {
   onQuickSend?: (reg: string) => void;
 }
 
-export default function VehicleCardMini({ vehicle, onClick, onQuickSend }: Props) {
+export default function VehicleCardMini({
+  vehicle,
+  onClick,
+  onQuickSend,
+}: Props) {
   const isFrozen = vehicle.cardStatus === "Frozen";
 
   return (
     <div
-      onClick={() => onClick?.()}
-      className={`w-full text-left rounded-2xl p-4 border transition-all ${
+      role="button"
+      tabIndex={0}
+      onClick={() => onClick()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onClick();
+      }}
+      className={`w-full text-left rounded-2xl p-4 border transition-colors cursor-pointer ${
         isFrozen
-          ? "bg-slate-100 dark:bg-slate-950 border-slate-300 dark:border-slate-800"
-          : "bg-gradient-to-br from-blue-500 to-blue-700 text-white border-blue-600 hover:shadow-lg"
+          ? "bg-zinc-900/80 border-zinc-700 text-zinc-300"
+          : "bg-gradient-to-br from-sky-600 to-sky-800 text-white border-sky-500/40 hover:border-sky-400/60"
       }`}
     >
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="font-mono font-black text-lg">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-mono text-lg font-bold tracking-tight">
             {vehicle.registrationNumber}
           </div>
           {vehicle.vic && (
-            <div className={`text-[10px] font-mono ${isFrozen ? "text-slate-500" : "text-blue-200"}`}>
+            <div
+              className={`text-sm font-mono ${
+                isFrozen ? "text-zinc-500" : "text-sky-100"
+              }`}
+            >
               {vehicle.vic}
             </div>
           )}
         </div>
         {isFrozen ? (
-          <Snowflake className="w-5 h-5 text-slate-400" />
+          <Snowflake className="w-5 h-5 text-zinc-500 shrink-0" />
         ) : (
-          <CreditCard className="w-5 h-5 text-blue-200" />
+          <CreditCard className="w-5 h-5 text-sky-100 shrink-0" />
         )}
       </div>
 
-      <div className={`text-xs mt-3 ${isFrozen ? "text-slate-500" : "text-blue-100"}`}>
+      <div className={`text-sm mt-3 ${isFrozen ? "text-zinc-500" : "text-sky-100"}`}>
         {vehicle.make} {vehicle.model}
       </div>
 
-      <div className="mt-4 pt-3 border-t border-current/20 flex items-end justify-between">
-        <div>
-          <div className={`text-[10px] uppercase ${isFrozen ? "text-slate-400" : "text-blue-200"}`}>
+      <div className="mt-4 pt-3 border-t border-current/20 flex items-end justify-between gap-2">
+        <div className="min-w-0">
+          <div
+            className={`text-[12px] ${isFrozen ? "text-zinc-500" : "text-sky-200"}`}
+          >
             Driver
           </div>
-          <div className="text-xs font-bold truncate max-w-[120px]">
+          <div className="text-sm font-semibold truncate max-w-[140px]">
             {vehicle.driverName ?? "Unassigned"}
           </div>
         </div>
-        <div className="text-right">
-          <div className={`text-[10px] uppercase ${isFrozen ? "text-slate-400" : "text-blue-200"}`}>
+        <div className="text-right shrink-0">
+          <div
+            className={`text-[12px] ${isFrozen ? "text-zinc-500" : "text-sky-200"}`}
+          >
             Balance
           </div>
-          <div className={`text-base font-mono font-black ${isFrozen ? "text-slate-600 dark:text-slate-300" : ""}`}>
+          <div className="text-lg font-mono font-bold tabular-nums">
             E{vehicle.balanceSzl.toFixed(2)}
           </div>
         </div>
@@ -64,32 +81,40 @@ export default function VehicleCardMini({ vehicle, onClick, onQuickSend }: Props
 
       <div className="mt-3 flex items-center justify-between gap-2">
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onClick?.();
+            onClick();
           }}
           aria-label={`Inspect ${vehicle.registrationNumber}`}
-          className="text-xs text-zinc-400 bg-white/[0.02] px-2 py-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20"
+          className="min-h-10 px-3 rounded-xl text-sm font-semibold bg-black/20 hover:bg-black/30 touch-manipulation"
         >
           Inspect
         </button>
-        <div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onQuickSend?.(vehicle.registrationNumber);
-            }}
-            aria-label={`Send money to ${vehicle.registrationNumber}`}
-            disabled={isFrozen}
-            className={`px-3 py-1 rounded-lg text-xs font-bold ${isFrozen ? "opacity-50 cursor-not-allowed" : "bg-amber-500 text-black"} focus:outline-none focus:ring-2 focus:ring-amber-400`}
-          >
-            Send
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onQuickSend?.(vehicle.registrationNumber);
+          }}
+          aria-label={`Send money to ${vehicle.registrationNumber}`}
+          disabled={isFrozen}
+          className={`min-h-10 px-4 rounded-xl text-sm font-bold touch-manipulation ${
+            isFrozen
+              ? "opacity-40 cursor-not-allowed bg-zinc-800 text-zinc-400"
+              : "bg-amber-500 text-black hover:bg-amber-400"
+          }`}
+        >
+          Send
+        </button>
       </div>
 
       {vehicle.cardNumber && (
-        <div className={`mt-2 text-[10px] font-mono truncate ${isFrozen ? "text-slate-400" : "text-blue-200"}`}>
+        <div
+          className={`mt-2 text-[12px] font-mono truncate ${
+            isFrozen ? "text-zinc-500" : "text-sky-200"
+          }`}
+        >
           {vehicle.cardNumber}
         </div>
       )}

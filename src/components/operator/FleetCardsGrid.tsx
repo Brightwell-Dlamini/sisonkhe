@@ -7,7 +7,7 @@ import VehicleCardMini from "./VehicleCardMini";
 import CardInspectionModal from "./CardInspectionModal";
 import SendMoneyModal from "./SendMoneyModal";
 import { useOperatorMasterCard } from "@/hooks/useOperatorMasterCard";
-import { useToast } from "@/components/ui";
+import { EmptyState, useToast } from "@/components/ui";
 
 export default function FleetCardsGrid() {
   const { vehicles, loading, error } = useOperatorFleetCards();
@@ -26,7 +26,7 @@ export default function FleetCardsGrid() {
 
   if (error) {
     return (
-      <div className="bg-rose-500/10 border border-rose-500/25 text-rose-400 rounded-xl px-4 py-3 text-xs">
+      <div className="bg-rose-500/10 border border-rose-500/25 text-rose-300 rounded-xl px-4 py-3 text-sm">
         {error}
       </div>
     );
@@ -34,15 +34,11 @@ export default function FleetCardsGrid() {
 
   if (vehicles.length === 0) {
     return (
-      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-12 text-center">
-        <Inbox className="w-8 h-8 mx-auto text-zinc-600 mb-2" />
-        <div className="text-sm font-bold text-zinc-300">
-          No vehicles in your fleet
-        </div>
-        <div className="text-xs text-zinc-500 mt-1">
-          Contact admin to have vehicles assigned to your operator account.
-        </div>
-      </div>
+      <EmptyState
+        icon={Inbox}
+        title="No vehicles in your fleet"
+        description="Contact admin to have vehicles assigned to your operator account."
+      />
     );
   }
 
@@ -76,7 +72,10 @@ export default function FleetCardsGrid() {
             const res = await sendMoney(input);
             if (res.success) {
               await refresh();
-              toast.success("Transfer sent", `E${input.amountSzl.toFixed(2)} → ${input.vehicleReg}`);
+              toast.success(
+                "Transfer sent",
+                `E${input.amountSzl.toFixed(2)} → ${input.vehicleReg}`
+              );
             } else {
               toast.error("Transfer failed", res.error ?? "Request failed");
             }

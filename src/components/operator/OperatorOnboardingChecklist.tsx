@@ -52,10 +52,8 @@ export default function OperatorOnboardingChecklist({
 
   return (
     <div className="rounded-2xl border border-amber-500/25 bg-amber-950/20 p-4 space-y-3">
-      <div className="text-[10px] font-black uppercase tracking-widest text-amber-400">
-        Get set up
-      </div>
-      <p className="text-xs text-zinc-400">
+      <div className="text-meta text-amber-400">Get set up</div>
+      <p className="text-body text-sm">
         Finish these before day-to-day operations. Your desk stays focused until
         the basics are in place.
       </p>
@@ -64,25 +62,25 @@ export default function OperatorOnboardingChecklist({
           <li key={s.label}>
             <Link
               href={s.href}
-              className="flex items-start gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 hover:border-emerald-500/30 transition"
+              className="flex items-start gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 min-h-[3.25rem] hover:border-emerald-500/30 transition-colors"
             >
               {s.done ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
               ) : (
-                <Circle className="w-4 h-4 text-zinc-600 shrink-0 mt-0.5" />
+                <Circle className="w-5 h-5 text-zinc-600 shrink-0 mt-0.5" />
               )}
               <div className="min-w-0 flex-1">
                 <div
-                  className={`text-xs font-bold ${
-                    s.done ? "text-zinc-400 line-through" : "text-white"
+                  className={`text-sm font-semibold ${
+                    s.done ? "text-zinc-500 line-through" : "text-white"
                   }`}
                 >
                   {s.label}
                 </div>
-                <div className="text-[11px] text-zinc-500 mt-0.5">{s.detail}</div>
+                <div className="text-meta mt-0.5">{s.detail}</div>
               </div>
               {!s.done && (
-                <ArrowRight className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                <ArrowRight className="w-4 h-4 text-emerald-500 shrink-0 mt-1" />
               )}
             </Link>
           </li>
