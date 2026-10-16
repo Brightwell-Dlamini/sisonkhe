@@ -120,14 +120,43 @@ export default function MarshalsList() {
     }
   }
 
+  function MarshalActions({ m }: { m: MarshalRow }) {
+    return (
+      <div className="flex items-center gap-1">
+        {!m.authUserId && (
+          <IconButton
+            icon={issuingId === m.id ? Loader2 : KeyRound}
+            label="Issue login"
+            onClick={() => void issueLogin(m)}
+            disabled={issuingId === m.id}
+            className={issuingId === m.id ? "[&_svg]:animate-spin" : ""}
+          />
+        )}
+        <IconButton
+          icon={Eye}
+          label="View card"
+          onClick={() => setViewingCard(m)}
+        />
+        <IconButton
+          icon={Edit2}
+          label="Assign rank post"
+          onClick={() => {
+            setEditing(m);
+            setShowForm(true);
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
-        title="Rank Marshals"
+        title="Rank marshals"
         description="Field portal collects identity. Issue login, then assign region, terminal, and corridor."
       />
 
-      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-3 mb-4">
+      <div className="surface-raised p-3 mb-4">
         <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
           <div className="flex-1 min-w-0">
             <Input
@@ -148,7 +177,7 @@ export default function MarshalsList() {
       </div>
 
       {error && (
-        <div className="mb-4 bg-rose-500/10 border border-rose-500/25 text-rose-400 rounded-xl p-3 text-xs font-medium">
+        <div className="mb-4 bg-rose-500/10 border border-rose-500/25 text-rose-300 rounded-xl p-3 text-sm font-medium">
           {error}
         </div>
       )}
@@ -174,97 +203,116 @@ export default function MarshalsList() {
           }
         />
       ) : (
-        <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl overflow-hidden">
-          <Table>
-            <TableHead>
-              <Tr>
-                <Th>Marshal</Th>
-                <Th>Contact</Th>
-                <Th>Region / Terminal</Th>
-                <Th>Login</Th>
-                <Th>Status</Th>
-                <Th className="text-right">Actions</Th>
-              </Tr>
-            </TableHead>
-            <TableBody>
-              {filtered.map((m) => (
-                <Tr key={m.id}>
-                  <Td>
-                    <div className="text-xs font-bold text-white">
+        <>
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-2.5">
+            {filtered.map((m) => (
+              <div key={m.id} className="surface-raised p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-white truncate">
                       {m.fullName}
                     </div>
                     {m.staffNumber && (
-                      <div className="font-mono text-[10px] text-zinc-500">
-                        #{m.staffNumber}
+                      <div className="font-mono text-meta mt-0.5">
+                        {m.staffNumber}
                       </div>
                     )}
-                  </Td>
-                  <Td>
-                    <div className="font-mono text-[11px] text-zinc-300">
-                      {m.cellNo ?? m.phone ?? "—"}
+                    <div className="text-meta mt-1">
+                      {[m.phone ?? m.cellNo, m.region, m.terminalName]
+                        .filter(Boolean)
+                        .join(" · ") || "No post assigned"}
                     </div>
-                    {m.idNumber && (
-                      <div className="font-mono text-[10px] text-zinc-500">
-                        ID {m.idNumber}
-                      </div>
-                    )}
-                  </Td>
-                  <Td>
-                    <div className="text-xs text-zinc-200">{m.region}</div>
-                    <div className="text-[10px] text-zinc-500 truncate max-w-[140px]">
-                      {m.terminalName}
-                    </div>
-                  </Td>
-                  <Td>
-                    <Badge
-                      variant={m.authUserId ? "success" : "default"}
-                      size="sm"
-                    >
-                      {m.authUserId ? "Issued" : "None"}
-                    </Badge>
-                  </Td>
-                  <Td>
-                    <Badge
-                      variant={m.isActive ? "success" : "default"}
-                      size="sm"
-                      dot
-                    >
-                      {m.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                  </Td>
-                  <Td>
-                    <div className="flex items-center justify-end gap-1">
-                      {!m.authUserId && (
-                        <IconButton
-                          icon={issuingId === m.id ? Loader2 : KeyRound}
-                          label="Issue login"
-                          onClick={() => void issueLogin(m)}
-                          disabled={issuingId === m.id}
-                          className={
-                            issuingId === m.id ? "[&_svg]:animate-spin" : ""
-                          }
-                        />
-                      )}
-                      <IconButton
-                        icon={Eye}
-                        label="View card"
-                        onClick={() => setViewingCard(m)}
-                      />
-                      <IconButton
-                        icon={Edit2}
-                        label="Assign rank post"
-                        onClick={() => {
-                          setEditing(m);
-                          setShowForm(true);
-                        }}
-                      />
-                    </div>
-                  </Td>
+                  </div>
+                  <Badge
+                    variant={m.isActive ? "success" : "default"}
+                    size="sm"
+                    dot
+                  >
+                    {m.isActive ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/[0.06]">
+                  <Badge
+                    variant={m.authUserId ? "success" : "warning"}
+                    size="sm"
+                  >
+                    {m.authUserId ? "Login ready" : "Needs login"}
+                  </Badge>
+                  <MarshalActions m={m} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHead>
+                <Tr>
+                  <Th>Marshal</Th>
+                  <Th>Contact</Th>
+                  <Th>Region / Terminal</Th>
+                  <Th>Login</Th>
+                  <Th>Status</Th>
+                  <Th className="text-right">Actions</Th>
                 </Tr>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHead>
+              <TableBody>
+                {filtered.map((m) => (
+                  <Tr key={m.id}>
+                    <Td>
+                      <div className="text-sm font-semibold text-white">
+                        {m.fullName}
+                      </div>
+                      {m.staffNumber && (
+                        <div className="font-mono text-meta mt-0.5">
+                          {m.staffNumber}
+                        </div>
+                      )}
+                    </Td>
+                    <Td>
+                      <div className="text-sm text-zinc-300">
+                        {m.phone ?? m.cellNo ?? "—"}
+                      </div>
+                      {m.idNumber && (
+                        <div className="font-mono text-meta">{m.idNumber}</div>
+                      )}
+                    </Td>
+                    <Td>
+                      <div className="text-sm text-zinc-300">
+                        {m.region ?? "—"}
+                      </div>
+                      <div className="text-meta">{m.terminalName ?? "—"}</div>
+                    </Td>
+                    <Td>
+                      <Badge
+                        variant={m.authUserId ? "success" : "warning"}
+                        size="sm"
+                      >
+                        {m.authUserId ? "Ready" : "Needed"}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge
+                        variant={m.isActive ? "success" : "default"}
+                        size="sm"
+                        dot
+                      >
+                        {m.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <div className="flex items-center justify-end">
+                        <MarshalActions m={m} />
+                      </div>
+                    </Td>
+                  </Tr>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
 
       {showForm && editing && (
