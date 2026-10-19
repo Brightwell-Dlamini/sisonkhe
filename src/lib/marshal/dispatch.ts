@@ -329,7 +329,7 @@ async function writeRankFee(
         }
       : null,
     feeCfg.rankFee,
-    { requireCard: false }
+    { requireCard: true }
   );
 
   if (!payGate.allowed) {
@@ -599,6 +599,39 @@ export async function applyDispatchAction(
       const gate = canDispatchDepart(gatePayload(vehicle));
       if (!gate.eligible) return { success: false, error: gate.reason };
 
+      // Hard block: vehicle card must cover rank fee BEFORE status change
+      const feeCfg = await getRankFeeConfig(admin);
+      const { data: vcardPre } = await admin
+        .from("vehicle_virtual_cards")
+        .select("id, status, balance_szl")
+        .eq("vehicle_reg", reg)
+        .maybeSingle();
+
+      const feeGate = canPayRankFee(
+        vcardPre
+          ? {
+              kind: "vehicle",
+              status: (vcardPre.status as string) ?? null,
+              balanceSzl: Number(vcardPre.balance_szl ?? 0),
+              id: vcardPre.id as string,
+            }
+          : null,
+        feeCfg.rankFee,
+        { requireCard: true }
+      );
+
+      if (!feeGate.allowed) {
+        log.warn("dispatch.depart_blocked_fee", {
+          vehicleReg: reg,
+          reason: feeGate.reason,
+        });
+        return {
+          success: false,
+          error: feeGate.reason ?? "Vehicle card cannot pay the rank fee.",
+          smartRecommendation,
+        };
+      }
+
       const oldPos = vehicle.currentQueuePosition;
       const payload = { status: "Departed", current_queue_position: 0 };
       const up = await optimisticUpdate(reg, vehicle.version, payload, nowIso);
@@ -625,14 +658,18 @@ export async function applyDispatchAction(
         entityType: "vehicle",
         entityId: reg,
         summary: `Depart ${reg}`,
-        meta: { estimatedPassengers: estimated, rankFeeWritten: fee.written },
+        meta: {
+          estimatedPassengers: estimated,
+          rankFeeWritten: fee.written,
+          rankFeeAmount: feeCfg.rankFee,
+        },
       });
 
       const feeWarn =
         !fee.written && fee.error
-          ? fee.error
+          ? `Departed, but fee post failed: ${fee.error}`
           : !fee.written
-            ? "Rank fee was not charged — check vehicle card balance or status."
+            ? "Departed, but rank fee was not recorded — check ledger."
             : undefined;
 
       return {
