@@ -249,26 +249,6 @@ function LoginForm() {
         </button>
       </form>
 
-      <div className="mt-6 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-        <div className="mb-3 text-meta">Quick roles</div>
-        <div className="grid grid-cols-2 gap-2">
-          {[
-            ["Marshal", "Queue and dispatch"],
-            ["Driver", "Roster and status"],
-            ["Operator", "Fleet and renewals"],
-            ["Inspector", "Checks and tickets"],
-          ].map(([name, detail]) => (
-            <div
-              key={name}
-              className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
-            >
-              <div className="text-sm font-semibold text-emerald-400">{name}</div>
-              <div className="mt-0.5 text-meta leading-relaxed">{detail}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       <div className="mt-5 space-y-3">
         <Link
           href="/kiosk"
