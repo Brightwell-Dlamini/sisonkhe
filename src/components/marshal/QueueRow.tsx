@@ -22,6 +22,7 @@ import {
   ChevronDown,
   ShieldAlert,
   Sparkles,
+  CreditCard,
 } from "lucide-react";
 import type { MarshalVehicle } from "@/lib/marshal/queries";
 import type { DispatchAction } from "@/lib/marshal/dispatch";
@@ -124,17 +125,19 @@ export default function QueueRow({
     }
   };
 
-  const handleDelayConfirm = async (reason: string) => {
+  const handleDelay = async (reason: string) => {
     setShowDelay(false);
     setPending("delay");
     const res = await onDispatch(vehicle.registrationNumber, "delay", reason);
     setPending(null);
-    if (res.success)
+    if (res.success) {
       showToast(`${vehicle.registrationNumber}: ${t("marshal.delay")}.`);
-    else showToast(res.error ?? "Failed");
+    } else {
+      showToast(res.error ?? "Failed");
+    }
   };
 
-  const handleBreakdownConfirm = async (reason: string) => {
+  const handleBreakdown = async (reason: string) => {
     setShowBreakdown(false);
     setPending("breakdown");
     const res = await onDispatch(
@@ -143,9 +146,11 @@ export default function QueueRow({
       reason
     );
     setPending(null);
-    if (res.success)
+    if (res.success) {
       showToast(`${vehicle.registrationNumber}: ${t("marshal.breakdown")}.`);
-    else showToast(res.error ?? "Failed");
+    } else {
+      showToast(res.error ?? "Failed");
+    }
   };
 
   const PrimaryIcon =
@@ -154,6 +159,61 @@ export default function QueueRow({
   const primaryLabel = coach.primary
     ? labelFor(coach.primary, coach.primaryLabel)
     : coach.primaryLabel;
+
+  const fee = Number(vehicle.rankFeeSzl ?? 25);
+  const bal = vehicle.cardBalanceSzl;
+  const cardSt = (vehicle.cardStatus ?? "").trim();
+
+  let cardChip: React.ReactNode = null;
+  if (bal == null && !cardSt) {
+    cardChip = (
+      <span
+        className="inline-flex items-center gap-1 rounded-lg border border-rose-800/50 bg-rose-950/40 px-2 py-0.5 text-[11px] font-semibold text-rose-200"
+        title="No vehicle card on file"
+      >
+        <CreditCard className="w-3 h-3" />
+        No card
+      </span>
+    );
+  } else if (
+    cardSt === "Frozen" ||
+    cardSt === "Suspended" ||
+    cardSt === "Blocked" ||
+    cardSt === "Closed" ||
+    cardSt === "Expired"
+  ) {
+    cardChip = (
+      <span
+        className="inline-flex items-center gap-1 rounded-lg border border-amber-800/50 bg-amber-950/40 px-2 py-0.5 text-[11px] font-semibold text-amber-100"
+        title={`Card ${cardSt}`}
+      >
+        <CreditCard className="w-3 h-3" />
+        {cardSt}
+      </span>
+    );
+  } else {
+    const n = Number(bal ?? 0);
+    const short = n + 1e-9 < fee;
+    cardChip = (
+      <span
+        className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[11px] font-semibold tabular-nums ${
+          short
+            ? "border-rose-800/50 bg-rose-950/40 text-rose-200"
+            : n < fee * 2
+              ? "border-amber-800/40 bg-amber-950/30 text-amber-100"
+              : "border-emerald-800/40 bg-emerald-950/30 text-emerald-200"
+        }`}
+        title={
+          short
+            ? `Short of rank fee E${fee.toFixed(2)}`
+            : `Vehicle card · rank fee E${fee.toFixed(2)}`
+        }
+      >
+        <CreditCard className="w-3 h-3" />
+        E{n.toFixed(2)}
+      </span>
+    );
+  }
 
   return (
     <>
@@ -237,6 +297,7 @@ export default function QueueRow({
                   {t("marshal.blocked")}
                 </span>
               )}
+              {cardChip}
             </div>
 
             <div className="flex items-center gap-3 mt-1.5 text-meta flex-wrap">
@@ -313,105 +374,82 @@ export default function QueueRow({
           )}
 
           {coach.secondary.includes("depart") && vehicle.status === "Loading" && (
-            <ActionButton
+            <button
+              type="button"
               onClick={() => handle("depart")}
               pending={pending === "depart"}
-              icon={Play}
-              label={t("marshal.depart")}
-              color="blue"
               disabled={coach.blocked}
-            />
+              className="min-h-11 px-3 py-2 rounded-xl text-sm font-semibold text-zinc-300 border border-white/[0.08] hover:border-emerald-500/40 disabled:opacity-40 touch-manipulation"
+              label={t("marshal.depart")}
+            >
+              {pending === "depart" ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                t("marshal.depart")
+              )}
+            </button>
           )}
-
           {coach.secondary.includes("delay") && !isDeparted && (
-            <ActionButton
+            <button
+              type="button"
               onClick={() => setShowDelay(true)}
-              pending={pending === "delay"}
-              icon={AlertTriangle}
-              label={t("marshal.delay")}
-              color="amber"
-            />
+              disabled={pending === "delay"}
+              className="min-h-11 px-3 py-2 rounded-xl text-sm font-semibold text-zinc-300 border border-white/[0.08] hover:border-amber-500/40 disabled:opacity-40 touch-manipulation"
+            >
+              {t("marshal.delay")}
+            </button>
           )}
-
-          {coach.secondary.includes("breakdown") && !isDeparted && (
-            <ActionButton
+          {coach.secondary.includes("breakdown") && (
+            <button
+              type="button"
               onClick={() => setShowBreakdown(true)}
-              pending={pending === "breakdown"}
-              icon={Wrench}
-              label={t("marshal.breakdown")}
-              color="red"
-            />
+              disabled={pending === "breakdown"}
+              className="min-h-11 px-3 py-2 rounded-xl text-sm font-semibold text-zinc-300 border border-white/[0.08] hover:border-rose-500/40 disabled:opacity-40 touch-manipulation"
+            >
+              {t("marshal.breakdown")}
+            </button>
           )}
-
-          {coach.secondary.includes("reset_to_waiting") &&
-            vehicle.status === "Loading" && (
-              <ActionButton
-                onClick={() => handle("reset_to_waiting")}
-                pending={pending === "reset_to_waiting"}
-                icon={RotateCcw}
-                label={t("marshal.cancel_load")}
-                color="zinc"
-              />
-            )}
+          {coach.secondary.includes("reset_to_waiting") && (
+            <button
+              type="button"
+              onClick={() => handle("reset_to_waiting")}
+              disabled={pending === "reset_to_waiting"}
+              className="min-h-11 px-3 py-2 rounded-xl text-sm font-semibold text-zinc-300 border border-white/[0.08] hover:border-white/20 disabled:opacity-40 touch-manipulation"
+            >
+              {pending === "reset_to_waiting" ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                t("marshal.cancel_load")
+              )}
+            </button>
+          )}
+          {coach.secondary.includes("load") && (
+            <button
+              type="button"
+              onClick={() => handle("load")}
+              disabled={coach.blocked || pending === "load"}
+              className="min-h-11 px-3 py-2 rounded-xl text-sm font-semibold text-zinc-300 border border-white/[0.08] hover:border-emerald-500/40 disabled:opacity-40 touch-manipulation"
+            >
+              {t("marshal.load")}
+            </button>
+          )}
         </div>
       </div>
 
       {showDelay && (
         <DelayReasonModal
           registrationNumber={vehicle.registrationNumber}
-          onCancel={() => setShowDelay(false)}
-          onConfirm={handleDelayConfirm}
+          onClose={() => setShowDelay(false)}
+          onConfirm={handleDelay}
         />
       )}
-
       {showBreakdown && (
         <BreakdownModal
           registrationNumber={vehicle.registrationNumber}
-          onCancel={() => setShowBreakdown(false)}
-          onConfirm={handleBreakdownConfirm}
+          onClose={() => setShowBreakdown(false)}
+          onConfirm={handleBreakdown}
         />
       )}
     </>
-  );
-}
-
-function ActionButton({
-  onClick,
-  pending,
-  icon: Icon,
-  label,
-  color,
-  disabled,
-}: {
-  onClick: () => void;
-  pending: boolean;
-  icon: React.ElementType;
-  label: string;
-  color: "emerald" | "blue" | "amber" | "red" | "zinc";
-  disabled?: boolean;
-}) {
-  const styles: Record<string, string> = {
-    emerald: "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600",
-    blue: "bg-sky-600 hover:bg-sky-700 text-white border-sky-600",
-    amber:
-      "bg-amber-950/40 hover:bg-amber-950/60 text-amber-200 border-amber-800",
-    red: "bg-red-950/40 hover:bg-red-950/60 text-red-200 border-red-800",
-    zinc: "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700",
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={pending || disabled}
-      className={`min-h-12 px-4 py-3 rounded-xl border text-sm font-semibold flex items-center gap-2 disabled:opacity-50 touch-manipulation ${styles[color]}`}
-    >
-      {pending ? (
-        <Loader2 className="w-4 h-4 animate-spin" />
-      ) : (
-        <Icon className="w-4 h-4" />
-      )}
-      <span>{label}</span>
-    </button>
   );
 }
