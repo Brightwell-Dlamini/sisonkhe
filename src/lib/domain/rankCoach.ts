@@ -33,21 +33,21 @@ export type RankCoachVehicle = {
   routeOrigin?: string | null;
   routeDestination?: string | null;
   seatingCapacity?: number;
+  /** Vehicle virtual card (for rank-fee coach) */
+  cardBalanceSzl?: number | null;
+  cardStatus?: string | null;
+  /** Rank fee amount in SZL (server config); defaults to 25 in coach if omitted */
+  rankFeeSzl?: number | null;
 };
 
 export type RankCoach = {
-  /** Single button the marshal should press */
   primary: MarshalAction | null;
   primaryLabel: string;
   primaryHint: string | null;
-  /** Soft warnings (still allowed) */
   warnings: string[];
-  /** Hard blockers (primary disabled) */
   blockReasons: string[];
   blocked: boolean;
-  /** Extra actions still legal (delay, breakdown, etc.) */
   secondary: MarshalAction[];
-  /** One-line coach for the rank */
   coachLine: string;
   isLead: boolean;
 };
@@ -95,6 +95,39 @@ function complianceBlocks(v: RankCoachVehicle): {
     }
   }
 
+  // Rank fee payable from vehicle card before depart / full cabin (Loading only)
+  const fee = Number(v.rankFeeSzl ?? 25);
+  const cardBal = v.cardBalanceSzl;
+  const cardSt = (v.cardStatus ?? "").trim();
+  const status = (v.status ?? "").trim();
+  const feeRelevant = status === "Loading";
+
+  if (feeRelevant && fee > 0) {
+    if (cardBal == null && !cardSt) {
+      reasons.push(
+        "No vehicle card — operator must issue and fund a card before depart."
+      );
+    } else if (
+      cardSt === "Frozen" ||
+      cardSt === "Suspended" ||
+      cardSt === "Blocked" ||
+      cardSt === "Closed" ||
+      cardSt === "Expired"
+    ) {
+      reasons.push(
+        `Vehicle card is ${cardSt} — operator must unfreeze before this kombi can depart.`
+      );
+    } else if (cardBal != null && Number(cardBal) + 1e-9 < fee) {
+      reasons.push(
+        `Card balance E${Number(cardBal).toFixed(2)} is short of rank fee E${fee.toFixed(2)} — operator must top up.`
+      );
+    } else if (cardBal != null && Number(cardBal) < fee * 2) {
+      warnings.push(
+        `Card balance E${Number(cardBal).toFixed(2)} — low after this trip.`
+      );
+    }
+  }
+
   return { reasons, warnings };
 }
 
@@ -110,49 +143,38 @@ function legalActions(status: VehicleStatus): MarshalAction[] {
   return all.filter((a) => canMarshalTransition(status, a).ok);
 }
 
-/**
- * Decide the next brilliant move for this kombi on the rank.
- */
 export function rankCoach(v: RankCoachVehicle): RankCoach {
   const status = statusOf(v);
   const isLead = v.currentQueuePosition === 1;
   const legal = legalActions(status);
   const { reasons, warnings } = complianceBlocks(v);
 
-  // Prefer one clear primary action by status
   let primary: MarshalAction | null = null;
   if (status === "Waiting" || status === "Delayed") {
     primary = "load";
   } else if (status === "Loading") {
-    // One smart depart path — full cabin is the common rank gesture
     primary = "full_cabin";
   } else if (status === "Departed" || status === "Breakdown") {
     primary = "reset_to_waiting";
   }
 
-  // If primary needs compliance and blocked, keep primary but flag blocked
   const needsCompliance =
     primary === "load" || primary === "full_cabin" || primary === "depart";
   const blocked = needsCompliance && reasons.length > 0;
 
   const secondary = legal.filter((a) => a !== primary);
-  // On Loading, keep plain depart as secondary only if not blocked
-  if (status === "Loading" && !blocked) {
-    // full_cabin is primary; depart stays secondary
-  }
 
   let primaryLabel = primary ? PRIMARY_LABEL[primary] ?? primary : "No action";
   let primaryHint: string | null = null;
 
   if (primary === "full_cabin") {
-    primaryHint = "Records rank fee · marks departed";
+    primaryHint = "Charges rank fee from vehicle card · departs";
   } else if (primary === "load" && isLead) {
     primaryHint = "You are lead — start boarding";
   } else if (primary === "load") {
     primaryHint = "Move into loading bay";
   }
 
-  // Coach line — plain English for the rank
   let coachLine: string;
   const plate = v.registrationNumber;
   const route =
@@ -203,7 +225,6 @@ export function rankCoach(v: RankCoachVehicle): RankCoach {
   };
 }
 
-/** Sort hint: lead first (already by position), then blocked last within same band. */
 export function coachSortKey(v: RankCoachVehicle): number {
   const pos = v.currentQueuePosition > 0 ? v.currentQueuePosition : 9999;
   const coach = rankCoach(v);
