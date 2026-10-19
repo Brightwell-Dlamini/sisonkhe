@@ -6,21 +6,14 @@
  *
  * Design:
  *   - Every money movement is expressed as balanced lines (debit + credit).
- *   - Lines are persisted as card transactions (or rank_fee_payments) plus
- *     an operational_audit row with action "ledger.journal.post".
- *   - This module does NOT introduce a new ledger table; it enforces
- *     balance invariants in application code so existing schema remains valid.
+ *   - Lines are persisted via operational_audit ("ledger.journal.post").
+ *   - No new ledger table required.
  *
- * Usage:
- *   await postJournal(admin, {
- *     reference: intent.clientReference,
- *     description: "Vehicle card top-up",
- *     actorId: intent.initiatedBy,
- *     lines: [
- *       { account: "cash.momo", direction: "DEBIT", amountSzl: 100 },
- *       { account: "card.vehicle:ABC123", direction: "CREDIT", amountSzl: 100 },
- *     ],
- *   });
+ * Card account codes (see src/lib/cards/policy.ts):
+ *   card.operator:{operatorId}
+ *   card.vehicle:{REG}
+ *   cash.{provider}
+ *   allocation.operational | allocation.nrtc | allocation.maintenance
  */
 
 import "server-only";
@@ -31,7 +24,6 @@ import { log } from "@/lib/observability/log";
 export type JournalDirection = "DEBIT" | "CREDIT";
 
 export interface JournalLine {
-  /** Logical account, e.g. cash.momo, card.vehicle:REG, allocation.operational */
   account: string;
   direction: JournalDirection;
   amountSzl: number;
@@ -61,9 +53,6 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/**
- * Validate that debits equal credits (within 0.01 SZL) and amounts are positive.
- */
 export function validateJournal(entry: JournalEntry): JournalPostResult {
   if (!entry.lines || entry.lines.length < 2) {
     throw new Error("Journal entry requires at least two lines");
@@ -100,11 +89,6 @@ export function validateJournal(entry: JournalEntry): JournalPostResult {
   };
 }
 
-/**
- * Post a balanced journal entry as an audit record.
- * Callers remain responsible for writing the underlying card / fee rows;
- * this ensures every money movement is accompanied by a balanced, queryable audit trail.
- */
 export async function postJournal(
   admin: SupabaseClient,
   entry: JournalEntry
@@ -143,12 +127,10 @@ export async function postJournal(
   return result;
 }
 
-/**
- * Convenience: balanced top-up journal (external cash → card liability).
- */
+/** External cash → card (top-up). */
 export function topUpJournalLines(opts: {
   provider: string;
-  cardAccount: string; // e.g. card.vehicle:REG or card.operator:ID
+  cardAccount: string;
   amountSzl: number;
 }): JournalLine[] {
   return [
@@ -165,8 +147,29 @@ export function topUpJournalLines(opts: {
   ];
 }
 
+/** Operator master → vehicle card transfer. */
+export function transferJournalLines(opts: {
+  operatorId: string;
+  vehicleReg: string;
+  amountSzl: number;
+}): JournalLine[] {
+  return [
+    {
+      account: `card.operator:${opts.operatorId}`,
+      direction: "DEBIT",
+      amountSzl: opts.amountSzl,
+    },
+    {
+      account: `card.vehicle:${opts.vehicleReg}`,
+      direction: "CREDIT",
+      amountSzl: opts.amountSzl,
+    },
+  ];
+}
+
 /**
- * Convenience: rank-fee collection with allocation split.
+ * Rank fee paid from vehicle card balance.
+ * Dr vehicle card, Cr allocation buckets (must sum to amount).
  */
 export function rankFeeJournalLines(opts: {
   amountSzl: number;
@@ -175,11 +178,17 @@ export function rankFeeJournalLines(opts: {
   splitNrtc: number;
   splitMaintenance: number;
 }): JournalLine[] {
-  const { amountSzl, vehicleReg, splitOperational, splitNrtc, splitMaintenance } =
-    opts;
+  const {
+    amountSzl,
+    vehicleReg,
+    splitOperational,
+    splitNrtc,
+    splitMaintenance,
+  } = opts;
+
   const lines: JournalLine[] = [
     {
-      account: `receivable.rank_fee:${vehicleReg}`,
+      account: `card.vehicle:${vehicleReg}`,
       direction: "DEBIT",
       amountSzl,
     },
