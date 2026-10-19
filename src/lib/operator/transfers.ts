@@ -1,6 +1,8 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Operator master → vehicle card transfer (money path of virtual cards).
  */
 
 import "server-only";
@@ -9,6 +11,8 @@ import { canTransferToVehicle } from "@/lib/domain/operatorRules";
 import { normalizePlate, plateKey } from "@/lib/domain/identity";
 import { nextReceiptNumber } from "@/lib/domain/serials";
 import { writeAudit } from "@/lib/domain/audit";
+import { postJournal, transferJournalLines } from "@/lib/ledger/journal";
+import { canReceiveFunds } from "@/lib/cards/policy";
 
 export interface TransferInput {
   operatorId: string;
@@ -91,10 +95,6 @@ export async function transferToVehicle(
     return { success: false, error: rule.reason };
   }
 
-  if (!masterCard) {
-    return { success: false, error: "Master card not found." };
-  }
-
   let { data: vehicleCard } = await admin
     .from("vehicle_virtual_cards")
     .select("id, balance_szl, status, vehicle_reg")
@@ -102,13 +102,12 @@ export async function transferToVehicle(
     .maybeSingle();
 
   if (!vehicleCard && compact) {
-    const { data: cards } = await admin
+    const { data: cardCandidates } = await admin
       .from("vehicle_virtual_cards")
       .select("id, balance_szl, status, vehicle_reg")
-      .ilike("vehicle_reg", `%${compact.slice(0, 4)}%`)
-      .limit(40);
+      .limit(80);
     vehicleCard =
-      (cards ?? []).find(
+      (cardCandidates ?? []).find(
         (c) => plateKey(String(c.vehicle_reg)) === compact
       ) ?? null;
   }
@@ -117,14 +116,20 @@ export async function transferToVehicle(
     return { success: false, error: `No card for ${canonicalReg}.` };
   }
 
-  if (vehicleCard.status !== "Active") {
+  const receiveGate = canReceiveFunds({
+    kind: "vehicle",
+    status: (vehicleCard.status as string) ?? null,
+    balanceSzl: Number(vehicleCard.balance_szl ?? 0),
+    id: vehicleCard.id as string,
+  });
+  if (!receiveGate.allowed) {
     return {
       success: false,
-      error: `Vehicle card is ${vehicleCard.status}.`,
+      error: receiveGate.reason ?? `Vehicle card cannot receive funds.`,
     };
   }
 
-  const masterBalance = Number(masterCard.balance_szl ?? 0);
+  const masterBalance = Number(masterCard!.balance_szl ?? 0);
   const vehicleBalance = Number(vehicleCard.balance_szl ?? 0);
   const now = new Date();
   const masterReceipt = await nextReceiptNumber(admin, "DISB");
@@ -132,12 +137,12 @@ export async function transferToVehicle(
 
   let driverName: string | null = null;
   if (vehicle.driver_id) {
-    const { data: drv } = await admin
+    const { data: driver } = await admin
       .from("drivers")
       .select("full_name")
       .eq("id", vehicle.driver_id as string)
       .maybeSingle();
-    driverName = (drv?.full_name as string | undefined) ?? null;
+    driverName = (driver?.full_name as string) ?? null;
   }
 
   const newMasterBalance = masterBalance - input.amountSzl;
@@ -146,7 +151,7 @@ export async function transferToVehicle(
   const { data: debited, error: masterErr } = await admin
     .from("operator_master_cards")
     .update({ balance_szl: newMasterBalance })
-    .eq("id", masterCard.id as string)
+    .eq("id", masterCard!.id as string)
     .eq("balance_szl", masterBalance)
     .select("id")
     .maybeSingle();
@@ -161,10 +166,11 @@ export async function transferToVehicle(
   const masterTxId = `tx_disb_${Date.now()}_${canonicalReg.replace(/\s+/g, "").slice(0, 6)}`;
   await admin.from("operator_card_transactions").insert({
     id: masterTxId,
-    card_id: masterCard.id as string,
+    card_id: masterCard!.id as string,
     timestamp: now.toISOString(),
     type: "VEHICLE_DISBURSEMENT",
-    description: input.description ?? `${input.category} sent to ${canonicalReg}`,
+    description:
+      input.description ?? `${input.category} sent to ${canonicalReg}`,
     target_vehicle_reg: canonicalReg,
     target_driver_name: driverName,
     category: input.category,
@@ -174,7 +180,6 @@ export async function transferToVehicle(
     status: "Completed",
   });
 
-  // Optimistic concurrency on vehicle credit (same pattern as master)
   const { data: credited, error: vehicleErr } = await admin
     .from("vehicle_virtual_cards")
     .update({ balance_szl: newVehicleBalance })
@@ -187,7 +192,7 @@ export async function transferToVehicle(
     await admin
       .from("operator_master_cards")
       .update({ balance_szl: masterBalance })
-      .eq("id", masterCard.id as string);
+      .eq("id", masterCard!.id as string);
     await admin.from("operator_card_transactions").delete().eq("id", masterTxId);
 
     return {
@@ -218,6 +223,31 @@ export async function transferToVehicle(
     summary: `Transfer E${input.amountSzl.toFixed(2)} to ${canonicalReg}`,
     meta: { masterReceipt, vehicleReceipt },
   });
+
+  try {
+    await postJournal(admin, {
+      reference: masterReceipt,
+      description: `Master → vehicle transfer E${input.amountSzl.toFixed(2)} (${canonicalReg})`,
+      actorId: input.actorUserId,
+      actorRole: "operator",
+      entityType: "vehicle",
+      entityId: canonicalReg,
+      lines: transferJournalLines({
+        operatorId: input.operatorId,
+        vehicleReg: canonicalReg,
+        amountSzl: input.amountSzl,
+      }),
+      meta: {
+        category: input.category,
+        masterReceipt,
+        vehicleReceipt,
+        masterCardId: masterCard!.id,
+        vehicleCardId: vehicleCard.id,
+      },
+    });
+  } catch (err) {
+    console.warn("transfer journal post failed", err);
+  }
 
   return {
     success: true,
