@@ -107,8 +107,8 @@ export function canCoverAmount(
 }
 
 /**
- * Rank fee at depart: vehicle card must be spendable and cover the fee
- * when policy requires pre-check (soft fail still allows depart if RPC fails later).
+ * Rank fee at depart: vehicle card must be spendable and cover the fee.
+ * Hard-block path defaults to requiring a card (depart must pay).
  */
 export function canPayRankFee(
   vehicleCard: CardSnapshot | null | undefined,
@@ -120,7 +120,8 @@ export function canPayRankFee(
     if (requireCard) {
       return {
         allowed: false,
-        reason: "Vehicle has no virtual card. Operator must issue one before rank fees.",
+        reason:
+          "No vehicle card — operator must issue and fund a card before this kombi can depart.",
       };
     }
     return { allowed: true, warning: "No vehicle card — fee may not post." };
@@ -128,10 +129,19 @@ export function canPayRankFee(
   if (isSpendBlocked(vehicleCard.status)) {
     return {
       allowed: false,
-      reason: `Vehicle card is ${vehicleCard.status}. Unfreeze or fund before depart fee.`,
+      reason: `Vehicle card is ${vehicleCard.status}. Operator must unfreeze before depart.`,
     };
   }
-  return canCoverAmount(vehicleCard, feeSzl);
+  const cover = canCoverAmount(vehicleCard, feeSzl);
+  if (!cover.allowed) {
+    return {
+      allowed: false,
+      reason:
+        cover.reason ??
+        `Insufficient card balance for rank fee (E${feeSzl.toFixed(2)}). Operator must top up.`,
+    };
+  }
+  return { allowed: true };
 }
 
 export function cardAccountCode(kind: CardKind, key: string): string {
