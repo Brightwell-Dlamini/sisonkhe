@@ -32,7 +32,6 @@ export interface MarshalVehicle {
   driverName: string | null;
   driverPhone: string | null;
   lastActive: string | null;
-  // Rank Coach inputs
   permitStatus: string | null;
   permitExpiryDate: string | null;
   cofExpiryDate: string | null;
@@ -42,6 +41,9 @@ export interface MarshalVehicle {
   driverPdpStatus: string | null;
   driverPdpExpiry: string | null;
   printPending: boolean;
+  cardBalanceSzl: number | null;
+  cardStatus: string | null;
+  rankFeeSzl: number;
 }
 
 export async function getMarshalContext(
@@ -183,22 +185,52 @@ export async function listVehiclesForMarshal(
     }
   }
 
-  // Batch print-pending: Approved renewals not yet Printed
-  const regs = vehicleList.map((v) => v.registration_number as string);
   const printPendingSet = new Set<string>();
-  if (regs.length > 0) {
-    try {
-      const { data: pending } = await admin
+  try {
+    const regs = vehicleList.map((v) => v.registration_number as string);
+    if (regs.length > 0) {
+      const { data: pendingPrint } = await admin
         .from("permit_renewal_requests")
-        .select("vehicle_reg, status")
+        .select("vehicle_reg, printed_at")
         .in("vehicle_reg", regs)
         .eq("status", "Approved");
-      for (const p of pending ?? []) {
-        printPendingSet.add(p.vehicle_reg as string);
+      for (const r of pendingPrint ?? []) {
+        if (!(r as { printed_at?: string | null }).printed_at) {
+          printPendingSet.add(r.vehicle_reg as string);
+        }
       }
-    } catch {
-      /* ignore */
     }
+  } catch {
+    /* optional */
+  }
+
+  // Virtual cards for rank-fee coach (operator funds · vehicle pays)
+  const regsAll = vehicleList.map((v) => v.registration_number as string);
+  const cardMap = new Map<string, { balance: number; status: string }>();
+  if (regsAll.length > 0) {
+    const { data: cards } = await admin
+      .from("vehicle_virtual_cards")
+      .select("vehicle_reg, balance_szl, status")
+      .in("vehicle_reg", regsAll);
+    for (const c of cards ?? []) {
+      cardMap.set(c.vehicle_reg as string, {
+        balance: Number(c.balance_szl ?? 0),
+        status: (c.status as string) ?? "Active",
+      });
+    }
+  }
+
+  let rankFeeSzl = 25;
+  try {
+    const { data: feeRow } = await admin
+      .from("system_config")
+      .select("value_json")
+      .eq("key", "rank_fee")
+      .maybeSingle();
+    const v = feeRow?.value_json as { rankFee?: number } | null;
+    if (v && Number(v.rankFee) > 0) rankFeeSzl = Number(v.rankFee);
+  } catch {
+    /* default */
   }
 
   return vehicleList.map((v) => {
@@ -234,6 +266,9 @@ export async function listVehiclesForMarshal(
       driverPdpStatus: driver?.pdpStatus ?? null,
       driverPdpExpiry: driver?.pdpExpiry ?? null,
       printPending: printPendingSet.has(reg),
+      cardBalanceSzl: cardMap.get(reg)?.balance ?? null,
+      cardStatus: cardMap.get(reg)?.status ?? null,
+      rankFeeSzl,
     };
   });
 }
@@ -278,20 +313,25 @@ export async function getMarshalSummary(
     };
   }
 
-  const { data: vehicles } = await admin
+  const { data: live } = await admin
     .from("vehicles")
     .select("status, current_queue_position")
     .in("route_assignment_id", routeIds)
     .neq("status", "Offline")
     .neq("status", "Archived");
 
-  const vehicleList = vehicles ?? [];
-  const activeQueueLength = vehicleList.filter(
-    (v) => (v.current_queue_position as number) > 0
-  ).length;
-  const delayedCount = vehicleList.filter((v) => v.status === "Delayed").length;
-  const loadingCount = vehicleList.filter((v) => v.status === "Loading").length;
-  const waitingCount = vehicleList.filter((v) => v.status === "Waiting").length;
+  let activeQueueLength = 0;
+  let delayedCount = 0;
+  let loadingCount = 0;
+  let waitingCount = 0;
+  for (const v of live ?? []) {
+    const st = v.status as string;
+    const pos = (v.current_queue_position as number) ?? 0;
+    if (pos > 0) activeQueueLength += 1;
+    if (st === "Delayed") delayedCount += 1;
+    if (st === "Loading") loadingCount += 1;
+    if (st === "Waiting") waitingCount += 1;
+  }
 
   return {
     dispatchedToday,
@@ -301,38 +341,4 @@ export async function getMarshalSummary(
     loadingCount,
     waitingCount,
   };
-}
-
-export interface MarshalActivityItem {
-  id: string;
-  timestamp: string;
-  vehicleReg: string;
-  triggerSource: string;
-  amountSzl: number;
-}
-
-export async function getMarshalActivity(
-  context: MarshalContext,
-  limit: number = 10
-): Promise<MarshalActivityItem[]> {
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from("marshal_transactions")
-    .select("id, timestamp, vehicle_reg, trigger_source, amount_szl")
-    .eq("marshal_id", context.marshalId)
-    .order("timestamp", { ascending: false })
-    .limit(limit);
-
-  if (error) {
-    console.error("[marshal/queries] activity error:", error);
-    return [];
-  }
-
-  return (data ?? []).map((row) => ({
-    id: row.id as string,
-    timestamp: row.timestamp as string,
-    vehicleReg: row.vehicle_reg as string,
-    triggerSource: row.trigger_source as string,
-    amountSzl: Number(row.amount_szl ?? 0),
-  }));
 }
