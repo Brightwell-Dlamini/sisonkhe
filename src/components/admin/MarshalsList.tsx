@@ -122,7 +122,7 @@ export default function MarshalsList() {
 
   function MarshalActions({ m }: { m: MarshalRow }) {
     return (
-      <div className="flex items-center gap-1">
+      <div className="flex items-center justify-end gap-1">
         {!m.authUserId && (
           <IconButton
             icon={issuingId === m.id ? Loader2 : KeyRound}
@@ -153,7 +153,7 @@ export default function MarshalsList() {
     <div>
       <PageHeader
         title="Rank marshals"
-        description="Field portal collects identity. Issue login, then assign region, terminal, and corridor."
+        description="Issue login, then assign region and terminal."
       />
 
       <div className="surface-raised p-3 mb-4">
@@ -161,7 +161,7 @@ export default function MarshalsList() {
           <div className="flex-1 min-w-0">
             <Input
               leadingIcon={Search}
-              placeholder="Search by name, phone, ID, region…"
+              placeholder="Name, phone, ID, region…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -199,7 +199,7 @@ export default function MarshalsList() {
               ? "Check the error above or try Refresh."
               : search
                 ? "Try a different search."
-                : "Marshals enrol via the field portal, then you issue login and assign a rank post."
+                : "Marshals enrol via the field portal. Issue login and assign a post."
           }
         />
       ) : (
@@ -250,19 +250,21 @@ export default function MarshalsList() {
             <Table>
               <TableHead>
                 <Tr>
-                  <Th>Marshal</Th>
-                  <Th>Contact</Th>
-                  <Th>Region / Terminal</Th>
-                  <Th>Login</Th>
-                  <Th>Status</Th>
-                  <Th className="text-right">Actions</Th>
+                  <Th className="w-[22%]">Marshal</Th>
+                  <Th className="w-[18%]">Contact</Th>
+                  <Th className="w-[22%]">Region / Terminal</Th>
+                  <Th className="w-[12%]">Login</Th>
+                  <Th className="w-[12%]">Status</Th>
+                  <Th align="right" className="w-[14%]">
+                    Actions
+                  </Th>
                 </Tr>
               </TableHead>
               <TableBody>
                 {filtered.map((m) => (
                   <Tr key={m.id}>
                     <Td>
-                      <div className="text-sm font-semibold text-white">
+                      <div className="text-sm font-semibold text-white truncate">
                         {m.fullName}
                       </div>
                       {m.staffNumber && (
@@ -302,10 +304,8 @@ export default function MarshalsList() {
                         {m.isActive ? "Active" : "Inactive"}
                       </Badge>
                     </Td>
-                    <Td>
-                      <div className="flex items-center justify-end">
-                        <MarshalActions m={m} />
-                      </div>
+                    <Td align="right">
+                      <MarshalActions m={m} />
                     </Td>
                   </Tr>
                 ))}
