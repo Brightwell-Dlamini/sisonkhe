@@ -1,7 +1,7 @@
 import React from "react";
-import { Printer, Download, X, Award, ShieldCheck, CheckCircle } from "lucide-react";
+import { Printer, X, Award, ShieldCheck, CheckCircle } from "lucide-react";
 import { Vehicle, Route, Driver } from "../../types";
-import { getAppBaseUrl } from "@/lib/appUrl";
+import SignedQRCode from "@/components/qr/SignedQRCode";
 
 interface A4PermitPrintModalProps {
   vehicle: Vehicle;
@@ -18,7 +18,6 @@ export default function A4PermitPrintModal({
 }: A4PermitPrintModalProps) {
   const routeObj = routes.find(r => r.id === vehicle.routeAssignmentId);
   const driverObj = drivers.find(d => d.id === vehicle.driverId || d.assignedVehicleReg === vehicle.registrationNumber);
-  const qrTargetUrl = `${getAppBaseUrl()}/verify?reg=${encodeURIComponent(vehicle.registrationNumber)}`;
 
   const handlePrint = () => {
     window.print();
@@ -28,7 +27,6 @@ export default function A4PermitPrintModal({
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-white print:static">
       <div className="bg-white text-zinc-900 border border-zinc-300 rounded-3xl max-w-3xl w-full p-8 shadow-2xl space-y-6 my-8 print:shadow-none print:border-none print:p-0 print:m-0">
         
-        {/* Modal Controls (Hidden in Print) */}
         <div className="flex items-center justify-between pb-4 border-b border-zinc-200 print:hidden">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-emerald-600" />
@@ -53,9 +51,7 @@ export default function A4PermitPrintModal({
           </div>
         </div>
 
-        {/* Official Document Content */}
         <div className="space-y-6 print:space-y-4">
-          {/* Header Crest Area */}
           <div className="text-center space-y-1 border-b-2 border-emerald-700 pb-4">
             <div className="flex justify-center mb-2">
               <Award className="w-12 h-12 text-emerald-700" />
@@ -71,7 +67,6 @@ export default function A4PermitPrintModal({
             </p>
           </div>
 
-          {/* Vehicle Identity Block */}
           <div className="grid grid-cols-2 gap-4 bg-zinc-50 border border-zinc-200 rounded-2xl p-4">
             <div>
               <div className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider">Registration</div>
@@ -91,7 +86,6 @@ export default function A4PermitPrintModal({
             </div>
           </div>
 
-          {/* Two-Column Specification & QR Area */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-3 text-sm">
               <div>
@@ -115,20 +109,26 @@ export default function A4PermitPrintModal({
                 <div className="text-[10px] font-bold uppercase text-zinc-400">COF Expiry</div>
                 <div className="font-semibold text-zinc-800">{vehicle.cofExpiryDate || "—"}</div>
               </div>
+              <div className="text-[10px] text-zinc-500 pt-2">
+                Human-readable plate and permit number remain authoritative if the QR cannot be read.
+              </div>
             </div>
 
-            {/* Right col: High-Resolution QR Decal & Concession Seal */}
             <div className="flex flex-col items-center justify-center border border-zinc-200 rounded-2xl p-4 bg-zinc-50">
               <div className="text-[10px] font-black uppercase tracking-widest text-emerald-800 mb-2">
                 OFFICIAL CRYPTOGRAPHIC QR
               </div>
-              <img
-                className="w-40 h-40 border border-zinc-300 rounded-lg bg-white p-1"
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=2&ecc=M&color=000000&bgcolor=ffffff&data=${encodeURIComponent(qrTargetUrl)}`}
-                alt="Permit QR"
+              <SignedQRCode
+                registrationNumber={vehicle.registrationNumber}
+                size={180}
+                showRefreshButton={false}
               />
               <div className="mt-2 text-[9px] text-zinc-500 text-center max-w-[12rem]">
-                Scan to verify vehicle standing on the Sisonkhe network
+                Signed token · scan to verify live standing
+              </div>
+              <div className="mt-1 font-mono text-[10px] font-bold text-zinc-800">
+                {vehicle.registrationNumber}
+                {vehicle.permitNumber ? ` · ${vehicle.permitNumber}` : ""}
               </div>
             </div>
           </div>
