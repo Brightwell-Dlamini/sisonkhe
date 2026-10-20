@@ -30,8 +30,13 @@ export function getAppBaseUrl(): string {
   return "http://localhost:3000";
 }
 
-/** Public cryptographic verify page for a signed vehicle QR token. */
+/**
+ * Public cryptographic verify page for a signed QR token.
+ * Token lives in the URL *hash* so ordinary access logs / analytics
+ * do not record the full credential. The page reads location.hash and POSTs.
+ * Query-string ?token= is still accepted for older printed codes.
+ */
 export function buildQrVerifyUrl(token: string): string {
   const base = getAppBaseUrl();
-  return `${base}/verify?token=${encodeURIComponent(token)}`;
+  return `${base}/verify#t=${encodeURIComponent(token)}`;
 }
