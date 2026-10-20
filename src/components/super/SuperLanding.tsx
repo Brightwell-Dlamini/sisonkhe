@@ -4,28 +4,49 @@ import Link from "next/link";
 import {
   Activity,
   Shield,
-  AlertOctagon,
-  Cpu,
-  FileText,
   Settings,
   Database,
-  HardDrive,
   Megaphone,
-  Search,
   ChevronRight,
 } from "lucide-react";
 
 const LINKS = [
-  { href: "/admin/super/analytics", label: "Live Analytics", desc: "Real-time operations data", icon: Activity },
-  { href: "/admin/super/security", label: "Security Centre", desc: "Threats and IP lists", icon: Shield },
-  { href: "/admin/super/errors", label: "Error Hub", desc: "System exception log", icon: AlertOctagon },
-  { href: "/admin/super/telemetry", label: "Telemetry", desc: "Server and DB metrics", icon: Cpu },
-  { href: "/admin/audits", label: "Audit Log", desc: "Full activity trail", icon: FileText },
-  { href: "/admin/super/config", label: "System Config", desc: "Themes and timers", icon: Settings },
-  { href: "/admin/super/recovery", label: "Disaster Recovery", desc: "Snapshots and restore", icon: Database },
-  { href: "/admin/super/storage", label: "Storage Usage", desc: "Row counts per table", icon: HardDrive },
-  { href: "/admin/super/adverts", label: "Advertisements", desc: "Kiosk sponsored content", icon: Megaphone },
-  { href: "/admin/super/assistant", label: "Ops Query", desc: "Status and inventory lookup", icon: Search },
+  {
+    href: "/admin/super/analytics",
+    label: "Live Analytics",
+    desc: "National ops snapshot",
+    icon: Activity,
+  },
+  {
+    href: "/admin/super/security",
+    label: "Security Centre",
+    desc: "Threats and IP lists",
+    icon: Shield,
+  },
+  {
+    href: "/super/invariants",
+    label: "Invariants",
+    desc: "Reconciliation and drift",
+    icon: Activity,
+  },
+  {
+    href: "/admin/config",
+    label: "Rank Config",
+    desc: "Fees and operational settings",
+    icon: Settings,
+  },
+  {
+    href: "/admin/super/adverts",
+    label: "Adverts",
+    desc: "Kiosk sponsored content",
+    icon: Megaphone,
+  },
+  {
+    href: "/admin/super/recovery",
+    label: "Snapshots",
+    desc: "App data backup and restore",
+    icon: Database,
+  },
 ];
 
 export default function SuperLanding() {
@@ -33,10 +54,11 @@ export default function SuperLanding() {
     <div className="space-y-4">
       <header>
         <h1 className="text-xl font-black text-white uppercase tracking-tight">
-          Super Admin Control Centre
+          Super Admin
         </h1>
         <p className="text-xs text-zinc-500 mt-1">
-          National platform oversight, diagnostics, and disaster recovery.
+          Domain controls only. Server, deploy, and DB metrics live in Vercel /
+          Hostinger / Supabase.
         </p>
       </header>
 
