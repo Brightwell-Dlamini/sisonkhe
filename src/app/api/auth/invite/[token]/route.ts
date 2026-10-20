@@ -35,7 +35,7 @@ export const GET = withApiHandler(async (request: NextRequest, ctx: Ctx) => {
 
   const { token } = await ctx.params;
   const result = await peekClaimToken(decodeURIComponent(token));
-  if (!result.ok) {
+  if (result.ok === false) {
     throw AppError.validation(result.reason);
   }
 
@@ -62,7 +62,9 @@ export const POST = withApiHandler(async (request: NextRequest, ctx: Ctx) => {
   const { token } = await ctx.params;
   const body = await request.json().catch(() => ({}));
   const password = String((body as { password?: string }).password ?? "");
-  const confirm = String((body as { confirmPassword?: string }).confirmPassword ?? "");
+  const confirm = String(
+    (body as { confirmPassword?: string }).confirmPassword ?? ""
+  );
 
   if (password.length < 8) {
     throw AppError.validation("Password must be at least 8 characters.");
@@ -75,7 +77,7 @@ export const POST = withApiHandler(async (request: NextRequest, ctx: Ctx) => {
     decodeURIComponent(token),
     password
   );
-  if (!consumed.ok) {
+  if (consumed.ok === false) {
     throw AppError.validation(consumed.reason);
   }
 
