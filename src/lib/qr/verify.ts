@@ -118,7 +118,7 @@ async function finish(
   const payload = "payload" in result ? result.payload : undefined;
   void logQrScan({
     valid: result.valid,
-    reason: result.valid ? null : result.reason,
+    reason: result.valid === false ? result.reason : null,
     entityType: result.valid
       ? result.entityType
       : result.entityType ?? (payload ? payload.t : null),
