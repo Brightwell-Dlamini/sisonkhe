@@ -621,73 +621,67 @@ export async function applyDispatchAction(
       );
 
       if (!feeGate.allowed) {
-        log.warn("dispatch.depart_blocked_fee", {
-          vehicleReg: reg,
-          reason: feeGate.reason,
-        });
         return {
           success: false,
-          error: feeGate.reason ?? "Vehicle card cannot pay the rank fee.",
+          error: feeGate.reason ?? "Vehicle card cannot cover rank fee.",
           smartRecommendation,
         };
       }
 
-      const oldPos = vehicle.currentQueuePosition;
-      const payload = { status: "Departed", current_queue_position: 0 };
+      const fromPos = vehicle.currentQueuePosition;
+      const payload = {
+        status: "Departed",
+        current_queue_position: 0,
+        last_departed_at: nowIso,
+      };
       const up = await optimisticUpdate(reg, vehicle.version, payload, nowIso);
       if (!up.ok) return { success: false, error: up.error };
 
-      const trigger =
-        action === "full_cabin" ? "Full Cabin Button" : "Depart Button";
-      const fee = await writeRankFee(context, reg, trigger);
+      await shiftQueue(vehicle.routeId, fromPos);
+      await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
+      await consumeDriverSignals(reg);
 
-      await shiftQueue(vehicle.routeId, oldPos);
-
-      const estimated = passengerCount == null || !(passengerCount > 0);
+      const fee = await writeRankFee(context, reg, action);
+      const estimated =
+        passengerCount == null || passengerCount <= 0;
       await recordTrip(
-        { ...vehicle, reg },
+        vehicle,
         nowIso,
         { passengerCount: passengerCount ?? null, estimated }
       );
-      await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
-      await consumeDriverSignals(reg);
+
       await writeAudit(admin, {
         action: "dispatch.depart",
         actorId: context.marshalId,
         actorRole: "marshal",
         entityType: "vehicle",
         entityId: reg,
-        summary: `Depart ${reg}`,
+        summary: `Depart ${reg}${reason ? ` — ${reason}` : ""}`,
         meta: {
-          estimatedPassengers: estimated,
+          action,
+          passengerCount: passengerCount ?? null,
           rankFeeWritten: fee.written,
-          rankFeeAmount: feeCfg.rankFee,
         },
       });
-
-      const feeWarn =
-        !fee.written && fee.error
-          ? `Departed, but fee post failed: ${fee.error}`
-          : !fee.written
-            ? "Departed, but rank fee was not recorded — check ledger."
-            : undefined;
 
       return {
         success: true,
         newStatus: "Departed",
         rankFeeWritten: fee.written,
-        warning: feeWarn ?? gate.warning,
+        warning: fee.error,
         revenueEstimated: estimated,
         smartRecommendation,
       };
     }
 
     case "delay": {
-      const payload = { status: "Delayed" as const };
+      const payload = {
+        status: "Delayed",
+        delay_reason: reason ?? null,
+      };
       const up = await optimisticUpdate(reg, vehicle.version, payload, nowIso);
       if (!up.ok) return { success: false, error: up.error };
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
-      await consumeDriverSignals(reg);
       await writeAudit(admin, {
         action: "dispatch.delay",
         actorId: context.marshalId,
@@ -700,18 +694,15 @@ export async function applyDispatchAction(
     }
 
     case "breakdown": {
-      const oldPos = vehicle.currentQueuePosition;
       const payload = {
-        status: "Breakdown" as const,
+        status: "Breakdown",
+        delay_reason: reason ?? "breakdown",
         current_queue_position: 0,
       };
       const up = await optimisticUpdate(reg, vehicle.version, payload, nowIso);
       if (!up.ok) return { success: false, error: up.error };
-
-      await shiftQueue(vehicle.routeId, oldPos);
-
+      await shiftQueue(vehicle.routeId, vehicle.currentQueuePosition);
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
-      await consumeDriverSignals(reg);
       await writeAudit(admin, {
         action: "dispatch.breakdown",
         actorId: context.marshalId,
@@ -734,7 +725,7 @@ export async function applyDispatchAction(
       if (!up.ok) return { success: false, error: up.error };
       await logSyncEvent(reg, "UPDATE", payload, vehicle.version, clientId);
       await writeAudit(admin, {
-        action: "dispatch.reset_to_waiting",
+        action: "dispatch.reset",
         actorId: context.marshalId,
         actorRole: "marshal",
         entityType: "vehicle",
