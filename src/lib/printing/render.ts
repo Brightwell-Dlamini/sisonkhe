@@ -14,12 +14,18 @@ import QRCode from "qrcode";
 import type { PermitDocument } from "./permit";
 
 function esc(value: unknown): string {
+  // Built via concatenation so HTML entity text is not decoded by transport layers
+  const amp = "&" + "amp;";
+  const lt = "&" + "lt;";
+  const gt = "&" + "gt;";
+  const quot = "&" + "quot;";
+  const apos = "&#" + "39;";
   return String(value ?? "")
-    .replace(/&/g, "&")
-    .replace(/</g, "<")
-    .replace(/>/g, ">")
-    .replace(/"/g, """)
-    .replace(/'/g, "&#39;");
+    .replace(/&/g, amp)
+    .replace(/</g, lt)
+    .replace(/>/g, gt)
+    .replace(/"/g, quot)
+    .replace(/'/g, apos);
 }
 
 async function renderQrSvg(data: string, sizePx: number = 200): Promise<string> {
@@ -205,7 +211,7 @@ export async function renderPermitHtml(doc: PermitDocument): Promise<string> {
   }
   .watermark svg { width: 60%; height: 60%; }
 
-  .permit-header { text-align: center; padding-bottom: 4mm; border-top: 0; border-bottom: 2px solid #065f46; position: relative; z-index: 1; }
+  .permit-header { text-align: center; padding-bottom: 4mm; border-bottom: 2px solid #065f46; position: relative; z-index: 1; }
   .kingdom { font-size: 9pt; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; color: #065f46; }
   .ministry { font-size: 16pt; font-weight: 900; text-transform: uppercase; color: #111; margin-top: 2mm; letter-spacing: -0.01em; }
   .board { font-size: 10pt; font-weight: 700; text-transform: uppercase; color: #333; margin-top: 1mm; }
