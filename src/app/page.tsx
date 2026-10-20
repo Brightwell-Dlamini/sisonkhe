@@ -77,7 +77,7 @@ export default function HomePage() {
             What do you need?
           </h1>
           <p className="mt-2 text-xs text-zinc-500">
-            National taxi rank management · Kingdom of Eswatini
+            Taxi rank management · Eswatini
           </p>
         </div>
 
@@ -95,7 +95,7 @@ export default function HomePage() {
                   Rank & route info
                 </div>
                 <p className="mt-1 text-xs text-zinc-500">
-                  Live departures, routes, and public transport updates — no login.
+                  Live departures and routes. No login.
                 </p>
                 <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
                   Open kiosk <ArrowRight className="h-3.5 w-3.5" />
@@ -114,7 +114,7 @@ export default function HomePage() {
                   Account access
                 </div>
                 <p className="mt-1 text-xs text-zinc-500">
-                  Drivers, marshals, operators, and staff.
+                  Drivers, marshals, operators, staff.
                 </p>
                 <div className="mt-3 flex flex-col gap-2">
                   <Link
@@ -128,14 +128,13 @@ export default function HomePage() {
                     href="/register/driver"
                     className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-[11px] font-bold text-zinc-200 hover:border-emerald-500/40"
                   >
-                    New driver — register profile
+                    New driver — register
                   </Link>
                   <p className="text-[10px] text-zinc-500 text-center">
-                    Got an invite link from your admin? Open it from WhatsApp — or{" "}
+                    Invite link lost?{" "}
                     <Link href="/claim" className="text-emerald-400 font-bold hover:underline">
-                      verify with ID
-                    </Link>{" "}
-                    if the link was lost.
+                      Verify with ID
+                    </Link>
                   </p>
                 </div>
               </div>
@@ -155,7 +154,7 @@ export default function HomePage() {
                   Check a vehicle
                 </div>
                 <p className="mt-1 text-xs text-zinc-500">
-                  Scan or open a permit QR to verify registration details.
+                  Scan permit QR or look up registration.
                 </p>
                 <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
                   Verify permit <ArrowRight className="h-3.5 w-3.5" />
