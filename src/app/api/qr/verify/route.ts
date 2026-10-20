@@ -36,7 +36,7 @@ function resolveToken(raw: string): string {
   const parsed = parseQrScanInput(raw);
   if (parsed.kind === "token") return parsed.token;
   throw AppError.validation(
-    "Provide a signed QR token (v1.…) or a verify URL containing ?token=."
+    "Provide a signed QR token (v1.… or v2.…) or a verify URL containing the token."
   );
 }
 
@@ -75,7 +75,10 @@ export const POST = withApiHandler(async (request: NextRequest) => {
 });
 
 export const GET = withApiHandler(async (request: NextRequest) => {
-  const raw = request.nextUrl.searchParams.get("token") ?? "";
+  const raw =
+    request.nextUrl.searchParams.get("token") ??
+    request.nextUrl.searchParams.get("t") ??
+    "";
   if (!raw) throw AppError.validation("Missing token param.");
 
   const token = resolveToken(raw);
