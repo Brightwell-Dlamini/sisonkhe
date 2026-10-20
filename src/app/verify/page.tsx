@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Public QR verification page. Anonymous access.
+ * Token from #t=… (preferred) or ?token=… (legacy prints).
  */
 
 "use client";
@@ -18,13 +19,13 @@ import {
   Car,
   FileText,
   Calendar,
-  QrCode,
-  LogIn,
   User,
   Building2,
+  WifiOff,
 } from "lucide-react";
 import BrandMark from "@/components/common/BrandMark";
-import { RoleGuidance } from "@/components/common/RoleGuidance";
+import { tokenFromLocation } from "@/lib/qr/parse";
+import { localVerifyQrToken } from "@/lib/qr/localVerify";
 
 interface VerifyResult {
   valid: boolean;
@@ -36,27 +37,74 @@ interface VerifyResult {
   permitStatus?: string;
   permitExpiry?: string | null;
   issuedAt?: string;
+  tokenVersion?: string;
+  offline?: boolean;
+  offlineNote?: string;
 }
 
 function VerifyInner() {
   const searchParams = useSearchParams();
-  const token = searchParams.get("token") ?? "";
-
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const fromQuery = searchParams.get("token") ?? searchParams.get("t") ?? "";
+    const token =
+      tokenFromLocation(
+        typeof window !== "undefined" ? window.location.search : "",
+        typeof window !== "undefined" ? window.location.hash : ""
+      ) || fromQuery;
+
     if (!token) {
       setResult({
         valid: false,
         reason: "MALFORMED",
-        message: "No token provided in URL. Scan an official signed QR.",
+        message: "No token. Scan an official signed QR.",
       });
       setLoading(false);
       return;
     }
 
     const run = async () => {
+      // 1) Offline / local signature + snapshot (works without network for v2)
+      let localNote: string | undefined;
+      try {
+        const local = await localVerifyQrToken(token);
+        if (!local.ok && local.reason === "BAD_SIGNATURE") {
+          setResult({
+            valid: false,
+            reason: "BAD_SIGNATURE",
+            message: local.message,
+          });
+          setLoading(false);
+          return;
+        }
+        if (local.ok) {
+          localNote = local.note;
+          // If offline, show snapshot immediately while live check runs / fails
+          if (typeof navigator !== "undefined" && !navigator.onLine) {
+            setResult({
+              valid: local.signatureValid === true,
+              reason: local.signatureValid ? undefined : "MALFORMED",
+              message: local.note,
+              entityType: local.payload.t,
+              summary: local.snapshot,
+              issuedAt: local.issuedAt,
+              tokenVersion: local.tokenVersion,
+              offline: true,
+              offlineNote: local.note,
+              permitStatus: local.snapshot.statusSnapshot ?? undefined,
+              permitExpiry: local.snapshot.expirySnapshot ?? null,
+            });
+            setLoading(false);
+            return;
+          }
+        }
+      } catch {
+        // continue to network path
+      }
+
+      // 2) Live registry check
       try {
         const res = await fetch("/api/qr/verify", {
           method: "POST",
@@ -64,19 +112,45 @@ function VerifyInner() {
           body: JSON.stringify({ token, source: "public-verify-page" }),
         });
         const data = await res.json();
-        setResult(data.data ?? data);
+        const body = data.data ?? data;
+        setResult({ ...body, offlineNote: localNote });
       } catch {
-        setResult({
-          valid: false,
-          reason: "MALFORMED",
-          message: "Network error during verification.",
-        });
+        // Network failed — try to surface local snapshot if we have one
+        try {
+          const local = await localVerifyQrToken(token);
+          if (local.ok) {
+            setResult({
+              valid: local.signatureValid === true,
+              message: local.note,
+              entityType: local.payload.t,
+              summary: local.snapshot,
+              issuedAt: local.issuedAt,
+              tokenVersion: local.tokenVersion,
+              offline: true,
+              offlineNote: local.note,
+              permitStatus: local.snapshot.statusSnapshot ?? undefined,
+              permitExpiry: local.snapshot.expirySnapshot ?? null,
+            });
+          } else {
+            setResult({
+              valid: false,
+              reason: "MALFORMED",
+              message: "Network error during verification.",
+            });
+          }
+        } catch {
+          setResult({
+            valid: false,
+            reason: "MALFORMED",
+            message: "Network error during verification.",
+          });
+        }
       } finally {
         setLoading(false);
       }
     };
     void run();
-  }, [token]);
+  }, [searchParams]);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-[#050505] flex items-center justify-center px-4 py-8">
@@ -98,6 +172,13 @@ function VerifyInner() {
           </div>
         )}
 
+        {!loading && result && result.offline && (
+          <div className="mb-3 flex items-center gap-2 rounded-xl border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-200">
+            <WifiOff className="w-3.5 h-3.5 shrink-0" />
+            <span>{result.offlineNote ?? "Offline — signature/snapshot only. Live status needs network."}</span>
+          </div>
+        )}
+
         {!loading && result && result.valid && (
           <div className="bg-white dark:bg-zinc-900 border-2 border-emerald-500 rounded-2xl overflow-hidden">
             <div className="bg-emerald-50 dark:bg-emerald-950/40 p-5 border-b border-emerald-200 dark:border-emerald-800">
@@ -107,7 +188,7 @@ function VerifyInner() {
                 </div>
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
-                    Verified Authentic
+                    {result.offline ? "Signature Valid (Offline)" : "Verified Authentic"}
                   </div>
                   <div className="text-base font-black uppercase text-emerald-900 dark:text-emerald-100">
                     {titleForEntity(result.entityType)}
@@ -147,13 +228,13 @@ function VerifyInner() {
                   <Row
                     icon={<CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                     label="Status"
-                    value={str(result.permitStatus ?? result.summary?.status)}
+                    value={str(result.permitStatus ?? result.summary?.status ?? result.summary?.statusSnapshot)}
                   />
-                  {result.permitExpiry && (
+                  {(result.permitExpiry || result.summary?.expiry || result.summary?.expirySnapshot) && (
                     <Row
                       icon={<Calendar className="w-4 h-4 text-zinc-400" />}
                       label="Expires"
-                      value={result.permitExpiry}
+                      value={str(result.permitExpiry ?? result.summary?.expiry ?? result.summary?.expirySnapshot)}
                       mono
                     />
                   )}
@@ -191,13 +272,13 @@ function VerifyInner() {
                   <Row
                     icon={<CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                     label="PDP"
-                    value={str(result.summary?.pdpStatus)}
+                    value={str(result.summary?.pdpStatus ?? result.summary?.pdpStatusSnapshot)}
                   />
-                  {result.summary?.pdpExpiry && (
+                  {(result.summary?.pdpExpiry || result.summary?.pdpExpirySnapshot) && (
                     <Row
                       icon={<Calendar className="w-4 h-4 text-zinc-400" />}
                       label="PDP expires"
-                      value={result.summary.pdpExpiry}
+                      value={str(result.summary?.pdpExpiry ?? result.summary?.pdpExpirySnapshot)}
                       mono
                     />
                   )}
@@ -262,35 +343,8 @@ function VerifyInner() {
           </div>
         )}
 
-        <div className="mt-6">
-          <RoleGuidance
-            title="Quick actions"
-            className="border-zinc-200 bg-white text-zinc-900 shadow-sm dark:border-white/[0.08] dark:bg-[#0F0F10] dark:text-white"
-            items={[
-              {
-                label: "Scan again",
-                detail: "Open a fresh verification for another official QR.",
-                href: "/verify",
-                icon: QrCode,
-              },
-              {
-                label: "Staff sign-in",
-                detail: "Operator and marshal dashboards for live operations.",
-                href: "/login",
-                icon: LogIn,
-              },
-              {
-                label: "Public kiosk",
-                detail: "Live public transport board.",
-                href: "/kiosk",
-                icon: ShieldCheck,
-              },
-            ]}
-          />
-        </div>
-
         <div className="mt-6 text-center text-[10px] text-zinc-400">
-          Cryptographic verification by Sisonkhe In Transit · NRTC
+          Cryptographic verification · Sisonkhe · NRTC
         </div>
       </div>
     </div>
