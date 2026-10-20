@@ -78,7 +78,7 @@ export default function MarshalDashboard() {
     <div className="space-y-4">
       <FirstRunWizard
         role="marshal"
-        userId={user?.id}
+        userId={user?.authUserId}
         displayName={context.fullName}
       />
 
@@ -100,71 +100,75 @@ export default function MarshalDashboard() {
       {summary && <SummaryCards summary={summary} />}
 
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-title">Live queue</h2>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wide">
+          Live queue
+        </h2>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setShowMore((v) => !v)}
-            className="min-h-11 px-3.5 bg-white/[0.06] text-zinc-200 rounded-xl text-sm font-semibold flex items-center gap-1.5 touch-manipulation"
+            onClick={() => setShowAddVehicle(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 px-3 py-2 text-xs font-bold min-h-10"
           >
-            <MoreHorizontal className="w-4 h-4" />
-            More
+            <Plus className="w-4 h-4" />
+            Add
           </button>
           <button
             type="button"
-            onClick={() => setShowAddVehicle(true)}
-            className="min-h-11 px-3.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-sm font-bold flex items-center gap-1.5 touch-manipulation"
+            onClick={() => setShowMore((v) => !v)}
+            className="inline-flex items-center justify-center rounded-xl border border-white/[0.08] text-zinc-400 w-10 h-10"
+            aria-label="More"
           >
-            <Plus className="w-4 h-4" />
-            Add vehicle
+            <MoreHorizontal className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {showMore && (
-        <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-xl border border-white/[0.06] bg-[#0F0F10] p-3 flex flex-wrap gap-2">
           <Link
             href="/marshal/comms"
-            className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center text-sm font-semibold text-zinc-200 hover:border-emerald-500/40 min-h-11 flex flex-col items-center justify-center gap-1"
+            className="inline-flex items-center gap-1.5 text-xs text-zinc-300 px-3 py-2 rounded-lg bg-white/[0.04] min-h-10"
           >
-            <MessageSquare className="w-4 h-4 text-emerald-400" />
-            Comms
+            <MessageSquare className="w-3.5 h-3.5" /> Comms
           </Link>
           <Link
             href="/marshal/queue"
-            className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center text-sm font-semibold text-zinc-200 hover:border-emerald-500/40 min-h-11 flex flex-col items-center justify-center gap-1"
+            className="inline-flex items-center gap-1.5 text-xs text-zinc-300 px-3 py-2 rounded-lg bg-white/[0.04] min-h-10"
           >
-            <Calendar className="w-4 h-4 text-emerald-400" />
-            30-day
+            <Calendar className="w-3.5 h-3.5" /> Full queue
           </Link>
           <Link
             href="/marshal/settings"
-            className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center text-sm font-semibold text-zinc-200 hover:border-emerald-500/40 min-h-11 flex flex-col items-center justify-center gap-1"
+            className="inline-flex items-center gap-1.5 text-xs text-zinc-300 px-3 py-2 rounded-lg bg-white/[0.04] min-h-10"
           >
-            <Settings className="w-4 h-4 text-emerald-400" />
-            Settings
+            <Settings className="w-3.5 h-3.5" /> Settings
           </Link>
         </div>
       )}
 
       <QueueList
         vehicles={vehicles}
-        onDispatch={dispatch}
+        onDispatch={async (reg, status) => {
+          const res = await dispatch(reg, status);
+          if (res.success) showToast(`${reg} → ${status}`);
+          else showToast(res.error || "Dispatch failed");
+          return res;
+        }}
         onReorder={handleReorder}
-        showToast={showToast}
-        onSelectVehicle={setDetailReg}
-        onAddVehicle={() => setShowAddVehicle(true)}
+        onOpenDetails={(reg) => setDetailReg(reg)}
       />
 
       {showAddVehicle && (
         <AddVehicleModal
-          vehicles={allVehicles}
+          open={showAddVehicle}
           onClose={() => setShowAddVehicle(false)}
+          candidates={allVehicles}
           onAdd={async (reg) => {
             const res = await addToQueue(reg);
             if (res.success) {
-              showToast(`${reg}: added to queue at #${res.position}`);
+              setShowAddVehicle(false);
               await refresh();
+              showToast(`${reg} added to queue`);
             }
             return res;
           }}
@@ -174,7 +178,9 @@ export default function MarshalDashboard() {
       {detailReg && (
         <VehicleDetailsModal
           registrationNumber={detailReg}
+          open={!!detailReg}
           onClose={() => setDetailReg(null)}
+          vehicles={vehicles}
         />
       )}
     </div>
