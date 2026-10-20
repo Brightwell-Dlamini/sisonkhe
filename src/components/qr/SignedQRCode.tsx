@@ -2,14 +2,14 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Renders a signed QR token using the existing QRCodeView.
- * The QR encodes the token string directly (v1.payload.signature).
- * A scanner reads the token, then POSTs it to /api/qr/verify.
+ * Renders a signed QR. The QR encodes the *verify URL* (token in hash),
+ * so a phone camera opens the public verify page. High error correction
+ * for dust / sun / bent plastic at ranks.
  */
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import QRCodeView from "../common/QRCodeView";
 import { useVehicleQR } from "@/hooks/useVehicleQR";
@@ -23,13 +23,12 @@ interface Props {
 
 export default function SignedQRCode({
   registrationNumber,
-  size = 200,
+  size = 220,
   showRefreshButton = true,
   className,
 }: Props) {
-  const { token, loading, error, issue } = useVehicleQR();
+  const { token, verifyUrl, loading, error, issue } = useVehicleQR();
 
-  // Issue a fresh token on mount / when the vehicle changes.
   useEffect(() => {
     void issue(registrationNumber);
   }, [registrationNumber, issue]);
@@ -38,7 +37,11 @@ export default function SignedQRCode({
     void issue(registrationNumber);
   };
 
-  if (loading && !token) {
+  // Prefer full verify URL so consumer cameras open the page.
+  // Fall back to raw token for staff scanners that POST the payload.
+  const qrPayload = verifyUrl || token;
+
+  if (loading && !qrPayload) {
     return (
       <div
         className={`flex items-center justify-center bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 ${className ?? ""}`}
@@ -49,7 +52,7 @@ export default function SignedQRCode({
     );
   }
 
-  if (error && !token) {
+  if (error && !qrPayload) {
     return (
       <div
         className={`flex flex-col items-center justify-center gap-2 bg-red-50 dark:bg-red-950/40 rounded-xl border border-red-200 dark:border-red-800 p-3 ${className ?? ""}`}
@@ -69,16 +72,17 @@ export default function SignedQRCode({
     );
   }
 
-  if (!token) return null;
+  if (!qrPayload) return null;
 
   return (
     <div className={`flex flex-col items-center gap-2 ${className ?? ""}`}>
       <QRCodeView
-        data={token}
+        data={qrPayload}
         size={size}
         margin={2}
         fgColor="#000000"
         bgColor="#ffffff"
+        errorCorrectionLevel="H"
       />
 
       {showRefreshButton && (
