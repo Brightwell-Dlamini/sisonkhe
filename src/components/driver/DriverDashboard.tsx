@@ -78,39 +78,51 @@ export default function DriverDashboard() {
       />
 
       <RoleWelcomeBanner
-        roleLabel="Driver"
-        headline={`Welcome, ${context.fullName.split(" ")[0] || "driver"}`}
-        body="Update vehicle status, signal the marshal, and keep your roster clear."
+        title={`Welcome back, ${context.fullName}`}
+        subtitle="Vehicle status, roster, and trip readiness. Keep the marshal informed before the next push."
+        actionLabel="Open roster"
+        actionHref="/driver/roster"
       />
 
-      <div className="flex items-center justify-between gap-3">
-        <DriverHeader context={context} />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <DriverHeader context={context} onPhotoUploaded={refresh} />
+        </div>
         <IconButton
+          icon={RefreshCw}
           label="Refresh"
-          onClick={() => void handleRefresh()}
-          className="shrink-0"
-        >
-          <RefreshCw className="w-4 h-4" />
-        </IconButton>
+          onClick={handleRefresh}
+          disabled={loading}
+          className={loading ? "[&_svg]:animate-spin" : ""}
+        />
       </div>
 
-      {summary && <DriverSummaryCards summary={summary} />}
+      <DriverSummaryCards summary={summary} />
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <Link
           href="/driver/roster"
-          className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 flex items-center gap-2.5 min-h-12 hover:border-emerald-500/40"
+          className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center text-sm font-semibold text-zinc-200 hover:border-emerald-500/40 min-h-11 flex flex-col items-center justify-center gap-1"
         >
           <Calendar className="w-4 h-4 text-emerald-400" />
-          <span className="text-sm font-semibold text-zinc-200">Roster</span>
+          Roster
         </Link>
         <Link
           href="/driver/card"
-          className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 flex items-center gap-2.5 min-h-12 hover:border-emerald-500/40"
+          className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center text-sm font-semibold text-zinc-200 hover:border-emerald-500/40 min-h-11 flex flex-col items-center justify-center gap-1"
         >
           <CreditCard className="w-4 h-4 text-emerald-400" />
-          <span className="text-sm font-semibold text-zinc-200">Card</span>
+          Card
         </Link>
+        <button
+          type="button"
+          onClick={() => setShowMessage(true)}
+          disabled={!context.marshal}
+          className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center text-sm font-semibold text-zinc-200 hover:border-emerald-500/40 min-h-11 flex flex-col items-center justify-center gap-1 disabled:opacity-40"
+        >
+          <Car className="w-4 h-4 text-emerald-400" />
+          Marshal
+        </button>
       </div>
 
       <div className="space-y-4">
