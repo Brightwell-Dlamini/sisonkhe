@@ -37,7 +37,6 @@ async function renderQrSvg(data: string, sizePx: number = 200): Promise<string> 
 }
 
 async function renderPermitBody(doc: PermitDocument): Promise<string> {
-  // Phone cameras open URLs; inspectors can still extract token from the URL.
   const qrSvg = await renderQrSvg(doc.verifyUrl, 200);
 
   return `
@@ -206,7 +205,7 @@ export async function renderPermitHtml(doc: PermitDocument): Promise<string> {
   }
   .watermark svg { width: 60%; height: 60%; }
 
-  .permit-header { text-align: center; padding-bottom: 4mm; border-bottom: 2px solid #065f46; position: relative; z-index: 1; }
+  .permit-header { text-align: center; padding-bottom: 4mm; border-top: 0; border-bottom: 2px solid #065f46; position: relative; z-index: 1; }
   .kingdom { font-size: 9pt; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; color: #065f46; }
   .ministry { font-size: 16pt; font-weight: 900; text-transform: uppercase; color: #111; margin-top: 2mm; letter-spacing: -0.01em; }
   .board { font-size: 10pt; font-weight: 700; text-transform: uppercase; color: #333; margin-top: 1mm; }
