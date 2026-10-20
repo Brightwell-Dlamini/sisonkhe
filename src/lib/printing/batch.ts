@@ -11,12 +11,18 @@ import QRCode from "qrcode";
 import type { PermitDocument } from "./permit";
 
 function esc(value: unknown): string {
+  // Built via concatenation so HTML entity text is not decoded by transport layers
+  const amp = "&" + "amp;";
+  const lt = "&" + "lt;";
+  const gt = "&" + "gt;";
+  const quot = "&" + "quot;";
+  const apos = "&#" + "39;";
   return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(/&/g, amp)
+    .replace(/</g, lt)
+    .replace(/>/g, gt)
+    .replace(/"/g, quot)
+    .replace(/'/g, apos);
 }
 
 async function renderQrSvg(data: string, size: number): Promise<string> {
