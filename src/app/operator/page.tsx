@@ -35,7 +35,7 @@ export default function OperatorHome() {
     <div className="space-y-6">
       <FirstRunWizard
         role="operator"
-        userId={user?.id}
+        userId={user?.authUserId}
         displayName={user?.fullName}
       />
 
@@ -49,88 +49,58 @@ export default function OperatorHome() {
       </header>
 
       <OperatorOnboardingChecklist
-        hasCard={!!card}
-        balanceSzl={card?.balanceSzl ?? 0}
-        fleetCount={vehicles.length}
+        hasMasterCard={!!card}
+        vehicleCount={vehicles.length}
+        onTopUp={() => setShowTopUp(true)}
+        onOpenFleet={() => router.push("/operator/fleet")}
+        onOpenRenewals={() => router.push("/operator/renewals")}
       />
 
-      {card && (
-        <OperatorReadinessCard
-          balanceSzl={card.balanceSzl}
-          fleetCount={vehicles.length}
-          status={card.status}
-          onReload={() => setShowTopUp(true)}
-          onSend={() => router.push("/operator/wallet")}
+      <OperatorReadinessCard />
+
+      {cardLoading && !card ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
+        </div>
+      ) : card ? (
+        <MasterCardView
+          card={card}
+          onTopUp={() => setShowTopUp(true)}
           onToggleFreeze={async () => {
-            const ok = await toggleFreeze();
-            if (ok) {
-              await refresh();
-              toast.success(
-                card.status === "Frozen"
-                  ? "Master card reactivated"
-                  : "Master card frozen",
-                card.status === "Frozen"
-                  ? "Fleet operations can continue."
-                  : "Transfers and renewals are now paused."
-              );
-            } else {
-              toast.error("Freeze update failed", "Please try again in a moment.");
-            }
-            return ok;
+            const res = await toggleFreeze();
+            if (!res.success) toast.error(res.error || "Could not update card");
+            else toast.success(card.status === "Frozen" ? "Card unfrozen" : "Card frozen");
           }}
         />
+      ) : (
+        <div className="rounded-2xl border border-white/[0.06] bg-[#0F0F10] p-5 text-sm text-zinc-400">
+          No master card yet. Create one from the operator wallet tools when ready.
+        </div>
       )}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-black uppercase tracking-wider text-white">
-            Master card
-          </h2>
-          <Link
-            href="/operator/wallet"
-            className="text-[11px] font-bold text-emerald-500 hover:text-emerald-400 flex items-center gap-1"
-          >
-            Wallet <ArrowRight className="w-3 h-3" />
-          </Link>
-        </div>
-        {cardLoading && !card ? (
-          <div className="flex justify-center py-10">
-            <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
-          </div>
-        ) : card ? (
-          <MasterCardView card={card} />
-        ) : (
-          <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-8 text-center text-xs text-zinc-500">
-            No master card on file. Contact administration.
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-black uppercase tracking-wider text-white">
-            Fleet vehicles
-          </h2>
+          <h2 className="text-sm font-bold text-white">Fleet cards</h2>
           <Link
             href="/operator/fleet"
-            className="text-[11px] font-bold text-emerald-500 hover:text-emerald-400 flex items-center gap-1"
+            className="text-xs font-semibold text-emerald-400 inline-flex items-center gap-1"
           >
-            Full fleet <ArrowRight className="w-3 h-3" />
+            Open fleet <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
-        <FleetCardsGrid />
+        <FleetCardsGrid vehicles={vehicles.slice(0, 6)} />
       </section>
 
       {showTopUp && user?.operatorId && (
         <TopUpModal
-          purpose="master_card_topup"
-          targetEntityId={user.operatorId}
-          targetLabel={`${user.fullName}'s Master Card`}
-          defaultPhone={user.phone ?? ""}
+          open={showTopUp}
           onClose={() => setShowTopUp(false)}
+          purpose="operator_master"
+          entityId={user.operatorId}
           onSuccess={() => {
-            void refresh();
             setShowTopUp(false);
+            void refresh();
+            toast.success("Top-up submitted");
           }}
         />
       )}

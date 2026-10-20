@@ -17,7 +17,11 @@ export default function AdminIndex() {
       : "admin";
   return (
     <>
-      <FirstRunWizard role={role} userId={user?.id} displayName={user?.fullName} />
+      <FirstRunWizard
+        role={role}
+        userId={user?.authUserId}
+        displayName={user?.fullName}
+      />
       <CommandCentre />
     </>
   );

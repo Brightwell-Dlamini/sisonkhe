@@ -15,7 +15,7 @@ export default function DriverPage() {
     <>
       <FirstRunWizard
         role="driver"
-        userId={user?.id}
+        userId={user?.authUserId}
         displayName={user?.fullName}
       />
       <DriverDashboard />
