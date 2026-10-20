@@ -204,7 +204,6 @@ export async function listVehiclesForMarshal(
     /* optional */
   }
 
-  // Virtual cards for rank-fee coach (operator funds · vehicle pays)
   const regsAll = vehicleList.map((v) => v.registration_number as string);
   const cardMap = new Map<string, { balance: number; status: string }>();
   if (regsAll.length > 0) {
@@ -341,4 +340,57 @@ export async function getMarshalSummary(
     loadingCount,
     waitingCount,
   };
+}
+
+export interface MarshalActivityItem {
+  id: string;
+  vehicleReg: string;
+  triggerSource: string;
+  amountSzl: number;
+  timestamp: string;
+}
+
+export async function getMarshalActivity(
+  context: MarshalContext,
+  limit: number = 10
+): Promise<MarshalActivityItem[]> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("marshal_transactions")
+    .select("id, vehicle_reg, trigger_source, amount_szl, created_at, timestamp")
+    .eq("marshal_id", context.marshalId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    const { data: alt, error: err2 } = await admin
+      .from("marshal_transactions")
+      .select("id, vehicle_reg, trigger_source, amount_szl, timestamp")
+      .eq("marshal_id", context.marshalId)
+      .order("timestamp", { ascending: false })
+      .limit(limit);
+    if (err2) {
+      console.error("[marshal/queries] activity error:", err2);
+      return [];
+    }
+    return (alt ?? []).map((row) => ({
+      id: String(row.id),
+      vehicleReg: String(row.vehicle_reg ?? ""),
+      triggerSource: String(row.trigger_source ?? "dispatch"),
+      amountSzl: Number(row.amount_szl ?? 0),
+      timestamp: String(row.timestamp ?? new Date().toISOString()),
+    }));
+  }
+
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    vehicleReg: String(row.vehicle_reg ?? ""),
+    triggerSource: String(row.trigger_source ?? "dispatch"),
+    amountSzl: Number(row.amount_szl ?? 0),
+    timestamp: String(
+      (row as { created_at?: string }).created_at ??
+        (row as { timestamp?: string }).timestamp ??
+        new Date().toISOString()
+    ),
+  }));
 }
