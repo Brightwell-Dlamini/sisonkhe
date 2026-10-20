@@ -29,12 +29,8 @@ import {
   ScanLine,
   FileWarning,
   Activity,
-  AlertOctagon,
-  Cpu,
   Database,
-  HardDrive,
   Megaphone,
-  Search,
   Layers,
   Wallet,
   MessageSquare,
@@ -225,6 +221,10 @@ export const ADMIN_NAV: NavGroup[] = [
   },
 ];
 
+/**
+ * Super-admin only. Keep this short: domain controls only.
+ * Hosting metrics (CPU, memory, deploy logs, DB size) live in Vercel / Hostinger / Supabase.
+ */
 export const PLATFORM_NAV: NavGroup[] = [
   {
     label: "Platform",
@@ -244,6 +244,7 @@ export const PLATFORM_NAV: NavGroup[] = [
         icon: Activity,
         roles: ["super-admin"],
         permission: "admin.platform",
+        hint: "National ops snapshot",
       },
       {
         href: "/admin/super/security",
@@ -251,13 +252,7 @@ export const PLATFORM_NAV: NavGroup[] = [
         icon: Shield,
         roles: ["super-admin"],
         permission: "admin.platform",
-      },
-      {
-        href: "/admin/super/telemetry",
-        label: "Telemetry",
-        icon: Cpu,
-        roles: ["super-admin"],
-        permission: "admin.platform",
+        hint: "Threats and IP lists",
       },
       {
         href: "/super/invariants",
@@ -265,28 +260,7 @@ export const PLATFORM_NAV: NavGroup[] = [
         icon: ActivityIcon,
         roles: ["super-admin"],
         permission: "admin.platform",
-        hint: "Reconciliation and drift report",
-      },
-      {
-        href: "/admin/super/errors",
-        label: "Error Hub",
-        icon: AlertOctagon,
-        roles: ["super-admin"],
-        permission: "admin.platform",
-      },
-      {
-        href: "/admin/super/storage",
-        label: "Storage",
-        icon: HardDrive,
-        roles: ["super-admin"],
-        permission: "admin.platform",
-      },
-      {
-        href: "/admin/super/config",
-        label: "System Config",
-        icon: Settings,
-        roles: ["super-admin"],
-        permission: "admin.config",
+        hint: "Reconciliation and drift",
       },
       {
         href: "/admin/config",
@@ -302,6 +276,7 @@ export const PLATFORM_NAV: NavGroup[] = [
         icon: Megaphone,
         roles: ["super-admin"],
         permission: "admin.platform",
+        hint: "Kiosk sponsored content",
       },
       {
         href: "/admin/super/recovery",
@@ -309,13 +284,7 @@ export const PLATFORM_NAV: NavGroup[] = [
         icon: Database,
         roles: ["super-admin"],
         permission: "admin.platform",
-      },
-      {
-        href: "/admin/super/assistant",
-        label: "Ops Query",
-        icon: Search,
-        roles: ["super-admin"],
-        permission: "admin.platform",
+        hint: "App data backup and restore",
       },
     ],
   },
