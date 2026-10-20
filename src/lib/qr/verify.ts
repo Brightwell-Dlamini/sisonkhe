@@ -4,22 +4,31 @@
  *
  * QR verification — signature + live registry state.
  * A valid signature does NOT mean currently legal.
+ *
+ * Accepts:
+ *   v1 — HMAC-SHA256 (legacy printed tokens)
+ *   v2 — Ed25519 (preferred)
  */
 
 import "server-only";
+import { verify as nodeVerify } from "node:crypto";
 import {
-  TOKEN_VERSION,
+  TOKEN_VERSION_V1,
+  TOKEN_VERSION_V2,
   fromBase64Url,
+  fromBase64UrlBytes,
   isQrPayload,
   isVehicleQrPayload,
   isOperatorQrPayload,
   isDriverQrPayload,
+  buildPermitRevision,
   type QrPayload,
 } from "./payload";
+import { getEd25519PublicKey, hasEd25519PrivateKey } from "./keys";
 import { createSupabaseAdminClient } from "../supabase/server";
 import { logQrScan } from "./audit";
 
-async function getVerificationKey(): Promise<CryptoKey> {
+async function getHmacVerificationKey(): Promise<CryptoKey> {
   const secret = process.env.QR_HMAC_SECRET;
   if (!secret || secret.length < 16) {
     throw new Error("QR_HMAC_SECRET is missing or too short.");
@@ -38,14 +47,8 @@ async function hmacVerify(
   signatureB64: string
 ): Promise<boolean> {
   try {
-    const key = await getVerificationKey();
-    let b64 = signatureB64.replace(/-/g, "+").replace(/_/g, "/");
-    while (b64.length % 4) b64 += "=";
-    const binary = atob(b64);
-    const signatureBytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      signatureBytes[i] = binary.charCodeAt(i);
-    }
+    const key = await getHmacVerificationKey();
+    const signatureBytes = fromBase64UrlBytes(signatureB64);
     return await crypto.subtle.verify(
       "HMAC",
       key,
@@ -54,6 +57,22 @@ async function hmacVerify(
     );
   } catch (err) {
     console.error("[qr/verify] hmacVerify error:", err);
+    return false;
+  }
+}
+
+function ed25519Verify(signingInput: string, signatureB64: string): boolean {
+  try {
+    if (!hasEd25519PrivateKey() && !process.env.QR_ED25519_PUBLIC_KEY && !process.env.NEXT_PUBLIC_QR_ED25519_PUBLIC_KEY) {
+      // No public key configured and no private key to derive from
+      console.error("[qr/verify] Ed25519 public key not configured");
+      return false;
+    }
+    const key = getEd25519PublicKey();
+    const sig = Buffer.from(fromBase64UrlBytes(signatureB64));
+    return nodeVerify(null, Buffer.from(signingInput, "utf8"), key, sig);
+  } catch (err) {
+    console.error("[qr/verify] ed25519Verify error:", err);
     return false;
   }
 }
@@ -77,11 +96,11 @@ export interface VerifySuccess {
   valid: true;
   entityType: "vehicle" | "operator" | "driver";
   payload: QrPayload;
-  /** Human-facing summary fields (public-safe). */
   summary: Record<string, string | null>;
   permitStatus?: string;
   permitExpiry?: string | null;
   issuedAt: string;
+  tokenVersion?: string;
 }
 
 export interface VerifyFailure {
@@ -91,6 +110,7 @@ export interface VerifyFailure {
   entityType?: "vehicle" | "operator" | "driver";
   payload?: QrPayload;
   summary?: Record<string, string | null>;
+  tokenVersion?: string;
 }
 
 export type VerifyResult = VerifySuccess | VerifyFailure;
@@ -103,7 +123,6 @@ export interface VerifyOptions {
   ipHint?: string | null;
 }
 
-/** Absolute max age for any token (3 years). Live status still gates legality. */
 const MAX_AGE_SECONDS = 3 * 365 * 24 * 60 * 60;
 
 function entityKeyFromPayload(payload: QrPayload): string {
@@ -157,19 +176,26 @@ export async function verifyQrToken(
 
   const [version, payloadB64, signatureB64] = parts;
 
-  if (version !== TOKEN_VERSION) {
+  if (version !== TOKEN_VERSION_V1 && version !== TOKEN_VERSION_V2) {
     return finish(
       {
         valid: false,
         reason: "UNKNOWN_VERSION",
         message: `Unknown token version: ${version}`,
+        tokenVersion: version,
       },
       options
     );
   }
 
   const signingInput = `${version}.${payloadB64}`;
-  const signatureOk = await hmacVerify(signingInput, signatureB64!);
+  let signatureOk = false;
+  if (version === TOKEN_VERSION_V2) {
+    signatureOk = ed25519Verify(signingInput, signatureB64!);
+  } else {
+    signatureOk = await hmacVerify(signingInput, signatureB64!);
+  }
+
   if (!signatureOk) {
     return finish(
       {
@@ -177,6 +203,7 @@ export async function verifyQrToken(
         reason: "BAD_SIGNATURE",
         message:
           "Signature verification failed. Token may be forged or tampered with.",
+        tokenVersion: version,
       },
       options
     );
@@ -191,6 +218,7 @@ export async function verifyQrToken(
           valid: false,
           reason: "INVALID_PAYLOAD",
           message: "Payload does not match expected schema.",
+          tokenVersion: version,
         },
         options
       );
@@ -202,6 +230,7 @@ export async function verifyQrToken(
         valid: false,
         reason: "INVALID_PAYLOAD",
         message: "Could not decode payload JSON.",
+        tokenVersion: version,
       },
       options
     );
@@ -216,6 +245,7 @@ export async function verifyQrToken(
         message: "Token issued in the future — clock skew or tampering.",
         entityType: payload.t,
         payload,
+        tokenVersion: version,
       },
       options
     );
@@ -228,6 +258,7 @@ export async function verifyQrToken(
         message: "Token is older than the 3-year maximum. Reprint the document.",
         entityType: payload.t,
         payload,
+        tokenVersion: version,
       },
       options
     );
@@ -253,6 +284,7 @@ export async function verifyQrToken(
           message: "Could not query the vehicle registry.",
           entityType: "vehicle",
           payload,
+          tokenVersion: version,
         },
         options
       );
@@ -266,6 +298,7 @@ export async function verifyQrToken(
           message: `Vehicle ${payload.r} is not in the current registry.`,
           entityType: "vehicle",
           payload,
+          tokenVersion: version,
         },
         options
       );
@@ -277,8 +310,36 @@ export async function verifyQrToken(
       (vehicle.permit_expiry_date as string | null) ?? null;
     const livePermitNumber =
       (vehicle.permit_number as string | null) ?? "";
+    const liveRev = buildPermitRevision(livePermitNumber, livePermitExpiry);
+    const tokenRev =
+      payload.rev?.trim() ||
+      buildPermitRevision(payload.p, payload.e);
+
+    // Explicit revision mismatch OR legacy permit-number mismatch
+    if (tokenRev && liveRev && tokenRev !== liveRev) {
+      return finish(
+        {
+          valid: false,
+          reason: "PERMIT_SUPERSEDED",
+          message:
+            "This QR was issued for an older permit revision. Reprint the current permit.",
+          entityType: "vehicle",
+          payload,
+          summary: {
+            plate: payload.r,
+            revisionOnToken: tokenRev,
+            revisionLive: liveRev,
+            permitOnToken: payload.p,
+            permitLive: livePermitNumber,
+          },
+          tokenVersion: version,
+        },
+        options
+      );
+    }
 
     if (
+      !payload.rev &&
       payload.p &&
       livePermitNumber &&
       payload.p.trim().toUpperCase() !== livePermitNumber.trim().toUpperCase()
@@ -296,6 +357,7 @@ export async function verifyQrToken(
             permitOnToken: payload.p,
             permitLive: livePermitNumber,
           },
+          tokenVersion: version,
         },
         options
       );
@@ -310,6 +372,7 @@ export async function verifyQrToken(
           entityType: "vehicle",
           payload,
           summary: { plate: payload.r, status: livePermitStatus },
+          tokenVersion: version,
         },
         options
       );
@@ -330,6 +393,7 @@ export async function verifyQrToken(
               expiry: livePermitExpiry,
               status: livePermitStatus,
             },
+            tokenVersion: version,
           },
           options
         );
@@ -350,10 +414,12 @@ export async function verifyQrToken(
           classification: (vehicle.classification as string | null) ?? null,
           status: livePermitStatus,
           expiry: livePermitExpiry,
+          revision: liveRev,
         },
         permitStatus: livePermitStatus,
         permitExpiry: livePermitExpiry,
         issuedAt: new Date(payload.i * 1000).toISOString(),
+        tokenVersion: version,
       },
       options
     );
@@ -374,6 +440,7 @@ export async function verifyQrToken(
           message: "Operator is not in the current registry.",
           entityType: "operator",
           payload,
+          tokenVersion: version,
         },
         options
       );
@@ -391,6 +458,7 @@ export async function verifyQrToken(
           licence: (op.operator_license_number as string | null) ?? null,
         },
         issuedAt: new Date(payload.i * 1000).toISOString(),
+        tokenVersion: version,
       },
       options
     );
@@ -413,6 +481,7 @@ export async function verifyQrToken(
           message: "Driver is not in the current registry.",
           entityType: "driver",
           payload,
+          tokenVersion: version,
         },
         options
       );
@@ -439,6 +508,7 @@ export async function verifyQrToken(
             pdpStatus,
             status: driverStatus,
           },
+          tokenVersion: version,
         },
         options
       );
@@ -459,6 +529,7 @@ export async function verifyQrToken(
               pdpExpiry,
               pdpStatus,
             },
+            tokenVersion: version,
           },
           options
         );
@@ -480,6 +551,7 @@ export async function verifyQrToken(
             (driver.assigned_vehicle_reg as string | null) ?? null,
         },
         issuedAt: new Date(payload.i * 1000).toISOString(),
+        tokenVersion: version,
       },
       options
     );
@@ -490,6 +562,7 @@ export async function verifyQrToken(
       valid: false,
       reason: "INVALID_PAYLOAD",
       message: "Unsupported entity type.",
+      tokenVersion: version,
     },
     options
   );
