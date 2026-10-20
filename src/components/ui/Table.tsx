@@ -15,17 +15,17 @@ export function Table({ children, className }: TableProps) {
         className
       )}
     >
-      <table className="w-full text-sm border-collapse">{children}</table>
+      <table className="w-full table-fixed text-sm border-collapse">{children}</table>
     </div>
   );
 }
 
+/**
+ * thead only — callers supply <Tr><Th>…</Th></Tr> so header and body
+ * share the same row primitive (no nested <tr>).
+ */
 export function TableHead({ children }: { children: React.ReactNode }) {
-  return (
-    <thead>
-      <tr className="border-b border-white/[0.06] bg-white/[0.02]">{children}</tr>
-    </thead>
-  );
+  return <thead className="bg-white/[0.02]">{children}</thead>;
 }
 
 interface ThProps {
@@ -38,7 +38,8 @@ export function Th({ children, align = "left", className }: ThProps) {
   return (
     <th
       className={cn(
-        "px-4 py-3 text-[12px] font-semibold text-zinc-500 whitespace-nowrap tracking-wide",
+        "px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-500 whitespace-nowrap border-b border-white/[0.06]",
+        align === "left" && "text-left",
         align === "center" && "text-center",
         align === "right" && "text-right",
         className
@@ -86,6 +87,7 @@ export function Td({ children, align = "left", className }: TdProps) {
     <td
       className={cn(
         "px-4 py-3.5 text-zinc-300 align-middle text-[13px]",
+        align === "left" && "text-left",
         align === "center" && "text-center",
         align === "right" && "text-right",
         className
