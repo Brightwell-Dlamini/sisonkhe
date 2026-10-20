@@ -38,24 +38,22 @@ export default function HeadingTodayHub({
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
             </span>
-            Real-time commuter transit hub
+            Live departures
           </span>
         </div>
 
         <h1 className="font-space text-2xl sm:text-[2.35rem] font-bold tracking-[-0.03em] text-white uppercase leading-[1.08]">
-          Where are you heading today?
+          Where to?
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-zinc-400">
-          Check live kombi departures, track the rank queue, and see your exact
-          loading bay in seconds.
+          Departures, queue position, and loading bay.
         </p>
 
-        {/* Full-width search inside the section */}
         <div className="relative mt-5">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search destination, route, or vehicle plate…"
+            placeholder="Destination, route, or plate…"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="w-full bg-black/40 border border-white/[0.1] rounded-xl pl-10 pr-10 py-3.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all font-mono"
@@ -108,14 +106,11 @@ export default function HeadingTodayHub({
           <div className="flex items-center gap-2 shrink-0">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
             <span className="font-mono text-[11px] font-bold text-emerald-300">
-              Rank Status: {rankStatus}
+              Rank: {rankStatus}
             </span>
           </div>
           <span className="hidden sm:inline text-zinc-700">·</span>
           <p className="text-[12px] text-zinc-400 leading-snug min-w-0">
-            <span className="font-mono text-[10px] font-black uppercase tracking-wider text-zinc-500 mr-1.5">
-              Announcement:
-            </span>
             {announcement}
           </p>
           {activeCorridorCount > 0 && (
@@ -123,7 +118,7 @@ export default function HeadingTodayHub({
               <span className="hidden sm:inline text-zinc-700">·</span>
               <span className="font-mono text-[10px] text-emerald-500/80 shrink-0 whitespace-nowrap">
                 {activeCorridorCount} corridor
-                {activeCorridorCount === 1 ? "" : "s"} active
+                {activeCorridorCount === 1 ? "" : "s"}
               </span>
             </>
           )}
@@ -168,7 +163,6 @@ function Chip({
   );
 }
 
-/** Strip leading "Announcement:" if the DB string already includes it. */
 function cleanAnnouncement(raw: string): string {
   return raw.replace(/^\s*announcement\s*:\s*/i, "").trim();
 }
@@ -192,14 +186,14 @@ function buildPopularDestinations(routes: PublicRoute[]): string[] {
 
 function deriveRankStatus(vehicles: PublicVehicle[]): string {
   if (vehicles.length === 0) return "Standby";
-  if (vehicles.some((v) => v.status === "Delayed")) return "Delays reported";
-  return "Normal Service";
+  if (vehicles.some((v) => v.status === "Delayed")) return "Delays";
+  return "Normal";
 }
 
 function defaultAnnouncement(snapshot: KioskSnapshot): string {
   const loading = snapshot.vehicles.find((v) => v.status === "Loading");
   if (loading?.routeDestination) {
-    return `${snapshot.regionConfig?.terminalName ?? snapshot.region} — vehicle ${loading.registrationNumber} now loading for ${loading.routeDestination}${loading.loadingBay ? ` on ${loading.loadingBay}` : ""}. Safe travel!`;
+    return `${loading.registrationNumber} loading for ${loading.routeDestination}${loading.loadingBay ? ` · ${loading.loadingBay}` : ""}`;
   }
-  return `Welcome to ${snapshot.regionConfig?.terminalName ?? snapshot.region}. Select a destination above to filter live departures.`;
+  return `${snapshot.regionConfig?.terminalName ?? snapshot.region} — select a destination.`;
 }
