@@ -150,7 +150,6 @@ export async function createClaimLink(input: CreateClaimInput): Promise<{
   const ttl = input.ttlHours ?? CLAIM_TTL_HOURS;
   const expiresAt = new Date(Date.now() + ttl * 60 * 60 * 1000).toISOString();
 
-  // Expire any open tokens for this user (one active invite)
   await admin
     .from("login_claim_tokens")
     .update({ used_at: new Date().toISOString() })
@@ -233,7 +232,9 @@ export async function consumeClaimToken(
   | { ok: false; reason: string }
 > {
   const peeked = await peekClaimToken(rawToken);
-  if (!peeked.ok) return peeked;
+  if (peeked.ok === false) {
+    return { ok: false, reason: peeked.reason };
+  }
 
   if (newPassword.length < 8) {
     return { ok: false, reason: "Password must be at least 8 characters." };
