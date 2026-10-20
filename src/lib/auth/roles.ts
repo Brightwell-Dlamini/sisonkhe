@@ -39,6 +39,8 @@ export type NavRole = AuthRole | "commuter";
 
 export interface ResolvedUser {
   authUserId: string;
+  /** Alias of authUserId for client components that historically used user.id */
+  id: string;
   email: string | null;
   phone: string | null;
   role: AuthRole;
@@ -85,147 +87,122 @@ export class RoleResolutionError extends Error {
   }
 }
 
-/** Short-lived cache so every API call does not re-hit 4 role tables. */
-const ROLE_CACHE_TTL_MS = 45_000;
+/** Short-lived cache — 45s per authUserId */
 const roleCache = new Map<
   string,
   { user: ResolvedUser | null; expiresAt: number }
 >();
-
-export function invalidateRoleCache(authUserId?: string): void {
-  if (authUserId) roleCache.delete(authUserId);
-  else roleCache.clear();
-}
+const CACHE_TTL_MS = 45_000;
 
 async function findStaffMatch(authUserId: string): Promise<TableMatch | null> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  const { data } = await admin
     .from("staff")
-    .select("id, full_name, role, region, terminal_id, is_active, avatar_url")
+    .select("id, full_name, role, region, terminal_id, avatar_url, is_active")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
-
-  if (error) throw new RoleResolutionError(`staff query: ${error.message}`, "NO_ROLE");
   if (!data) return null;
-
   if (data.is_active === false) {
-    throw new RoleResolutionError(`staff ${data.id} is not active`, "INACTIVE");
+    throw new RoleResolutionError("Staff account is inactive", "INACTIVE");
   }
-
-  if (!isAuthRole(data.role)) {
+  const role = data.role as string;
+  if (!isAuthRole(role) || !["super-admin", "admin", "fleet-manager", "inspector"].includes(role)) {
     throw new RoleResolutionError(
-      `staff ${data.id} has unknown role "${data.role}" — CHECK constraint violated`,
+      `Unknown staff role: ${role}`,
       "UNKNOWN_STAFF_ROLE"
     );
   }
-
   return {
     kind: "staff",
     id: data.id as string,
-    fullName: data.full_name as string,
-    role: data.role as AuthRole,
-    region: (data.region as string | null) ?? undefined,
-    terminalId: (data.terminal_id as string | null) ?? undefined,
-    avatarUrl: (data.avatar_url as string | null) ?? undefined,
+    fullName: (data.full_name as string) || "Staff",
+    role,
+    region: (data.region as string | undefined) || undefined,
+    terminalId: (data.terminal_id as string | undefined) || undefined,
+    avatarUrl: (data.avatar_url as string | undefined) || undefined,
   };
 }
 
 async function findMarshalMatch(authUserId: string): Promise<TableMatch | null> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  const { data } = await admin
     .from("marshals")
-    .select("id, first_name, surname, region, is_active, avatar_url, photo_storage_path")
+    .select("id, first_name, surname, region, avatar_url, is_active")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
-
-  if (error) throw new RoleResolutionError(`marshal query: ${error.message}`, "NO_ROLE");
   if (!data) return null;
-
   if (data.is_active === false) {
-    throw new RoleResolutionError(`marshal ${data.id} is not active`, "INACTIVE");
+    throw new RoleResolutionError("Marshal account is inactive", "INACTIVE");
   }
-
-  const avatarUrl =
-    (data.avatar_url as string | null) ??
-    (data.photo_storage_path as string | null) ??
-    undefined;
-
   return {
     kind: "marshal",
     id: data.id as string,
-    fullName:
-      `${data.first_name ?? ""} ${data.surname ?? ""}`.trim() || "Marshal",
-    region: (data.region as string | null) ?? undefined,
-    avatarUrl,
+    fullName: `${data.first_name ?? ""} ${data.surname ?? ""}`.trim() || "Marshal",
+    region: (data.region as string | undefined) || undefined,
+    avatarUrl: (data.avatar_url as string | undefined) || undefined,
   };
 }
 
 async function findDriverMatch(authUserId: string): Promise<TableMatch | null> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  const { data } = await admin
     .from("drivers")
-    .select("id, full_name, status, assigned_vehicle_reg, profile_picture_url")
+    .select("id, full_name, assigned_vehicle_reg, avatar_url, status")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
-
-  if (error) throw new RoleResolutionError(`driver query: ${error.message}`, "NO_ROLE");
   if (!data) return null;
-
-  if (data.status === "Suspended") {
-    throw new RoleResolutionError(`driver ${data.id} is suspended`, "INACTIVE");
+  if (String(data.status ?? "").toLowerCase() === "inactive") {
+    throw new RoleResolutionError("Driver account is inactive", "INACTIVE");
   }
-
   return {
     kind: "driver",
     id: data.id as string,
-    fullName: data.full_name as string,
-    assignedVehicleReg: (data.assigned_vehicle_reg as string | null) ?? undefined,
-    avatarUrl: (data.profile_picture_url as string | null) ?? undefined,
+    fullName: (data.full_name as string) || "Driver",
+    assignedVehicleReg: (data.assigned_vehicle_reg as string | undefined) || undefined,
+    avatarUrl: (data.avatar_url as string | undefined) || undefined,
   };
 }
 
 async function findOperatorMatch(authUserId: string): Promise<TableMatch | null> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  const { data } = await admin
     .from("fleet_operators")
-    .select("id, name, company_name, avatar_url")
+    .select("id, full_name, avatar_url, is_active")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
-
-  if (error) throw new RoleResolutionError(`operator query: ${error.message}`, "NO_ROLE");
   if (!data) return null;
-
+  if (data.is_active === false) {
+    throw new RoleResolutionError("Operator account is inactive", "INACTIVE");
+  }
   return {
     kind: "operator",
     id: data.id as string,
-    fullName: (data.name as string) || (data.company_name as string) || "Operator",
-    avatarUrl: (data.avatar_url as string | null) ?? undefined,
+    fullName: (data.full_name as string) || "Operator",
+    avatarUrl: (data.avatar_url as string | undefined) || undefined,
   };
 }
 
-async function resolveUserRoleUncached(
+async function resolveFromMatches(
   authUserId: string,
   email: string | null,
   phone: string | null
 ): Promise<ResolvedUser | null> {
-  const [staff, marshal, driver, operator] = await Promise.all([
-    findStaffMatch(authUserId),
-    findMarshalMatch(authUserId),
-    findDriverMatch(authUserId),
-    findOperatorMatch(authUserId),
-  ]);
+  const matches: TableMatch[] = [];
+  const staff = await findStaffMatch(authUserId);
+  if (staff) matches.push(staff);
+  const marshal = await findMarshalMatch(authUserId);
+  if (marshal) matches.push(marshal);
+  const driver = await findDriverMatch(authUserId);
+  if (driver) matches.push(driver);
+  const operator = await findOperatorMatch(authUserId);
+  if (operator) matches.push(operator);
 
-  const matches = [staff, marshal, driver, operator].filter(
-    (m): m is TableMatch => m !== null
-  );
-
-  if (matches.length === 0) return null;
-
+  if (matches.length === 0) {
+    throw new RoleResolutionError("No role linked to this account", "NO_ROLE");
+  }
   if (matches.length > 1) {
     throw new RoleResolutionError(
-      `auth user ${authUserId} is claimed by multiple role tables: ${matches
-        .map((m) => m.kind)
-        .join(", ")}. Resolve the data conflict before allowing sign-in.`,
+      `Multiple roles for user: ${matches.map((m) => m.kind).join(", ")}`,
       "MULTI_ROLE"
     );
   }
@@ -233,6 +210,7 @@ async function resolveUserRoleUncached(
   const m = matches[0];
   const base: ResolvedUser = {
     authUserId,
+    id: authUserId,
     email,
     phone,
     fullName: m.fullName,
@@ -290,21 +268,25 @@ export async function resolveUserRole(
   if (hit && hit.expiresAt > Date.now()) {
     return hit.user;
   }
-
-  const user = await resolveUserRoleUncached(authUserId, email, phone);
-  roleCache.set(authUserId, {
-    user,
-    expiresAt: Date.now() + ROLE_CACHE_TTL_MS,
-  });
-  return user;
+  try {
+    const user = await resolveFromMatches(authUserId, email, phone);
+    roleCache.set(authUserId, { user, expiresAt: Date.now() + CACHE_TTL_MS });
+    return user;
+  } catch (err) {
+    if (err instanceof RoleResolutionError) {
+      roleCache.set(authUserId, { user: null, expiresAt: Date.now() + 5_000 });
+      throw err;
+    }
+    throw err;
+  }
 }
 
 export function primaryEntityId(user: ResolvedUser): string {
   return (
-    user.staffId ??
-    user.marshalId ??
-    user.driverId ??
-    user.operatorId ??
+    user.staffId ||
+    user.marshalId ||
+    user.driverId ||
+    user.operatorId ||
     user.authUserId
   );
 }
