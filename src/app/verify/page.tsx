@@ -66,22 +66,24 @@ function VerifyInner() {
     }
 
     const run = async () => {
-      // 1) Offline / local signature + snapshot (works without network for v2)
       let localNote: string | undefined;
+
       try {
         const local = await localVerifyQrToken(token);
-        if (!local.ok && local.reason === "BAD_SIGNATURE") {
-          setResult({
-            valid: false,
-            reason: "BAD_SIGNATURE",
-            message: local.message,
-          });
-          setLoading(false);
-          return;
-        }
-        if (local.ok) {
+
+        if (!local.ok) {
+          if (local.reason === "BAD_SIGNATURE") {
+            setResult({
+              valid: false,
+              reason: "BAD_SIGNATURE",
+              message: local.message,
+            });
+            setLoading(false);
+            return;
+          }
+          // Other local failures: still try live verify
+        } else {
           localNote = local.note;
-          // If offline, show snapshot immediately while live check runs / fails
           if (typeof navigator !== "undefined" && !navigator.onLine) {
             setResult({
               valid: local.signatureValid === true,
@@ -104,7 +106,6 @@ function VerifyInner() {
         // continue to network path
       }
 
-      // 2) Live registry check
       try {
         const res = await fetch("/api/qr/verify", {
           method: "POST",
@@ -115,7 +116,6 @@ function VerifyInner() {
         const body = data.data ?? data;
         setResult({ ...body, offlineNote: localNote });
       } catch {
-        // Network failed — try to surface local snapshot if we have one
         try {
           const local = await localVerifyQrToken(token);
           if (local.ok) {
@@ -134,8 +134,8 @@ function VerifyInner() {
           } else {
             setResult({
               valid: false,
-              reason: "MALFORMED",
-              message: "Network error during verification.",
+              reason: local.reason,
+              message: local.message || "Network error during verification.",
             });
           }
         } catch {
@@ -175,7 +175,10 @@ function VerifyInner() {
         {!loading && result && result.offline && (
           <div className="mb-3 flex items-center gap-2 rounded-xl border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-200">
             <WifiOff className="w-3.5 h-3.5 shrink-0" />
-            <span>{result.offlineNote ?? "Offline — signature/snapshot only. Live status needs network."}</span>
+            <span>
+              {result.offlineNote ??
+                "Offline — signature/snapshot only. Live status needs network."}
+            </span>
           </div>
         )}
 
@@ -188,7 +191,9 @@ function VerifyInner() {
                 </div>
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
-                    {result.offline ? "Signature Valid (Offline)" : "Verified Authentic"}
+                    {result.offline
+                      ? "Signature Valid (Offline)"
+                      : "Verified Authentic"}
                   </div>
                   <div className="text-base font-black uppercase text-emerald-900 dark:text-emerald-100">
                     {titleForEntity(result.entityType)}
@@ -228,13 +233,23 @@ function VerifyInner() {
                   <Row
                     icon={<CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                     label="Status"
-                    value={str(result.permitStatus ?? result.summary?.status ?? result.summary?.statusSnapshot)}
+                    value={str(
+                      result.permitStatus ??
+                        result.summary?.status ??
+                        result.summary?.statusSnapshot
+                    )}
                   />
-                  {(result.permitExpiry || result.summary?.expiry || result.summary?.expirySnapshot) && (
+                  {(result.permitExpiry ||
+                    result.summary?.expiry ||
+                    result.summary?.expirySnapshot) && (
                     <Row
                       icon={<Calendar className="w-4 h-4 text-zinc-400" />}
                       label="Expires"
-                      value={str(result.permitExpiry ?? result.summary?.expiry ?? result.summary?.expirySnapshot)}
+                      value={str(
+                        result.permitExpiry ??
+                          result.summary?.expiry ??
+                          result.summary?.expirySnapshot
+                      )}
                       mono
                     />
                   )}
@@ -272,13 +287,20 @@ function VerifyInner() {
                   <Row
                     icon={<CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                     label="PDP"
-                    value={str(result.summary?.pdpStatus ?? result.summary?.pdpStatusSnapshot)}
+                    value={str(
+                      result.summary?.pdpStatus ??
+                        result.summary?.pdpStatusSnapshot
+                    )}
                   />
-                  {(result.summary?.pdpExpiry || result.summary?.pdpExpirySnapshot) && (
+                  {(result.summary?.pdpExpiry ||
+                    result.summary?.pdpExpirySnapshot) && (
                     <Row
                       icon={<Calendar className="w-4 h-4 text-zinc-400" />}
                       label="PDP expires"
-                      value={str(result.summary?.pdpExpiry ?? result.summary?.pdpExpirySnapshot)}
+                      value={str(
+                        result.summary?.pdpExpiry ??
+                          result.summary?.pdpExpirySnapshot
+                      )}
                       mono
                     />
                   )}
