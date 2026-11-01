@@ -1,21 +1,24 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Retired. Assistant surface is not part of the production control set.
  */
 
-import type { NextRequest } from "next/server";
 import { requireServerRole } from "@/lib/auth/session";
-import { runAssistantQuery } from "@/lib/super/assistant";
-import { AppError } from "@/lib/api/errors";
-import { ok, withApiHandler } from "@/lib/api/response";
+import { withApiHandler } from "@/lib/api/response";
+import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export const POST = withApiHandler(async (req: NextRequest) => {
-  const user = await requireServerRole(["super-admin"]);
-  const body = await req.json();
-  const q = String(body.query ?? "");
-  if (!q.trim()) throw AppError.validation("query required");
-  return ok(await runAssistantQuery(q, user));
+export const POST = withApiHandler(async () => {
+  await requireServerRole(["super-admin"]);
+  return NextResponse.json(
+    {
+      retired: true,
+      message: "Assistant API is retired.",
+    },
+    { status: 410 }
+  );
 });
