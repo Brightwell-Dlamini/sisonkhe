@@ -38,6 +38,7 @@ import {
   ListChecks,
   KeyRound,
   Palette,
+  Landmark,
 } from "lucide-react";
 import type { NavRole } from "@/lib/auth/roles";
 import type { Permission } from "@/lib/auth/permissions";
@@ -150,6 +151,13 @@ export const ADMIN_NAV: NavGroup[] = [
         icon: Building2,
         permission: "admin.operators",
         hint: "Owners and Master Cards",
+      },
+      {
+        href: "/admin/associations",
+        label: "Associations",
+        icon: Landmark,
+        permission: "admin.associations.read",
+        hint: "Transport associations and membership",
       },
       {
         href: "/admin/marshals",
