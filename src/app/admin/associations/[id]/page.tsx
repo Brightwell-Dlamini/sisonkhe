@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -14,6 +14,8 @@ import {
   Plus,
   RefreshCw,
   Users,
+  Search,
+  Check,
 } from "lucide-react";
 import type { Association } from "@/lib/domain/associations";
 import {
@@ -31,6 +33,12 @@ type MembershipRow = {
   status: MembershipStatus;
   joinedAt?: string | null;
   notes?: string | null;
+};
+
+type PickerItem = {
+  id: string;
+  label: string;
+  sublabel?: string;
 };
 
 export default function AssociationDetailPage() {
@@ -60,7 +68,8 @@ export default function AssociationDetailPage() {
       }
       setAssociation((body as { association: Association }).association);
       setMemberships(
-        ((body as { memberships: MembershipRow[] }).memberships ?? []) as MembershipRow[]
+        ((body as { memberships: MembershipRow[] }).memberships ??
+          []) as MembershipRow[]
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
@@ -264,6 +273,11 @@ export default function AssociationDetailPage() {
       {showAdd && (
         <AddMemberModal
           associationId={id}
+          existingMemberIds={new Set(
+            memberships
+              .filter((m) => m.status === "Active")
+              .map((m) => `${m.memberEntityType}:${m.memberEntityId}`)
+          )}
           onClose={() => setShowAdd(false)}
           onSuccess={async () => {
             setShowAdd(false);
@@ -278,23 +292,103 @@ export default function AssociationDetailPage() {
 
 function AddMemberModal({
   associationId,
+  existingMemberIds,
   onClose,
   onSuccess,
 }: {
   associationId: string;
+  existingMemberIds: Set<string>;
   onClose: () => void;
   onSuccess: () => void;
 }) {
   const [memberEntityType, setMemberEntityType] = useState<
     "operator" | "driver"
   >("operator");
-  const [memberEntityId, setMemberEntityId] = useState("");
+  const [selected, setSelected] = useState<PickerItem | null>(null);
   const [role, setRole] = useState<(typeof MEMBERSHIP_ROLES)[number]>("Member");
+  const [query, setQuery] = useState("");
+  const [items, setItems] = useState<PickerItem[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const loadCandidates = useCallback(async (type: "operator" | "driver") => {
+    setListLoading(true);
+    setListError(null);
+    setSelected(null);
+    setQuery("");
+    try {
+      const url = type === "operator" ? "/api/operators" : "/api/drivers";
+      const res = await fetch(url, { credentials: "include", cache: "no-store" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          (body as { error?: string }).error ?? `Failed to load ${type}s`
+        );
+      }
+      if (type === "operator") {
+        const ops = (body as { operators?: Array<Record<string, unknown>> })
+          .operators ?? [];
+        setItems(
+          ops.map((o) => ({
+            id: o.id as string,
+            label:
+              (o.companyName as string) ||
+              (o.name as string) ||
+              (o.id as string),
+            sublabel: [o.name as string, o.phone as string]
+              .filter(Boolean)
+              .join(" · "),
+          }))
+        );
+      } else {
+        const drvs = (body as { drivers?: Array<Record<string, unknown>> })
+          .drivers ?? [];
+        setItems(
+          drvs.map((d) => ({
+            id: d.id as string,
+            label: (d.fullName as string) || (d.id as string),
+            sublabel: [d.phone as string, d.assignedVehicleReg as string]
+              .filter(Boolean)
+              .join(" · "),
+          }))
+        );
+      }
+    } catch (err) {
+      setItems([]);
+      setListError(err instanceof Error ? err.message : "Failed to load");
+    } finally {
+      setListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCandidates(memberEntityType);
+  }, [memberEntityType, loadCandidates]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return items
+      .filter((it) => {
+        const key = `${memberEntityType}:${it.id}`;
+        if (existingMemberIds.has(key)) return false;
+        if (!q) return true;
+        return (
+          it.label.toLowerCase().includes(q) ||
+          (it.sublabel ?? "").toLowerCase().includes(q) ||
+          it.id.toLowerCase().includes(q)
+        );
+      })
+      .slice(0, 40);
+  }, [items, query, memberEntityType, existingMemberIds]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selected) {
+      setError("Select an operator or driver from the list");
+      return;
+    }
     setError(null);
     setLoading(true);
     const res = await fetch(
@@ -305,7 +399,7 @@ function AddMemberModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           memberEntityType,
-          memberEntityId: memberEntityId.trim(),
+          memberEntityId: selected.id,
           role,
         }),
       }
@@ -321,7 +415,7 @@ function AddMemberModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4">
+      <div className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl shadow-2xl max-w-lg w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
         <h2 className="text-sm font-black uppercase text-white">Add Member</h2>
         {error && (
           <div className="bg-red-950/40 border border-red-800 text-red-300 rounded-xl p-3 text-xs">
@@ -344,19 +438,86 @@ function AddMemberModal({
               <option value="driver">Driver</option>
             </select>
           </div>
+
           <div>
             <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">
-              {memberEntityType === "operator" ? "Operator" : "Driver"} ID *
+              Search {memberEntityType === "operator" ? "operators" : "drivers"}
             </label>
-            <input
-              type="text"
-              required
-              value={memberEntityId}
-              onChange={(e) => setMemberEntityId(e.target.value)}
-              placeholder={memberEntityType === "operator" ? "op_…" : "drv_…"}
-              className="input w-full font-mono"
-            />
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Name, phone, or id…"
+                className="input w-full pl-9"
+              />
+            </div>
           </div>
+
+          <div className="border border-white/[0.06] rounded-xl max-h-48 overflow-y-auto">
+            {listLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
+              </div>
+            ) : listError ? (
+              <div className="p-3 text-xs text-red-300">{listError}</div>
+            ) : filtered.length === 0 ? (
+              <div className="p-3 text-xs text-zinc-500">
+                No matching {memberEntityType}s
+                {existingMemberIds.size > 0
+                  ? " (active members are hidden)"
+                  : ""}
+              </div>
+            ) : (
+              <ul className="divide-y divide-white/[0.04]">
+                {filtered.map((it) => {
+                  const active = selected?.id === it.id;
+                  return (
+                    <li key={it.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelected(it)}
+                        className={`w-full text-left px-3 py-2.5 flex items-start gap-2 hover:bg-white/[0.04] ${
+                          active ? "bg-emerald-500/10" : ""
+                        }`}
+                      >
+                        <span
+                          className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                            active
+                              ? "border-emerald-500 bg-emerald-500/20 text-emerald-400"
+                              : "border-white/20"
+                          }`}
+                        >
+                          {active && <Check className="w-2.5 h-2.5" />}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-xs font-bold text-white truncate">
+                            {it.label}
+                          </span>
+                          {it.sublabel && (
+                            <span className="block text-[10px] text-zinc-500 truncate">
+                              {it.sublabel}
+                            </span>
+                          )}
+                          <span className="block text-[10px] font-mono text-zinc-600 truncate">
+                            {it.id}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {selected && (
+            <div className="text-[11px] text-emerald-400/90 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2">
+              Selected: <span className="font-bold">{selected.label}</span>
+            </div>
+          )}
+
           <div>
             <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">
               Role
@@ -375,6 +536,7 @@ function AddMemberModal({
               ))}
             </select>
           </div>
+
           <div className="flex gap-2 pt-2">
             <button
               type="button"
@@ -385,7 +547,7 @@ function AddMemberModal({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !selected}
               className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
