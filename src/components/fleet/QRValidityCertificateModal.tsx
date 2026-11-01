@@ -35,6 +35,7 @@ export default function QRValidityCertificateModal({
     new Date().toLocaleString()
   );
   const [qrToken, setQrToken] = useState<string>("");
+  const [issuedVerifyUrl, setIssuedVerifyUrl] = useState<string>("");
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +52,7 @@ export default function QRValidityCertificateModal({
         const data = await res.json();
         if (!cancelled) {
           setQrToken(data.token ?? data.data?.token ?? "");
+          setIssuedVerifyUrl(data.verifyUrl ?? data.data?.verifyUrl ?? "");
           setVerifyTimestamp(new Date().toLocaleString());
         }
       } catch {
@@ -106,9 +108,13 @@ export default function QRValidityCertificateModal({
     }
   };
 
-  const verifyUrl = qrToken
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/verify?token=${encodeURIComponent(qrToken)}`
-    : "";
+  const verifyUrl =
+    issuedVerifyUrl ||
+    (qrToken
+      ? `${
+          typeof window !== "undefined" ? window.location.origin : ""
+        }/verify#t=${encodeURIComponent(qrToken)}`
+      : "");
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
@@ -335,12 +341,12 @@ export default function QRValidityCertificateModal({
                 <div className="flex items-center justify-between text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
                   <span className="flex items-center gap-1">
                     <Lock className="w-3.5 h-3.5" />
-                    <span>HMAC-SHA256 SIGNED TOKEN</span>
+                    <span>CRYPTOGRAPHICALLY SIGNED TOKEN</span>
                   </span>
                 </div>
                 <p className="text-[11px] text-zinc-500">
-                  Highway inspection officers scan this QR. The token is signed by
-                  the server and re-checked against live permit status.
+                  Officers scan this QR. Signature authenticity and live permit
+                  status are checked separately.
                 </p>
                 <div className="text-[10px] text-zinc-500 dark:text-zinc-400 pt-1 border-t border-emerald-500/20">
                   <span className="block font-semibold">Verified At:</span>
