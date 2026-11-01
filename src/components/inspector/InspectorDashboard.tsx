@@ -4,6 +4,7 @@
  *
  * Roadside inspection desk — scan → verdict → ticket.
  * Supports offline plate lookup from IndexedDB cache of prior successful lookups.
+ * Offline QR: local Ed25519/snapshot decode → plate lookup from cache.
  */
 
 "use client";
@@ -28,6 +29,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import type { InspectorVehicleView } from "@/lib/inspector/queries";
 import { parseQrScanInput } from "@/lib/qr/parse";
+import {
+  localVerifyQrToken,
+  isLocalVerifyFailure,
+  isLocalVerifySuccess,
+} from "@/lib/qr/localVerify";
+import { isVehicleQrPayload, isDriverQrPayload } from "@/lib/qr/payload";
 import { formatCacheAge } from "@/lib/offline/inspectorCache";
 import VehicleCompliancePanel from "./VehicleCompliancePanel";
 import TicketForm from "./TicketForm";
@@ -88,12 +95,43 @@ export default function InspectorDashboard() {
   };
 
   const verifyTokenThenLookup = async (token: string) => {
+    // Offline path: local crypto + snapshot → plate/VIC lookup from cache
     if (!online) {
-      setLookupError(
-        "Offline — cannot verify QR signature. Enter the plate manually if you looked it up before."
-      );
+      try {
+        const local = await localVerifyQrToken(token);
+        if (isLocalVerifyFailure(local)) {
+          setLookupError(`QR invalid offline: ${local.message}`);
+          return;
+        }
+        if (isLocalVerifySuccess(local)) {
+          if (isVehicleQrPayload(local.payload)) {
+            showToast(
+              local.signatureValid
+                ? "Offline: signature valid — loading cached vehicle."
+                : "Offline: snapshot only (signature unchecked) — loading cache."
+            );
+            void handleLookup(local.payload.r);
+            return;
+          }
+          if (isDriverQrPayload(local.payload)) {
+            setLookupError(
+              "Offline driver QR decoded. Enter the vehicle plate manually if you have a prior cache."
+            );
+            return;
+          }
+          setLookupError(
+            "Offline operator QR — scan a vehicle permit for roadside checks."
+          );
+          return;
+        }
+      } catch {
+        setLookupError(
+          "Offline — could not decode QR. Enter the plate if you looked it up before."
+        );
+      }
       return;
     }
+
     try {
       const res = await fetch("/api/qr/verify", {
         method: "POST",
@@ -113,7 +151,11 @@ export default function InspectorDashboard() {
         return;
       }
 
-      if (data.valid && data.entityType === "driver" && data.summary?.assignedVehicle) {
+      if (
+        data.valid &&
+        data.entityType === "driver" &&
+        data.summary?.assignedVehicle
+      ) {
         void handleLookup(String(data.summary.assignedVehicle));
         return;
       }
@@ -245,11 +287,15 @@ export default function InspectorDashboard() {
         <button
           type="button"
           onClick={handleScanClick}
-          disabled={scanner.scanning || !online}
+          disabled={scanner.scanning}
           className="w-full py-3.5 rounded-2xl border border-red-500/40 bg-red-950/30 hover:bg-red-950/50 disabled:opacity-40 text-red-200 text-sm font-black uppercase tracking-wider flex items-center justify-center gap-2"
         >
           <QrCode className="w-5 h-5" />
-          {scanner.scanning ? "Scanning…" : "Scan permit QR"}
+          {scanner.scanning
+            ? "Scanning…"
+            : online
+              ? "Scan permit QR"
+              : "Scan QR (offline)"}
         </button>
 
         {scanner.scanning && (
