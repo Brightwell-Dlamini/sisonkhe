@@ -34,6 +34,7 @@ export default function OfficialPlaqueQRModal({
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [showValidityModal, setShowValidityModal] = useState(false);
   const [qrToken, setQrToken] = useState<string>("");
+  const [issuedVerifyUrl, setIssuedVerifyUrl] = useState<string>("");
 
   const routeObj = routes.find((r) => r.id === vehicle.routeAssignmentId);
   const driverObj = drivers.find(
@@ -58,6 +59,9 @@ export default function OfficialPlaqueQRModal({
         const data = await res.json();
         if (!cancelled) {
           setQrToken(data.token ?? data.data?.token ?? "");
+          setIssuedVerifyUrl(
+            data.verifyUrl ?? data.data?.verifyUrl ?? ""
+          );
         }
       } catch {
         // ignore
@@ -86,7 +90,7 @@ export default function OfficialPlaqueQRModal({
         setVerifyStep(4);
         setToastMsg(
           valid
-            ? "Server HMAC-SHA256 signature verified successfully."
+            ? "Signature and live permit status verified."
             : "Verification completed — token rejected or permit not active."
         );
       }
@@ -126,11 +130,13 @@ export default function OfficialPlaqueQRModal({
     );
   }
 
-  const verifyUrl = qrToken
-    ? `${
-        typeof window !== "undefined" ? window.location.origin : ""
-      }/verify?token=${encodeURIComponent(qrToken)}`
-    : "";
+  const verifyUrl =
+    issuedVerifyUrl ||
+    (qrToken
+      ? `${
+          typeof window !== "undefined" ? window.location.origin : ""
+        }/verify#t=${encodeURIComponent(qrToken)}`
+      : "");
 
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
@@ -267,9 +273,9 @@ export default function OfficialPlaqueQRModal({
               <div className="flex items-center gap-2">
                 <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
                 <span className="font-bold text-emerald-300">
-                  {verifyStep === 1 && "Step 1/3: Submitting token to server…"}
-                  {verifyStep === 2 && "Step 2/3: Validating HMAC-SHA256 signature…"}
-                  {verifyStep === 3 && "Step 3/3: Checking live permit status…"}
+                  {verifyStep === 1 && "Submitting token…"}
+                  {verifyStep === 2 && "Checking cryptographic signature…"}
+                  {verifyStep === 3 && "Checking live permit status…"}
                   {verifyStep === 4 && "Verification complete."}
                 </span>
               </div>
@@ -315,7 +321,7 @@ export default function OfficialPlaqueQRModal({
               className="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 shadow cursor-pointer text-center"
             >
               <ExternalLink className="w-4 h-4" />
-              <span>Scan Sim</span>
+              <span>Open Verify</span>
             </a>
           ) : (
             <div className="py-2.5 px-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-400 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 cursor-not-allowed">
