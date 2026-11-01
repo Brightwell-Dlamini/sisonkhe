@@ -25,7 +25,11 @@ import {
 } from "lucide-react";
 import BrandMark from "@/components/common/BrandMark";
 import { tokenFromLocation } from "@/lib/qr/parse";
-import { localVerifyQrToken } from "@/lib/qr/localVerify";
+import {
+  localVerifyQrToken,
+  isLocalVerifyFailure,
+  isLocalVerifySuccess,
+} from "@/lib/qr/localVerify";
 
 interface VerifyResult {
   valid: boolean;
@@ -71,7 +75,7 @@ function VerifyInner() {
       try {
         const local = await localVerifyQrToken(token);
 
-        if (!local.ok) {
+        if (isLocalVerifyFailure(local)) {
           if (local.reason === "BAD_SIGNATURE") {
             setResult({
               valid: false,
@@ -81,12 +85,11 @@ function VerifyInner() {
             setLoading(false);
             return;
           }
-          // Other local failures: still try live verify
-        } else {
+        } else if (isLocalVerifySuccess(local)) {
           localNote = local.note;
           if (typeof navigator !== "undefined" && !navigator.onLine) {
             setResult({
-              valid: local.signatureValid === true,
+              valid: local.signatureValid,
               reason: local.signatureValid ? undefined : "MALFORMED",
               message: local.note,
               entityType: local.payload.t,
@@ -118,9 +121,9 @@ function VerifyInner() {
       } catch {
         try {
           const local = await localVerifyQrToken(token);
-          if (local.ok) {
+          if (isLocalVerifySuccess(local)) {
             setResult({
-              valid: local.signatureValid === true,
+              valid: local.signatureValid,
               message: local.note,
               entityType: local.payload.t,
               summary: local.snapshot,
@@ -131,11 +134,17 @@ function VerifyInner() {
               permitStatus: local.snapshot.statusSnapshot ?? undefined,
               permitExpiry: local.snapshot.expirySnapshot ?? null,
             });
-          } else {
+          } else if (isLocalVerifyFailure(local)) {
             setResult({
               valid: false,
               reason: local.reason,
               message: local.message || "Network error during verification.",
+            });
+          } else {
+            setResult({
+              valid: false,
+              reason: "MALFORMED",
+              message: "Network error during verification.",
             });
           }
         } catch {
@@ -285,7 +294,7 @@ function VerifyInner() {
                     value={str(result.summary?.name)}
                   />
                   <Row
-                    icon={<CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                    icon={<CheckCircle2 className="w-4 h-4 text-zinc-400" />}
                     label="PDP"
                     value={str(
                       result.summary?.pdpStatus ??
