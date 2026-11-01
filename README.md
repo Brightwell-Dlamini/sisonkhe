@@ -13,7 +13,7 @@ Sisonkhe coordinates vehicle registries, driver compliance (permit / COF / PDP),
 | **Operator** | `/operator` | Master card, fleet, permit renewals |
 | **Inspector** | `/inspector` | Scan vehicles, issue tickets |
 | **Admin / Fleet Manager** | `/admin` | Registry, permits, ledger, intelligence |
-| **Super-admin** | `/admin/super` | National config, security, invariants, telemetry |
+| **Super-admin** | `/admin/super` | National config, security, invariants |
 | **Public / Kiosk** | `/kiosk` | Region routes and assignments |
 
 ## Architecture
@@ -25,23 +25,31 @@ Next.js 15 (App Router)
   ├── en / ss (siSwati) field chrome
   ├── Event-log sync (preferred)  ←  legacy fleet blob (deprecated)
   ├── Rate limits (opt-in) + /api/health
+  ├── Ed25519 signed QR (v2) + live registry verify
   └── Supabase Postgres + Auth + RLS authority lattice
 ```
 
-## Ops readiness (Phase 6)
+## QR verification
+
+| Token | Algorithm | Status |
+|-------|-----------|--------|
+| `v2.…` | Ed25519 | Preferred for new prints |
+| `v1.…` | HMAC-SHA256 | Still verified (legacy paper) |
+
+Printed QRs encode a verify URL with the token in the **hash** (`/verify#t=…`) so access logs do not store credentials. Signature authenticity and live permit status are separate checks.
+
+**Required env for new issues:** `QR_ED25519_PRIVATE_KEY`, `NEXT_PUBLIC_QR_ED25519_PUBLIC_KEY` (see `.env.example`). Keep `QR_HMAC_SECRET` so existing v1 stickers still verify. Without Ed25519 keys, issue falls back to v1 HMAC.
+
+## Ops readiness
 
 | Endpoint / control | Purpose |
 |--------------------|---------|
 | `GET /api/health` | Liveness + DB probe (200 healthy / 503 degraded) |
-| `RATE_LIMIT_ENABLED=1` | Turn on sliding-window limits (auth + payment intents) |
-| `UPSTASH_REDIS_REST_URL` + `TOKEN` | Shared Redis backend; else in-memory per instance |
-| `RATE_LIMIT_FAIL_CLOSED=1` | Reject when Redis missing (default is fail-open) |
-| `logEvent()` / existing observability log | JSON telemetry for log drains |
+| `RATE_LIMIT_ENABLED=1` | Sliding-window limits (auth + payment intents) |
+| `UPSTASH_REDIS_REST_URL` + `TOKEN` | Shared Redis; else in-memory per instance |
+| `RATE_LIMIT_FAIL_CLOSED=1` | Reject when Redis missing (default fail-open) |
 
-Sign-in: 30 attempts / IP / 15 min and 10 / identifier / 15 min when enabled.  
-Payment intents: 20 / user / minute when enabled.
-
-## Localisation (Phase 5)
+## Localisation
 
 `src/lib/i18n/messages.ts` — English + siSwati for marshal, driver, operator field chrome.
 
@@ -49,13 +57,14 @@ Payment intents: 20 / user / minute when enabled.
 
 See `src/lib/auth/permissions.ts`. Journal + exception queue on `/admin/payments`.
 
-## Improvement roadmap
+## Roadmap status
 
 | Phase | Status |
 |-------|--------|
 | 1–4 Foundation → permissions | **Complete** |
-| 5 UX / localisation | **Largely complete** |
-| 6 Ops readiness (rate limit, health, telemetry) | **In progress** |
+| 5 UX / localisation | **Complete** |
+| 6 Ops readiness | **Complete** |
+| QR crypto hardening (Ed25519, revision, offline) | **Complete** |
 
 ## License
 
