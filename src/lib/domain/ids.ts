@@ -48,6 +48,26 @@ export function newAuditId(): string {
   return `aud_${token(12)}`;
 }
 
+export function newAssociationId(): string {
+  return `assoc_${token()}`;
+}
+
+export function newMembershipId(): string {
+  return `mem_${token()}`;
+}
+
+export function newTrainingRecordId(): string {
+  return `train_${token()}`;
+}
+
+export function newMaintenanceLogId(): string {
+  return `maint_${token()}`;
+}
+
+export function newFeedbackId(): string {
+  return `fb_${token()}`;
+}
+
 export function newEntityId(prefix: string): string {
   const clean = prefix.replace(/[^a-z0-9_]/gi, "").slice(0, 12) || "ent";
   return `${clean}_${token()}`;
