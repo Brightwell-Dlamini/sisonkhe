@@ -136,7 +136,8 @@ export default function AssociationFormModal({
               </Field>
               <Field label="Short Name" error={fieldErrors.shortName?.[0]}>
                 <input
-                  type="text"\Psi                  value={form.shortName}
+                  type="text"
+                  value={form.shortName}
                   onChange={(e) => update("shortName", e.target.value)}
                   placeholder="e.g. HTA"
                   className="input"
