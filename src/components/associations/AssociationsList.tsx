@@ -2,8 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Minimal Associations list surface (Phase 0 foundation).
- * Read path only. Create / edit / membership management follow in later increments.
+ * Associations list + create surface (Phase 0).
  */
 
 "use client";
@@ -18,9 +17,12 @@ import {
   MapPin,
   Phone,
   User,
+  Plus,
 } from "lucide-react";
 import type { Association } from "@/lib/domain/associations";
 import { associationStatusLabel } from "@/lib/domain/associations";
+import type { CreateAssociationInput } from "@/lib/associations/mutations";
+import AssociationFormModal from "./AssociationFormModal";
 
 type AssociationRow = Association & {
   membershipCount?: number;
@@ -31,6 +33,9 @@ export default function AssociationsList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [regionScope, setRegionScope] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,8 +53,12 @@ export default function AssociationsList() {
             `Failed to load associations (${res.status})`
         );
       }
-      const data = (await res.json()) as { associations?: AssociationRow[] };
+      const data = (await res.json()) as {
+        associations?: AssociationRow[];
+        regionScope?: string | null;
+      };
       setRows(data.associations ?? []);
+      setRegionScope(data.regionScope ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load associations");
       setRows([]);
@@ -61,6 +70,35 @@ export default function AssociationsList() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  const handleCreate = async (input: CreateAssociationInput) => {
+    const res = await fetch("/api/admin/associations", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false as const,
+        error: (body as { error?: string }).error ?? "Create failed",
+        issues: (body as { details?: Record<string, string[]> }).details,
+      };
+    }
+    setShowCreate(false);
+    showToast(`Registered ${(body as { association?: Association }).association?.name ?? "association"}`);
+    await load();
+    return { success: true as const };
+  };
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return rows;
@@ -88,16 +126,32 @@ export default function AssociationsList() {
             className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
           />
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          className="px-3 py-2 rounded-xl bg-white/[0.06] text-zinc-300 text-xs font-bold hover:bg-white/[0.08] disabled:opacity-50 flex items-center gap-1.5"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="px-3 py-2 rounded-xl bg-white/[0.06] text-zinc-300 text-xs font-bold hover:bg-white/[0.08] disabled:opacity-50 flex items-center gap-1.5"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Register Association
+          </button>
+        </div>
       </div>
+
+      {toast && (
+        <div className="bg-emerald-950/40 border border-emerald-800 text-emerald-200 rounded-xl px-4 py-3 text-xs font-bold">
+          {toast}
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-950/40 border border-red-800 text-red-300 rounded-xl px-4 py-3 text-xs flex items-center gap-2">
@@ -115,9 +169,8 @@ export default function AssociationsList() {
           <Building2 className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
           <p className="text-sm font-bold text-zinc-400">No associations found</p>
           <p className="text-xs text-zinc-500 mt-1 max-w-sm mx-auto">
-            Associations will appear here once the migration has been applied and
-            records are registered. Create and membership management arrive in the
-            next increment.
+            Register the first association for this region. Ensure migration
+            20261101_associations has been applied.
           </p>
         </div>
       ) : (
@@ -181,6 +234,14 @@ export default function AssociationsList() {
             </div>
           ))}
         </div>
+      )}
+
+      {showCreate && (
+        <AssociationFormModal
+          defaultRegionCode={regionScope}
+          onClose={() => setShowCreate(false)}
+          onSubmit={handleCreate}
+        />
       )}
     </div>
   );
