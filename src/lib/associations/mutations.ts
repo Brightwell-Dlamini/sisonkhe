@@ -1,18 +1,29 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- *
- * Association write operations (Phase 0).
  */
 
 import "server-only";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "../supabase/server";
-import { newAssociationId } from "@/lib/domain/ids";
+import { newAssociationId, newMembershipId } from "@/lib/domain/ids";
 import {
   ASSOCIATION_STATUSES,
+  MEMBERSHIP_ROLES,
+  MembershipStatusSchema,
   type Association,
+  type AssociationMembership,
 } from "@/lib/domain/associations";
+
+function zodIssues(error: z.ZodError): Record<string, string[]> {
+  const issues: Record<string, string[]> = {};
+  for (const issue of error.issues) {
+    const key = issue.path.join(".") || "_form";
+    if (!issues[key]) issues[key] = [];
+    issues[key].push(issue.message);
+  }
+  return issues;
+}
 
 export const CreateAssociationInputSchema = z.object({
   name: z.string().min(2).max(120),
@@ -34,7 +45,9 @@ export const CreateAssociationInputSchema = z.object({
   queuePriorityWeight: z.number().int().min(0).max(100).optional().default(0),
 });
 
-export type CreateAssociationInput = z.infer<typeof CreateAssociationInputSchema>;
+export type CreateAssociationInput = z.infer<
+  typeof CreateAssociationInputSchema
+>;
 
 export type CreateAssociationResult =
   | { success: true; association: Association }
@@ -45,39 +58,32 @@ export async function createAssociation(
 ): Promise<CreateAssociationResult> {
   const parsed = CreateAssociationInputSchema.safeParse(raw);
   if (!parsed.success) {
-    const issues: Record<string, string[]> = {};
-    for (const issue of parsed.error.issues) {
-      const key = issue.path.join(".") || "_form";
-      if (!issues[key]) issues[key] = [];
-      issues[key].push(issue.message);
-    }
-    return { success: false, error: "Validation failed", issues };
+    return {
+      success: false,
+      error: "Validation failed",
+      issues: zodIssues(parsed.error),
+    };
   }
-
   const input = parsed.data;
   const admin = createSupabaseAdminClient();
 
-  // Ensure region exists
   const { data: region, error: regionErr } = await admin
     .from("regions")
     .select("code")
     .eq("code", input.regionCode)
     .maybeSingle();
-
-  if (regionErr) {
+  if (regionErr)
     return { success: false, error: `Region check failed: ${regionErr.message}` };
-  }
   if (!region) {
     return {
       success: false,
-      error: `Unknown region code: ${input.regionCode}. Create the region first or use an existing code.`,
+      error: `Unknown region code: ${input.regionCode}`,
       issues: { regionCode: [`Region '${input.regionCode}' does not exist`] },
     };
   }
 
   const id = newAssociationId();
   const now = new Date().toISOString();
-
   const row = {
     id,
     name: input.name.trim(),
@@ -107,10 +113,7 @@ export async function createAssociation(
     .single();
 
   if (error) {
-    if (
-      error.message.includes("does not exist") ||
-      error.code === "42P01"
-    ) {
+    if (error.message.includes("does not exist") || error.code === "42P01") {
       return {
         success: false,
         error:
@@ -120,23 +123,208 @@ export async function createAssociation(
     return { success: false, error: error.message };
   }
 
-  const association: Association = {
+  return {
+    success: true,
+    association: {
+      id: data.id as string,
+      name: data.name as string,
+      shortName: (data.short_name as string | null) ?? null,
+      registrationNumber: (data.registration_number as string | null) ?? null,
+      regionCode: data.region_code as string,
+      status: (data.status as Association["status"]) ?? "Active",
+      chairName: (data.chair_name as string | null) ?? null,
+      contactPhone: (data.contact_phone as string | null) ?? null,
+      contactEmail: (data.contact_email as string | null) ?? null,
+      physicalAddress: (data.physical_address as string | null) ?? null,
+      notes: (data.notes as string | null) ?? null,
+      queuePriorityWeight: Number(data.queue_priority_weight ?? 0),
+      version: Number(data.version ?? 1),
+      createdAt: data.created_at as string | undefined,
+      updatedAt: data.updated_at as string | undefined,
+    },
+  };
+}
+
+export const AddMembershipInputSchema = z.object({
+  associationId: z.string().min(1),
+  memberEntityType: z.enum(["operator", "driver"]),
+  memberEntityId: z.string().min(1),
+  role: z.enum(MEMBERSHIP_ROLES).optional().default("Member"),
+  status: MembershipStatusSchema.optional().default("Active"),
+  notes: z.string().max(1000).optional().nullable(),
+  duesPaidUntil: z.string().optional().nullable(),
+});
+
+export type AddMembershipInput = z.infer<typeof AddMembershipInputSchema>;
+
+export type MembershipMutationResult =
+  | { success: true; membership: AssociationMembership }
+  | { success: false; error: string; issues?: Record<string, string[]> };
+
+function mapMembershipRow(data: Record<string, unknown>): AssociationMembership {
+  return {
     id: data.id as string,
-    name: data.name as string,
-    shortName: (data.short_name as string | null) ?? null,
-    registrationNumber: (data.registration_number as string | null) ?? null,
-    regionCode: data.region_code as string,
-    status: (data.status as Association["status"]) ?? "Active",
-    chairName: (data.chair_name as string | null) ?? null,
-    contactPhone: (data.contact_phone as string | null) ?? null,
-    contactEmail: (data.contact_email as string | null) ?? null,
-    physicalAddress: (data.physical_address as string | null) ?? null,
+    associationId: data.association_id as string,
+    memberEntityType: data.member_entity_type as "operator" | "driver",
+    memberEntityId: data.member_entity_id as string,
+    role: data.role as AssociationMembership["role"],
+    status: data.status as AssociationMembership["status"],
+    joinedAt: (data.joined_at as string | null) ?? null,
+    leftAt: (data.left_at as string | null) ?? null,
+    duesPaidUntil: (data.dues_paid_until as string | null) ?? null,
     notes: (data.notes as string | null) ?? null,
-    queuePriorityWeight: Number(data.queue_priority_weight ?? 0),
     version: Number(data.version ?? 1),
     createdAt: data.created_at as string | undefined,
     updatedAt: data.updated_at as string | undefined,
   };
+}
 
-  return { success: true, association };
+export async function addMembership(
+  raw: unknown
+): Promise<MembershipMutationResult> {
+  const parsed = AddMembershipInputSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "Validation failed",
+      issues: zodIssues(parsed.error),
+    };
+  }
+  const input = parsed.data;
+  const admin = createSupabaseAdminClient();
+
+  const { data: assoc, error: assocErr } = await admin
+    .from("associations")
+    .select("id")
+    .eq("id", input.associationId)
+    .maybeSingle();
+  if (assocErr) return { success: false, error: assocErr.message };
+  if (!assoc) return { success: false, error: "Association not found" };
+
+  if (input.memberEntityType === "operator") {
+    const { data: op } = await admin
+      .from("fleet_operators")
+      .select("id")
+      .eq("id", input.memberEntityId)
+      .maybeSingle();
+    if (!op) {
+      return {
+        success: false,
+        error: "Operator not found",
+        issues: { memberEntityId: ["Unknown operator id"] },
+      };
+    }
+  } else {
+    const { data: drv } = await admin
+      .from("drivers")
+      .select("id")
+      .eq("id", input.memberEntityId)
+      .maybeSingle();
+    if (!drv) {
+      return {
+        success: false,
+        error: "Driver not found",
+        issues: { memberEntityId: ["Unknown driver id"] },
+      };
+    }
+  }
+
+  const { data: existing } = await admin
+    .from("association_memberships")
+    .select("id, status")
+    .eq("association_id", input.associationId)
+    .eq("member_entity_type", input.memberEntityType)
+    .eq("member_entity_id", input.memberEntityId)
+    .maybeSingle();
+
+  if (existing && (existing.status as string) === "Active") {
+    return {
+      success: false,
+      error: "This member is already active on this association",
+    };
+  }
+
+  const id = newMembershipId();
+  const now = new Date().toISOString();
+  const row = {
+    id,
+    association_id: input.associationId,
+    member_entity_type: input.memberEntityType,
+    member_entity_id: input.memberEntityId,
+    role: input.role ?? "Member",
+    status: input.status ?? "Active",
+    joined_at: now,
+    left_at: null,
+    dues_paid_until: input.duesPaidUntil || null,
+    notes: input.notes?.trim() || null,
+    version: 1,
+    created_at: now,
+    updated_at: now,
+  };
+
+  const { data, error } = await admin
+    .from("association_memberships")
+    .insert(row)
+    .select(
+      `id, association_id, member_entity_type, member_entity_id, role, status,
+       joined_at, left_at, dues_paid_until, notes, version, created_at, updated_at`
+    )
+    .single();
+
+  if (error) {
+    if (error.message.includes("does not exist") || error.code === "42P01") {
+      return {
+        success: false,
+        error:
+          "Memberships table not found. Apply migration 20261101_associations.sql first.",
+      };
+    }
+    return { success: false, error: error.message };
+  }
+
+  return { success: true, membership: mapMembershipRow(data as Record<string, unknown>) };
+}
+
+export const UpdateMembershipStatusSchema = z.object({
+  membershipId: z.string().min(1),
+  status: MembershipStatusSchema,
+  notes: z.string().max(1000).optional().nullable(),
+});
+
+export async function updateMembershipStatus(
+  raw: unknown
+): Promise<MembershipMutationResult> {
+  const parsed = UpdateMembershipStatusSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "Validation failed",
+      issues: zodIssues(parsed.error),
+    };
+  }
+  const { membershipId, status, notes } = parsed.data;
+  const admin = createSupabaseAdminClient();
+  const now = new Date().toISOString();
+
+  const patch: Record<string, unknown> = { status, updated_at: now };
+  if (status === "Resigned" || status === "Expelled" || status === "Suspended") {
+    patch.left_at = now;
+  }
+  if (status === "Active") patch.left_at = null;
+  if (notes !== undefined) patch.notes = notes?.trim() || null;
+
+  const { data, error } = await admin
+    .from("association_memberships")
+    .update(patch)
+    .eq("id", membershipId)
+    .select(
+      `id, association_id, member_entity_type, member_entity_id, role, status,
+       joined_at, left_at, dues_paid_until, notes, version, created_at, updated_at`
+    )
+    .maybeSingle();
+
+  if (error) return { success: false, error: error.message };
+  if (!data) return { success: false, error: "Membership not found" };
+
+  return { success: true, membership: mapMembershipRow(data as Record<string, unknown>) };
 }
