@@ -317,3 +317,62 @@ export const qrScanEvents = pgTable(
     index("qr_scan_events_entity_idx").on(t.entityType, t.entityKey),
   ]
 );
+
+/**
+ * Associations – first-class transport associations (Phase 0 foundation).
+ * Region-scoped. Used for membership, representation and future queue rules.
+ */
+export const associations = pgTable(
+  "associations",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    shortName: text("short_name"),
+    registrationNumber: text("registration_number"),
+    regionCode: text("region_code")
+      .notNull()
+      .references(() => regions.code),
+    status: text("status").notNull().default("Active"),
+    chairName: text("chair_name"),
+    contactPhone: text("contact_phone"),
+    contactEmail: text("contact_email"),
+    physicalAddress: text("physical_address"),
+    notes: text("notes"),
+    queuePriorityWeight: integer("queue_priority_weight").notNull().default(0),
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("associations_region_idx").on(t.regionCode),
+    index("associations_status_idx").on(t.status),
+  ]
+);
+
+/**
+ * Association memberships – links operators or drivers to an association.
+ */
+export const associationMemberships = pgTable(
+  "association_memberships",
+  {
+    id: text("id").primaryKey(),
+    associationId: text("association_id")
+      .notNull()
+      .references(() => associations.id),
+    memberEntityType: text("member_entity_type").notNull(), // 'operator' | 'driver'
+    memberEntityId: text("member_entity_id").notNull(),
+    role: text("role").notNull().default("Member"),
+    status: text("status").notNull().default("Active"),
+    joinedAt: timestamp("joined_at", { withTimezone: true }),
+    leftAt: timestamp("left_at", { withTimezone: true }),
+    duesPaidUntil: date("dues_paid_until"),
+    notes: text("notes"),
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("assoc_memberships_assoc_idx").on(t.associationId),
+    index("assoc_memberships_member_idx").on(t.memberEntityType, t.memberEntityId),
+  ]
+);

@@ -47,6 +47,8 @@ export type Permission =
   | "admin.platform"
   | "admin.config"
   | "admin.national"
+  | "admin.associations.read"
+  | "admin.associations.write"
   | "inspector.lookup"
   | "inspector.ticket";
 
@@ -73,6 +75,8 @@ export const PERMISSION_POLICIES: Partial<Record<Permission, string[]>> = {
   "admin.ledger.view": ["trips_scoped_read", "payments_scoped_read"],
   "admin.ops.view": ["trips_scoped_read", "payments_scoped_read", "audit_scoped_read"],
   "admin.payments.manage": ["payments_scoped_read"],
+  "admin.associations.read": ["associations_scoped_read"],
+  "admin.associations.write": ["associations_scoped_write"],
   "inspector.ticket": ["tickets_inspector_write"],
   "inspector.lookup": ["vehicles_scoped_read", "drivers_scoped_read"],
 };
@@ -99,6 +103,8 @@ const SUPER: Permission[] = [
   "admin.platform",
   "admin.config",
   "admin.national",
+  "admin.associations.read",
+  "admin.associations.write",
   "inspector.lookup",
   "inspector.ticket",
 ];
@@ -122,6 +128,8 @@ const RANK_ADMIN: Permission[] = [
   "admin.yoy.view",
   "admin.ops.view",
   "admin.payments.manage",
+  "admin.associations.read",
+  "admin.associations.write",
 ];
 
 const INSPECTOR: Permission[] = ["inspector.lookup", "inspector.ticket"];
