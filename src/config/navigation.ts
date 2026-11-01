@@ -37,6 +37,7 @@ import {
   Activity as ActivityIcon,
   ListChecks,
   KeyRound,
+  Palette,
 } from "lucide-react";
 import type { NavRole } from "@/lib/auth/roles";
 import type { Permission } from "@/lib/auth/permissions";
@@ -269,6 +270,14 @@ export const PLATFORM_NAV: NavGroup[] = [
         roles: ["super-admin"],
         permission: "admin.config",
         hint: "Rank fee and operational settings",
+      },
+      {
+        href: "/admin/super/config",
+        label: "Platform Config",
+        icon: Palette,
+        roles: ["super-admin"],
+        permission: "admin.platform",
+        hint: "Kiosk theme and display cycle",
       },
       {
         href: "/admin/super/adverts",
