@@ -8,6 +8,7 @@ import {
   Database,
   Megaphone,
   ChevronRight,
+  Palette,
 } from "lucide-react";
 
 const LINKS = [
@@ -34,6 +35,12 @@ const LINKS = [
     label: "Rank Config",
     desc: "Fees and operational settings",
     icon: Settings,
+  },
+  {
+    href: "/admin/super/config",
+    label: "Platform Config",
+    desc: "Kiosk theme and display cycle",
+    icon: Palette,
   },
   {
     href: "/admin/super/adverts",
