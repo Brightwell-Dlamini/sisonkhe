@@ -8,6 +8,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   Loader2,
@@ -29,6 +30,7 @@ type AssociationRow = Association & {
 };
 
 export default function AssociationsList() {
+  const router = useRouter();
   const [rows, setRows] = useState<AssociationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +97,9 @@ export default function AssociationsList() {
       };
     }
     setShowCreate(false);
-    showToast(`Registered ${(body as { association?: Association }).association?.name ?? "association"}`);
+    showToast(
+      `Registered ${(body as { association?: Association }).association?.name ?? "association"}`
+    );
     await load();
     return { success: true as const };
   };
@@ -176,9 +180,11 @@ export default function AssociationsList() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {filtered.map((a) => (
-            <div
+            <button
               key={a.id}
-              className="bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4 flex flex-col gap-3 hover:border-white/[0.1] transition-colors"
+              type="button"
+              onClick={() => router.push(`/admin/associations/${a.id}`)}
+              className="text-left bg-[#0F0F10] border border-white/[0.06] rounded-2xl p-4 flex flex-col gap-3 hover:border-emerald-500/40 transition-colors"
             >
               <div className="min-w-0">
                 <div className="font-black text-white text-sm truncate">{a.name}</div>
@@ -225,13 +231,11 @@ export default function AssociationsList() {
                 >
                   {associationStatusLabel(a.status)}
                 </span>
-                {a.registrationNumber && (
-                  <span className="text-[10px] font-mono text-zinc-500 truncate max-w-[8rem]">
-                    {a.registrationNumber}
-                  </span>
-                )}
+                <span className="text-[10px] text-emerald-500/80 font-bold">
+                  Manage →
+                </span>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
