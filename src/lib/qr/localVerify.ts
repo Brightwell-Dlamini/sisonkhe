@@ -24,31 +24,36 @@ import {
   type QrPayload,
 } from "./payload";
 
-export type LocalVerifyResult =
-  | {
-      ok: true;
-      signatureValid: true;
-      tokenVersion: string;
-      payload: QrPayload;
-      snapshot: Record<string, string | null>;
-      issuedAt: string;
-      note: string;
-    }
-  | {
-      ok: true;
-      signatureValid: false;
-      signatureUnchecked: true;
-      tokenVersion: string;
-      payload: QrPayload;
-      snapshot: Record<string, string | null>;
-      issuedAt: string;
-      note: string;
-    }
-  | {
-      ok: false;
-      reason: string;
-      message: string;
-    };
+export type LocalVerifySuccess = {
+  ok: true;
+  signatureValid: boolean;
+  signatureUnchecked?: boolean;
+  tokenVersion: string;
+  payload: QrPayload;
+  snapshot: Record<string, string | null>;
+  issuedAt: string;
+  note: string;
+};
+
+export type LocalVerifyFailure = {
+  ok: false;
+  reason: string;
+  message: string;
+};
+
+export type LocalVerifyResult = LocalVerifySuccess | LocalVerifyFailure;
+
+export function isLocalVerifyFailure(
+  r: LocalVerifyResult
+): r is LocalVerifyFailure {
+  return r.ok === false;
+}
+
+export function isLocalVerifySuccess(
+  r: LocalVerifyResult
+): r is LocalVerifySuccess {
+  return r.ok === true;
+}
 
 function snapshotFromPayload(payload: QrPayload): Record<string, string | null> {
   if (isVehicleQrPayload(payload)) {
@@ -81,7 +86,6 @@ function snapshotFromPayload(payload: QrPayload): Record<string, string | null> 
 
 async function importSpkiPublicKey(spkiBase64: string): Promise<CryptoKey> {
   let b64 = spkiBase64.trim().replace(/\s+/g, "");
-  // tolerate url-safe
   b64 = b64.replace(/-/g, "+").replace(/_/g, "/");
   while (b64.length % 4) b64 += "=";
   const binary = atob(b64);
@@ -110,6 +114,18 @@ async function verifyEd25519(
     console.warn("[qr/localVerify] Ed25519 verify failed:", err);
     return false;
   }
+}
+
+function publicKeyFromEnv(): string | undefined {
+  const fromProcess =
+    typeof process !== "undefined"
+      ? process.env.NEXT_PUBLIC_QR_ED25519_PUBLIC_KEY?.trim()
+      : undefined;
+  if (fromProcess) return fromProcess;
+  if (typeof window !== "undefined") {
+    return (window as unknown as { __QR_PUB__?: string }).__QR_PUB__;
+  }
+  return undefined;
 }
 
 /**
@@ -165,16 +181,7 @@ export async function localVerifyQrToken(
   const signingInput = `${version}.${payloadB64}`;
 
   if (version === TOKEN_VERSION_V2) {
-    const pub =
-      typeof process !== "undefined"
-        ? process.env.NEXT_PUBLIC_QR_ED25519_PUBLIC_KEY?.trim()
-        : undefined;
-    // Also try runtime injection via window for flexibility
-    const pubKey =
-      pub ||
-      (typeof window !== "undefined"
-        ? (window as unknown as { __QR_PUB__?: string }).__QR_PUB__
-        : undefined);
+    const pubKey = publicKeyFromEnv();
 
     if (!pubKey) {
       return {
@@ -209,7 +216,6 @@ export async function localVerifyQrToken(
     };
   }
 
-  // v1 HMAC — secret must never ship to the client
   return {
     ok: true,
     signatureValid: false,
